@@ -42,6 +42,32 @@ def _is_glm_5_2_model(model: str | None) -> bool:
     return any(token in m for token in ("glm-5.2", "glm-5-2", "glm-5p2"))
 
 
+def _is_glm_5_3_model(model: str | None) -> bool:
+    """GLM-5.3 across alias spellings (glm-5.3 / glm-5.3-flash / glm-5-3 / glm-5p3)."""
+    m = _flat_model_name(model)
+    return any(token in m for token in ("glm-5.3", "glm-5-3", "glm-5p3"))
+
+
+def _declared_efforts(model: str | None) -> tuple[str, ...] | None:
+    """The Go relay's per-model vendor reasoning vocabulary, or None when the route has none here.
+
+    The relay is permissive (live probes 200 on every level), so each family's constant in
+    ``agent.reasoning_effort`` is the authority. ``None`` covers both a wire with no knob
+    (mimo*, hy3*) and a model core routes to another wire (gpt-*, grok-*, muse-spark*, minimax-*,
+    qwen*). Cache-free: read on the request hot path.
+    """
+    m = _flat_model_name(model)
+    if _is_glm_5_2_model(m):
+        return re_.GLM52_EFFORTS
+    if _is_glm_5_3_model(m):
+        return re_.GLM53_EFFORTS
+    if m.startswith(("kimi-k2", "kimi-k3")):
+        return re_.kimi_supported_efforts(m)
+    if _is_deepseek_thinking_model(m):
+        return re_.DEEPSEEK_V4_EFFORTS
+    return None
+
+
 class OpenCodeGoProfile(ProviderProfile):
     """OpenCode Go - model-specific reasoning controls."""
 
@@ -52,6 +78,10 @@ class OpenCodeGoProfile(ProviderProfile):
     def get_max_tokens(self, model: str | None) -> int | None:
         cap = self._MODEL_MAX_TOKENS.get(_flat_model_name(model))
         return self.default_max_tokens if cap is None else cap
+
+    def supported_reasoning_efforts(self, model: str | None) -> tuple[str, ...] | None:
+        """Per-model vendor vocabulary (see ``_declared_efforts``); None when undeclared."""
+        return _declared_efforts(model)
 
     def fetch_account_usage(self, *, base_url: str | None = None, api_key: str | None = None):
         """Go subscription windows for /usage via ``/zen/go/v1/usage`` (anomalyco/opencode#16513).
@@ -97,10 +127,23 @@ class OpenCodeGoProfile(ProviderProfile):
                 return {}, {}
             clamped = re_.clamp_effort(effort, re_.GLM52_EFFORTS, re_.GLM52_OVERRIDES)
             return {}, {"reasoning_effort": clamped if clamped in re_.GLM52_EFFORTS else "high"}
+        if _is_glm_5_3_model(model):
+            # Native reasoning_effort knob, widened by GLM-5.3 to low/medium/high/max (GLM53_EFFORTS).
+            effort = re_.requested_effort(reasoning_config)
+            if effort is None or effort == "none":
+                return {}, {}
+            clamped = re_.clamp_effort(effort, re_.GLM53_EFFORTS, re_.GLM53_OVERRIDES)
+            return {}, {"reasoning_effort": clamped if clamped in re_.GLM53_EFFORTS else "high"}
         if _flat_model_name(model).startswith("kimi-k2"):
             if not isinstance(reasoning_config, dict):
                 return {}, {}
             return re_.thinking_toggle_extras(reasoning_config, re_.KIMI_K2_EFFORTS)
+        if _flat_model_name(model).startswith("kimi-k3"):
+            # Kimi K3 reuses the Moonshot thinking+effort shape with the K3 vocabulary + roundings.
+            if not isinstance(reasoning_config, dict):
+                return {}, {}
+            return re_.thinking_toggle_extras(
+                reasoning_config, re_.KIMI_K3_EFFORTS, re_.KIMI_K3_OVERRIDES)
         if _is_deepseek_thinking_model(model):
             return re_.thinking_toggle_extras(reasoning_config, re_.DEEPSEEK_V4_EFFORTS, re_.DEEPSEEK_V4_OVERRIDES)
         return {}, {}

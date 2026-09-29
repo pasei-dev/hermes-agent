@@ -25,8 +25,11 @@ from agent.reasoning_effort import (
     KIMI_K3_OVERRIDES,
     OPENAI_COMPAT_WIRE_EFFORTS,
     clamp_effort,
+    codex_supported_efforts,
     kimi_supported_efforts,
+    profile_declared_efforts,
     requested_effort,
+    route_supported_efforts,
 )
 from hermes_constants import VALID_REASONING_EFFORTS
 
@@ -184,3 +187,23 @@ class TestRequestedEffort:
         assert requested_effort({"enabled": False, "effort": "high"}) is None
         assert requested_effort("not-a-dict") is None
         assert requested_effort({"effort": ""}) is None
+
+
+class TestRouteSupportedEffortsPrecedence:
+    """route_supported_efforts is every picker's ENTRY clamp. Precedence: a provider profile's
+    per-model declaration wins, openai-codex keeps its Responses ladder, everything else falls
+    back to the widest OpenAI-compatible vocabulary."""
+
+    def test_profile_declaration_wins(self):
+        assert route_supported_efforts("opencode-go", "glm-5.2") == ("high", "max")
+
+    def test_unknown_provider_falls_back_to_openai_compat(self):
+        assert route_supported_efforts("no-such-provider", "any-model") == OPENAI_COMPAT_WIRE_EFFORTS
+
+    def test_codex_route_is_unaffected(self):
+        for model in ("gpt-5.6-sol", "o5-pro"):
+            assert route_supported_efforts("openai-codex", model) == codex_supported_efforts(model)
+
+    def test_profile_declared_efforts_is_none_when_undeclared(self):
+        assert profile_declared_efforts("no-such-provider", "any-model") is None
+        assert profile_declared_efforts(None, None) is None

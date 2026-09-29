@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from agent import reasoning_effort as re_
+
 
 @pytest.fixture
 def opencode_go_profile():
@@ -309,3 +311,94 @@ def test_opencode_go_plan_windows_reach_usage_through_profile_hook(opencode_go_p
     assert [(w.label, w.used_percent) for w in snapshot.windows] == [
         ("Rolling window", 3.0), ("Weekly", 2.0), ("Monthly", 2.0)]
     assert snapshot.windows[0].reset_at == datetime(2026, 9, 16, 21, 44, 55, 176000, tzinfo=timezone.utc)
+
+
+class TestOpenCodeGoDeclaredEfforts:
+    """The profile declares each family's real vendor vocabulary so every level-offering surface
+    (desktop menu, ``hermes model``, TUI picker, ``/reasoning``) offers only what the knob has."""
+
+    @pytest.mark.parametrize(
+        "model, expected",
+        [
+            ("glm-5.2", re_.GLM52_EFFORTS),
+            ("z-ai/glm-5p2", re_.GLM52_EFFORTS),
+            ("glm-5.3", re_.GLM53_EFFORTS),
+            ("glm-5.3-flash", re_.GLM53_EFFORTS),
+            ("kimi-k2.6", re_.KIMI_K2_EFFORTS),
+            ("kimi-k2.7-code", re_.KIMI_K2_EFFORTS),
+            ("kimi-k3", re_.KIMI_K3_EFFORTS),
+            ("deepseek-v4-pro", re_.DEEPSEEK_V4_EFFORTS),
+            ("deepseek-v4-flash", re_.DEEPSEEK_V4_EFFORTS),
+        ],
+    )
+    def test_declares_the_family_vocabulary(self, opencode_go_profile, model, expected):
+        assert opencode_go_profile.supported_reasoning_efforts(model) == expected
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "glm-5.1",
+            "glm-5",
+            "deepseek-v3.1",
+            "mimo-v2.5",
+            "hy3-preview",
+            "gpt-5.6-sol",
+            "grok-4.6",
+            "muse-spark-1",
+            "minimax-m2",
+            "qwen3.5-coder",
+            "",
+            None,
+        ],
+    )
+    def test_declares_nothing_for_routes_without_a_knob_here(self, opencode_go_profile, model):
+        assert opencode_go_profile.supported_reasoning_efforts(model) is None
+
+
+class TestOpenCodeGoGLM53AndKimiK3Reasoning:
+    """GLM-5.3 and Kimi K3 previously matched no branch and sent no reasoning parameter at all."""
+
+    @pytest.mark.parametrize(
+        "model, effort, wire",
+        [
+            ("glm-5.3", "medium", "medium"),
+            ("glm-5.3", "minimal", "low"),
+            ("glm-5.3-flash", "xhigh", "max"),
+            ("glm-5.3", "max", "max"),
+            ("kimi-k3", "low", "low"),
+            ("kimi-k3", "medium", "high"),
+            ("kimi-k3", "xhigh", "max"),
+        ],
+    )
+    def test_effort_is_clamped_onto_the_vendor_vocabulary(
+        self, opencode_go_profile, model, effort, wire
+    ):
+        extra_body, top_level = opencode_go_profile.build_api_kwargs_extras(
+            reasoning_config={"enabled": True, "effort": effort},
+            model=model,
+        )
+        assert extra_body == {}
+        assert top_level == {"reasoning_effort": wire}
+
+    def test_glm_52_kimi_k2_and_deepseek_extras_are_unchanged(self, opencode_go_profile):
+        """The widened branches must not disturb the families that already emitted a parameter."""
+        for model, effort, wire in (
+            ("glm-5.2", "medium", "high"),
+            ("glm-5.2", "max", "max"),
+            ("kimi-k2.6", "minimal", "low"),
+            ("kimi-k2.6", "xhigh", "high"),
+            ("deepseek-v4-pro", "xhigh", "max"),
+        ):
+            extra_body, top_level = opencode_go_profile.build_api_kwargs_extras(
+                reasoning_config={"enabled": True, "effort": effort},
+                model=model,
+            )
+            assert extra_body == {}, (model, effort)
+            assert top_level == {"reasoning_effort": wire}, (model, effort)
+
+    @pytest.mark.parametrize("model", ["glm-5.3", "kimi-k3"])
+    def test_unset_config_still_preserves_the_server_default(self, opencode_go_profile, model):
+        extra_body, top_level = opencode_go_profile.build_api_kwargs_extras(
+            reasoning_config=None, model=model)
+        assert extra_body == {}
+        assert top_level == {}

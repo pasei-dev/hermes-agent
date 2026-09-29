@@ -153,12 +153,39 @@ def clamp_effort(
     return max(below, key=EFFORT_LADDER.index) if below else min(candidates, key=EFFORT_LADDER.index)
 
 
+def profile_declared_efforts(provider: Optional[str], model: Optional[str]) -> Optional[tuple[str, ...]]:
+    """The registered provider profile's per-model reasoning-effort declaration, or None.
+
+    ``None`` = unknown/aliased-away provider, or a profile that declares nothing (callers keep
+    their own default vocabulary); ``()`` = a real declaration that the model accepts no reasoning
+    parameters. The profile is the authority on a route-specific vendor knob, so models.dev is not
+    consulted. Lazy import: provider plugins import this module during registry discovery, so a
+    module-level ``from providers import ...`` would be circular.
+    """
+    try:
+        from providers import get_provider_profile
+
+        profile = get_provider_profile((provider or "").strip().lower())
+        declared = profile.supported_reasoning_efforts(model) if profile is not None else None
+    except Exception:
+        return None
+    return None if declared is None else tuple(declared)
+
+
 def route_supported_efforts(provider: Optional[str], model: Optional[str]) -> tuple[str, ...]:
-    """Levels the (provider, model) route's ENTRY clamp accepts: the Codex/OpenAI Responses set per
-    model generation, else the widest OpenAI-compatible vocabulary (narrower providers clamp again
-    downstream, never upward)."""
+    """Levels the (provider, model) route's ENTRY clamp accepts: for ``openai-codex``, the
+    Codex/OpenAI Responses set per model generation; otherwise the provider profile's per-model
+    declaration (:func:`profile_declared_efforts`) when it has one; otherwise the widest
+    OpenAI-compatible vocabulary (narrower providers clamp again downstream, never upward).
+
+    A ``()`` declaration falls through to that last default: the entry clamp always names a
+    vocabulary, and the wire-level "no reasoning params at all" decision belongs to the transport.
+    """
     if (provider or "").strip().lower() == "openai-codex":
         return codex_supported_efforts(model)
+    declared = profile_declared_efforts(provider, model)
+    if declared:
+        return declared
     return OPENAI_COMPAT_WIRE_EFFORTS
 
 
