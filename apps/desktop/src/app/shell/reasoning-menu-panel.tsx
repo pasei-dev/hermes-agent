@@ -55,6 +55,7 @@ export function ReasoningMenuPanel(props: ModelMenuHostProps) {
       onSetOptions={patch => controller.setOptions(patch, row)}
       provider={provider}
       reasoning={caps?.reasoning ?? true}
+      supportedEfforts={caps?.supported_efforts ?? undefined}
     />
   )
 }

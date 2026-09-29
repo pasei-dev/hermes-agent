@@ -319,6 +319,33 @@ describe('the per-row options submenu is discoverable', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Extra High' })).not.toBeNull()
   })
 
+  // The capability payload's `supported_efforts` is the row's own vocabulary;
+  // the submenu must offer those levels and no others for that model.
+  it('offers only the levels the row route declares', async () => {
+    getGlobalModelOptions.mockResolvedValue({
+      providers: [
+        {
+          capabilities: {
+            'gemini-3.1-pro': { fast: false, reasoning: true, supported_efforts: ['low', 'high', 'max'] }
+          },
+          models: ['gemini-3.1-pro', 'gemini-2.5-flash'],
+          name: 'Google',
+          slug: 'google'
+        }
+      ]
+    })
+
+    renderMenu()
+    await screen.findByText(/Gemini 3\.1 Pro/i)
+
+    const input = screen.getByRole('textbox', { name: 'Search models' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowRight' })
+    await screen.findByText('Effort')
+
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent)).toEqual(['Low', 'High', 'Max'])
+  })
+
   it('returns focus to the search field when the keyboard closes the sub again', async () => {
     renderMenu()
     await screen.findByText(/Gemini 3\.1 Pro/i)

@@ -26,11 +26,13 @@ afterEach(() => {
 function renderSubmenu(opts: {
   defaultEffort?: string
   effort?: string
+  effortWire?: string
   fastControl: FastControl
   isActive?: boolean
   onSelectModel?: (model: string) => void
   onSetOptions: (patch: { effort?: string; fast?: boolean }) => void
   reasoning: boolean
+  supportedEfforts?: readonly string[]
 }) {
   return render(
     <DropdownMenu open>
@@ -40,6 +42,7 @@ function renderSubmenu(opts: {
           <ModelEditSubmenu
             defaultEffort={opts.defaultEffort ?? 'medium'}
             effort={opts.effort ?? 'medium'}
+            effortWire={opts.effortWire}
             fastControl={opts.fastControl}
             isActive={opts.isActive ?? true}
             model="m1"
@@ -47,12 +50,19 @@ function renderSubmenu(opts: {
             onSetOptions={opts.onSetOptions}
             provider="p1"
             reasoning={opts.reasoning}
+            supportedEfforts={opts.supportedEfforts}
           />
         </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
+
+const effortRows = () =>
+  screen.getAllByRole('menuitemradio').map(row => ({
+    checked: row.getAttribute('aria-checked') === 'true',
+    label: row.textContent
+  }))
 
 // The submenu is PURE: it reports edits and never writes to a session, a
 // preset store, or the gateway. That's the invariant that lets the same
@@ -127,5 +137,69 @@ describe('ModelEditSubmenu reports edits without performing them', () => {
     fireEvent.click(screen.getByRole('switch'))
 
     expect(onSelectModel).toHaveBeenCalledWith('m1-fast')
+  })
+})
+
+// A route that declares its own vocabulary gets exactly those rows; every
+// other route (absent key, null, empty array) keeps the static ladder.
+describe('ModelEditSubmenu bounds the effort rows to the route vocabulary', () => {
+  it('renders only the declared levels when the payload carries them', () => {
+    renderSubmenu({
+      fastControl: { kind: 'none' },
+      onSetOptions: vi.fn(),
+      reasoning: true,
+      supportedEfforts: ['high', 'max']
+    })
+
+    expect(effortRows().map(row => row.label)).toEqual(['High', 'Max'])
+  })
+
+  it('renders the full static ladder when nothing is declared', () => {
+    renderSubmenu({ fastControl: { kind: 'none' }, onSetOptions: vi.fn(), reasoning: true })
+
+    expect(effortRows().map(row => row.label)).toEqual([
+      'Minimal',
+      'Low',
+      'Medium',
+      'High',
+      'Extra High',
+      'Max',
+      'Ultra'
+    ])
+  })
+
+  it('treats an empty declaration as no declaration', () => {
+    renderSubmenu({ fastControl: { kind: 'none' }, onSetOptions: vi.fn(), reasoning: true, supportedEfforts: [] })
+
+    expect(effortRows()).toHaveLength(7)
+  })
+
+  it('selects the level the route sends when the stored level is not declared', () => {
+    // The profile default `medium` is not on a high/max-only route; the
+    // gateway reports the route sends `high`, so that row is the selected one.
+    renderSubmenu({
+      effort: 'medium',
+      effortWire: 'high',
+      fastControl: { kind: 'none' },
+      onSetOptions: vi.fn(),
+      reasoning: true,
+      supportedEfforts: ['high', 'max']
+    })
+
+    expect(effortRows()).toEqual([
+      { checked: true, label: 'High' },
+      { checked: false, label: 'Max' }
+    ])
+  })
+
+  it('falls back to the raw value for a level with no label', () => {
+    renderSubmenu({
+      fastControl: { kind: 'none' },
+      onSetOptions: vi.fn(),
+      reasoning: true,
+      supportedEfforts: ['high', 'weird-level']
+    })
+
+    expect(effortRows().map(row => row.label)).toEqual(['High', 'weird-level'])
   })
 })

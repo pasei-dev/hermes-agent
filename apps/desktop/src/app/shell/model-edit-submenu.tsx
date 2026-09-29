@@ -91,6 +91,10 @@ interface ModelEditSubmenuProps {
   provider: string
   /** Whether this model supports reasoning effort. */
   reasoning: boolean
+  /** The reasoning-effort vocabulary the model's route actually has, per
+   *  the capability payload (`supported_efforts`). Absent, null, or empty
+   *  means the provider declares nothing and the static ladder stands. */
+  supportedEfforts?: readonly string[]
 }
 
 export function ModelEditSubmenu(props: ModelEditSubmenuProps) {
@@ -117,7 +121,8 @@ export function ModelOptionsContent({
   isActive,
   onSelectModel,
   onSetOptions,
-  reasoning
+  reasoning,
+  supportedEfforts
 }: ModelEditSubmenuProps) {
   const { t } = useI18n()
   const copy = t.shell.modelOptions
@@ -125,6 +130,24 @@ export function ModelOptionsContent({
   const effortValue = resolveReasoningEffort(effort, defaultEffort)
   const clamp = reasoningEffortClamp(effortValue, effortWire)
   const thinkingOn = isThinkingEnabled(effort, defaultEffort)
+
+  // A declaring route narrows the rows to its own vocabulary; every other route
+  // (absent, null, or empty) keeps the full static ladder.
+  const effortRows: readonly string[] = supportedEfforts?.length ? supportedEfforts : REASONING_EFFORTS
+
+  // A stored level the route does not carry (e.g. the default `medium` on a
+  // high/max-only route) matches no row; the clamp's wire level is what the
+  // route sends, so that row reads as selected instead of none.
+  const selectedEffort = clamp && !effortRows.includes(clamp.effort) ? clamp.wire : effortValue
+
+  // Declared levels are Hermes level names, so `copy` carries their labels; a
+  // level without one falls back to its raw value rather than `undefined`.
+  const effortLabel = (value: string): string => {
+    const label = (copy as Record<string, unknown>)[value]
+
+    return typeof label === 'string' ? label : value
+  }
+
   const showThinkingToggle = reasoning && canDisableReasoning !== false
 
   const setFast = (enabled: boolean) => {
@@ -175,15 +198,17 @@ export function ModelOptionsContent({
         <>
           <DropdownMenuSeparator className="mx-0" />
           <DropdownMenuLabel className={dropdownMenuSectionLabel}>{copy.effort}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup onValueChange={value => onSetOptions({ effort: value })} value={effortValue}>
-            {REASONING_EFFORTS.map(value => (
+          <DropdownMenuRadioGroup onValueChange={value => onSetOptions({ effort: value })} value={selectedEffort}>
+            {effortRows.map(value => (
               <DropdownMenuRadioItem
                 className={dropdownMenuRow}
                 key={value}
                 onSelect={event => event.preventDefault()}
                 value={value}
               >
-                {clamp?.effort === value ? `${copy[value]} (${copy.sendsOnRoute(copy[clamp.wire])})` : copy[value]}
+                {clamp?.effort === value
+                  ? `${effortLabel(value)} (${copy.sendsOnRoute(copy[clamp.wire])})`
+                  : effortLabel(value)}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
