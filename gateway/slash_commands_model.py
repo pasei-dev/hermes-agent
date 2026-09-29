@@ -748,7 +748,7 @@ class GatewayModelCommandsMixin:
         rc = self._reasoning_config
         # Labels tell the truth about the route: a Hermes-internal step (``ultra``) that the wire
         # clamps is shown as "ultra (sends max on this route)" instead of a distinct level (#61634).
-        from agent.reasoning_effort import effort_display_label
+        from agent.reasoning_effort import effort_display_label, profile_declared_efforts
         from gateway.run import _load_gateway_config
         _session_route = ((getattr(self, "_session_model_overrides", {}) or {}).get(session_key) or {})
         _model_cfg = {}
@@ -779,7 +779,7 @@ class GatewayModelCommandsMixin:
             choices=[
                 {"value": "none", "label": t("gateway.reasoning.choice_none"), "is_current": current_effort == "none"},
                 *({"value": lv, "label": effort_display_label(lv, *_route), "is_current": lv == current_effort}
-                  for lv in VALID_REASONING_EFFORTS),
+                  for lv in (profile_declared_efforts(*_route) or VALID_REASONING_EFFORTS)),
                 *({"value": v, "label": t(f"gateway.reasoning.choice_{v}"), "is_current": False}
                   for v in ("reset", "show", "hide")),
             ],
