@@ -606,7 +606,10 @@ class CLITuiMixin:
             current = ("none" if isinstance(rc, dict) and rc.get("enabled") is False
                        else (rc or {}).get("effort", "medium") if isinstance(rc, dict) else "medium")
             choices = [t("cli.tui.picker_current_labeled", label=label) if value == current else label
-                       for value, label in _picker_reasoning_rows()]
+                       for value, label in _picker_reasoning_rows(
+                           (state.get("provider_data") or {}).get("slug")
+                           or getattr(result, "target_provider", ""),
+                           getattr(result, "new_model", ""))]
             choices += [t("cli.shared.back"), t("cli.shared.cancel")]
             hint = t("cli.tui.picker_effort_hint")
         else:
@@ -1222,7 +1225,10 @@ class CLITuiMixin:
             max_idx = len(state.get("providers") or [])
         elif state.get("stage") == "reasoning":
             from hermes_cli.cli_model_switch_mixin import _picker_reasoning_rows
-            max_idx = len(_picker_reasoning_rows()) + 1  # + Back + Cancel
+            _result = state.get("switch_result")
+            max_idx = len(_picker_reasoning_rows(
+                (state.get("provider_data") or {}).get("slug") or getattr(_result, "target_provider", ""),
+                getattr(_result, "new_model", ""))) + 1  # + Back + Cancel
         else:
             # +1 for "← Back" and Cancel over the filtered visible rows.
             _fp = state.get("_filtered_pairs")

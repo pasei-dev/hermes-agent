@@ -18817,6 +18817,21 @@
             ],
             "default": null,
             "title": "Can Disable Reasoning"
+          },
+          "supported_efforts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Supported Efforts"
           }
         },
         "required": [

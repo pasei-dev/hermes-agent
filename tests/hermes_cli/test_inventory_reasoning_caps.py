@@ -156,3 +156,21 @@ def test_catalog_failure_never_breaks_the_picker(monkeypatch):
     caps = rows[0]["capabilities"]["deepseek/deepseek-v4-pro"]
     assert "supported_efforts" not in caps
     assert caps["reasoning"] is True
+
+
+def test_profile_declaration_rides_the_capability_payload(monkeypatch):
+    """The provider profile's own per-model vocabulary reaches the picker payload.
+
+    A route whose gateway validates ``reasoning.effort`` per model (OpenCode Go's vendor knobs)
+    must let the level pickers offer only its real levels. The profile's declaration is a
+    different, authoritative source from the models.dev catalog the tests above keep off the
+    payload — so this one *is* forwarded, and a model the profile leaves undeclared still omits
+    the key.
+    """
+    _patch_catalog(monkeypatch, {})
+    rows = [{"slug": "opencode-go", "models": ["glm-5.2", "mimo-v2.5"]}]
+    inv._apply_capabilities(rows)
+
+    caps = rows[0]["capabilities"]
+    assert caps["glm-5.2"]["supported_efforts"] == ["high", "max"]
+    assert "supported_efforts" not in caps["mimo-v2.5"]

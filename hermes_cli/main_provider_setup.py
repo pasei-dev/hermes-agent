@@ -654,12 +654,23 @@ def _prompt_main_reasoning_effort(model: str, provider: str) -> None:
 
 
 def _main_model_reasoning_efforts(model: str, provider: str) -> Optional[list[str]]:
-    """Levels to offer for *model* on *provider*: None when the route has no reasoning control."""
+    """Levels to offer for *model* on *provider*: None when the route has no reasoning control.
+
+    The provider profile's per-model declaration wins when it has one (the vendor knob's real
+    vocabulary); Copilot's catalog and the models.dev no-reasoning gate are the fallbacks.
+    """
     from hermes_constants import VALID_REASONING_EFFORTS
     slug = (provider or "").strip().lower()
     if slug == "copilot":
         from hermes_cli.models import github_model_reasoning_efforts
         return github_model_reasoning_efforts(model) or None
+    try:
+        from agent.reasoning_effort import profile_declared_efforts
+        declared = profile_declared_efforts(slug, model)
+    except Exception:
+        declared = None
+    if declared:
+        return list(declared)
     try:
         from agent.models_dev import get_model_capabilities
         meta = get_model_capabilities(slug, model)

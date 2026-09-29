@@ -317,14 +317,21 @@ def _reasoning_catalog_reader(slug: str):
 def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None) -> None:
     """Attach ``{model: {fast, reasoning, ...}}`` per row. ``reasoning`` defaults True when the catalog is
     silent (the dial is a no-op on models that ignore it; hiding it from a capable model is worse). A
-    serving aggregator's detail overrides models.dev (adds ``can_disable_reasoning``). ``supported_efforts``
-    is deliberately NOT forwarded — it under-reports levels that work."""
+    serving aggregator's detail overrides models.dev (adds ``can_disable_reasoning``). models.dev's
+    ``supported_efforts`` is deliberately NOT forwarded — it under-reports levels that work — but the
+    provider profile's own per-model declaration IS: a different, authoritative source that names the
+    vendor knob's real vocabulary for level-offering surfaces."""
     from hermes_cli.models import model_supports_fast_mode
 
     try:
         from agent.models_dev import get_model_capabilities
     except Exception:
         get_model_capabilities = None  # type: ignore[assignment]
+
+    try:
+        from agent.reasoning_effort import profile_declared_efforts
+    except Exception:
+        profile_declared_efforts = None  # type: ignore[assignment]
 
     for row in rows:
         slug = row.get("slug") or ""
@@ -342,6 +349,12 @@ def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None
                     reasoning = True
 
             entry: dict[str, Any] = {"fast": bool(model_supports_fast_mode(model)), "reasoning": reasoning}
+
+            if profile_declared_efforts is not None:
+                declared = profile_declared_efforts(slug, model)
+                if declared:
+                    # The profile's declaration, not models.dev's under-reporting set (see above).
+                    entry["supported_efforts"] = list(declared)
 
             if reasoning and read_reasoning_catalog is not None:
                 try:

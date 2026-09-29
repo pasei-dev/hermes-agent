@@ -212,11 +212,14 @@ _MODEL_USAGE_ROWS = (
 _MODEL_USAGE_COL = 36
 
 
-def _picker_reasoning_rows() -> list[tuple[str, str]]:
-    """``(value, label)`` rows for the picker's effort step: the canonical ladder, the off state,
-    then a keep-current row (empty value = leave the effort alone)."""
+def _picker_reasoning_rows(provider: str = "", model: str = "") -> list[tuple[str, str]]:
+    """``(value, label)`` rows for the picker's effort step: the picked route's declared vocabulary
+    when it has one, else the canonical ladder; then the off state and a keep-current row (empty
+    value = leave the effort alone)."""
+    from agent.reasoning_effort import profile_declared_efforts
     from hermes_constants import VALID_REASONING_EFFORTS
-    rows = [(lvl, lvl) for lvl in VALID_REASONING_EFFORTS]
+    declared = profile_declared_efforts(provider, model)
+    rows = [(lvl, lvl) for lvl in (declared or VALID_REASONING_EFFORTS)]
     rows.append(("none", t("cli.model.effort_none")))
     rows.append(("", t("cli.model.effort_keep_current")))
     return rows
@@ -770,7 +773,8 @@ class CLIModelSwitchMixin:
                     custom_providers=state.get("custom_provs"))
                 if result.success and _picker_offers_reasoning(provider_data, result.new_model):
                     # Third step: effort for the picked model (skipped for routes the catalog
-                    # marks reasoning-free). Rows come from the canonical level set.
+                    # marks reasoning-free). Rows come from the route's declared vocabulary, or
+                    # the canonical level set when the route declares nothing.
                     state.update(stage="reasoning", switch_result=result, selected=0, _scroll_offset=0)
                     self._invalidate(min_interval=0.0)
                     return
@@ -778,8 +782,10 @@ class CLIModelSwitchMixin:
                 return
             self._close_model_picker()
         if stage == "reasoning":
-            rows = _picker_reasoning_rows()
             result = state.get("switch_result")
+            rows = _picker_reasoning_rows(
+                (state.get("provider_data") or {}).get("slug") or getattr(result, "target_provider", ""),
+                getattr(result, "new_model", ""))
             if selected == len(rows):  # ← Back to the model list
                 state.update(stage="model", selected=0, _scroll_offset=0, switch_result=None)
                 self._invalidate(min_interval=0.0)
