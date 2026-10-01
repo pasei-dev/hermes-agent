@@ -17,6 +17,11 @@ $activeTreeGroup.subscribe(groupId => {
   }
 })
 
+/** Pane ids that ARE a session surface: the primary chat, and every session tile. */
+export function isSessionSurfacePane(paneId: null | string | undefined): boolean {
+  return paneId === 'workspace' || Boolean(paneId?.startsWith('session-tile:'))
+}
+
 export const $focusedTreePaneId = computed(
   [$activeTreeGroup, $layoutTree, $workspaceMode, $lastContentGroup],
   (groupId, tree, workspaceMode, lastContentGroup) => {
@@ -43,4 +48,15 @@ export const $focusedTreePaneId = computed(
 
     return active
   }
+)
+
+/**
+ * True when the honoured interaction zone is a pane that is NOT a session
+ * surface — a click that landed outside every session pane (the preview rail, a
+ * contributed plugin pane, the file browser). Such a click must not re-home the
+ * focused session to the route's primary: with several session tabs open that
+ * primary is the FIRST tab, so the pane snapped back to it (#75311).
+ */
+export const $focusedPaneIsForeign = computed($focusedTreePaneId, paneId =>
+  Boolean(paneId) && !isSessionSurfacePane(paneId)
 )

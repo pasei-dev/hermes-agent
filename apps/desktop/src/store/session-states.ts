@@ -71,7 +71,7 @@ import {
   setTurnStartedAt
 } from './session'
 import { secondaryProfileOwnerForEvent } from './session-event-provenance'
-import { $focusedTreePaneId } from './session-focus'
+import { $focusedPaneIsForeign, $focusedTreePaneId } from './session-focus'
 import { assertSessionOwnerResolved } from './session-owner-resolution'
 import {
   isSessionOwnerRoute,
@@ -2998,8 +2998,19 @@ export const $focusedSessionIsTile = computed($focusedTreePaneId, active =>
   Boolean(active?.startsWith(TILE_PANE_PREFIX))
 )
 
-export const $focusedStoredSessionId = computed([$focusedTreePaneId, $selectedStoredSessionId], (active, selected) =>
-  active?.startsWith(TILE_PANE_PREFIX) ? active.slice(TILE_PANE_PREFIX.length) : selected
+export const $focusedStoredSessionId = computed(
+  [$focusedTreePaneId, $selectedStoredSessionId, $focusedPaneIsForeign],
+  (active, selected, foreign) => {
+    if (active?.startsWith(TILE_PANE_PREFIX)) {
+      return active.slice(TILE_PANE_PREFIX.length)
+    }
+
+    // A click that landed OUTSIDE every session pane (a preview/plugin/files
+    // pane) must not re-home "the session" to the route's primary — that primary
+    // is the FIRST open tab, so a multi-tab workspace snapped back to it. Report
+    // no focused session instead; callers that need the primary read it directly.
+    return foreign ? null : selected
+  }
 )
 
 /** Every session currently OPEN as a surface: the primary's selection plus

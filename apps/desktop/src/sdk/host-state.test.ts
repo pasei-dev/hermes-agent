@@ -101,6 +101,56 @@ describe('host.state focused-session atoms', () => {
     tree.noteActiveTreeGroup('grp-main')
     expect(host.state.focusedStoredSessionId.get()).toBe(primarySelection)
   })
+
+  it('clicking outside any session pane never moves the selected session with 3 tabs open', async () => {
+    const { host, session, states } = await setup()
+    const tree = await import('@/components/pane-shell/tree/store')
+    const model = await import('@/components/pane-shell/tree/model')
+    const { registry } = await import('@/contrib/registry')
+
+    // Three session tabs open in the main zone (workspace + two tiles), plus a
+    // NON-session pane — the kind a contributed plugin mounts — in its own zone.
+    for (const id of ['workspace', 'session-tile:tile-a', 'session-tile:tile-b', 'subagent-panes:watch']) {
+      registry.register({
+        area: 'panes',
+        data: id === 'workspace' ? { placement: 'main', uncloseable: true } : { placement: 'main' },
+        id,
+        render: () => null,
+        title: id
+      })
+    }
+
+    tree.declareDefaultTree(
+      model.split('row', [
+        model.group(['workspace', 'session-tile:tile-a', 'session-tile:tile-b'], {
+          active: 'session-tile:tile-b',
+          id: 'grp-main'
+        }),
+        model.group(['subagent-panes:watch'], { active: 'subagent-panes:watch', id: 'grp-plugin' })
+      ])
+    )
+
+    states.$sessionTiles.set([
+      { storedSessionId: 'tile-a', runtimeId: 'runtime-a' },
+      { storedSessionId: 'tile-b', runtimeId: 'runtime-b' }
+    ])
+    session.setSelectedStoredSessionId('primary-chat')
+    const selectedBefore = session.$selectedStoredSessionId.get()
+
+    // The user is working in the third tab — the same move a tab click makes.
+    tree.activateTreePane('grp-main', 'session-tile:tile-b')
+    tree.noteActiveTreeGroup('grp-main')
+    expect(host.state.focusedStoredSessionId.get()).toBe('tile-b')
+
+    // …then clicks a pane that is not a session surface.
+    tree.noteActiveTreeGroup('grp-plugin')
+
+    // The click must be a NO-OP for the session: the selection is untouched…
+    expect(session.$selectedStoredSessionId.get()).toBe(selectedBefore)
+    // …and the app stops claiming a focused session rather than re-homing to the
+    // FIRST tab's session (the primary) it used to report here.
+    expect(host.state.focusedStoredSessionId.get()).toBeNull()
+  })
 })
 
 describe('host.state.focusedSessionProfile', () => {
