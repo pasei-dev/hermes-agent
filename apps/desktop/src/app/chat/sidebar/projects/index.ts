@@ -7,7 +7,8 @@ export {
   projectSubtreeSessionIds,
   projectTreeCwd,
   sortProjectsForOverview,
-  useRepoWorktreeMap
+  useRepoWorktreeMap,
+  visibleProjectRows
 } from './model'
 export { ProjectBackRow, ProjectOverviewRow } from './overview-row'
 export { ProjectMenu } from './project-menu'

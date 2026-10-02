@@ -42,7 +42,8 @@ import {
   type SidebarProjectTree,
   type SidebarSessionGroup,
   SidebarWorkspaceGroup,
-  type SidebarWorkspaceTree
+  type SidebarWorkspaceTree,
+  visibleProjectRows
 } from './projects'
 import { createProjectNestResolver } from './projects/project-drag'
 import { WorkspaceAddButton } from './projects/workspace-header'
@@ -538,6 +539,12 @@ export function SidebarSessionsSection({
     // wired — Home stays outside the sortable list, it's a fixture.
     const home = projectOverview[0]?.isNoProject ? projectOverview[0] : undefined
     const sortableProjects = home ? projectOverview.slice(1) : projectOverview
+    // A collapsed project hides its subprojects along with its sessions — the nest is a display
+    // grouping, and a row nobody can see is not a row to render. Each project keeps its own open
+    // flag, so whatever a subproject was left in survives its parent folding away and coming back.
+    // The sortable ids stay whole: a drop resolves against the FULL order, so reordering while a
+    // parent is closed cannot renumber the rows it hides.
+    const visibleProjects = visibleProjectRows(sortableProjects, id => nodeOpen[id] ?? true)
     const projectsDraggable = sortableProjects.length > 1 && !!onReorderProjects
     const Row = projectsDraggable ? SortableProjectOverviewRow : ProjectOverviewRow
 
@@ -563,7 +570,7 @@ export function SidebarSessionsSection({
       />
     )
 
-    const rows = sortableProjects.map(project => projectRow(project, Row))
+    const rows = visibleProjects.map(project => projectRow(project, Row))
 
     inner = (
       <>

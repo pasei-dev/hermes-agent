@@ -260,6 +260,44 @@ export function projectSubtreeSessionIds(projects: SidebarProjectTree[], id: str
   return ids
 }
 
+/**
+ * The projects whose row should be on screen: a project whose ancestor chain is all open.
+ *
+ * Nesting is a display grouping, so a collapsed container hides everything under it — a subproject
+ * goes away with its parent, and comes back in whatever state it was left in (each row keeps its own
+ * open flag, keyed by project id, so expanding a child and collapsing its parent is not a reset).
+ * A parent that is not in this list (archived, or a stale id) cannot hide anything.
+ */
+export function visibleProjectRows(
+  projects: SidebarProjectTree[],
+  isOpen: (id: string) => boolean
+): SidebarProjectTree[] {
+  const byId = new Map(projects.map(project => [project.id, project]))
+
+  return projects.filter(project => {
+    const seen = new Set<string>()
+    let parentId = project.parentId
+
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+
+      const parent = byId.get(parentId)
+
+      if (!parent) {
+        break
+      }
+
+      if (!isOpen(parent.id)) {
+        return false
+      }
+
+      parentId = parent.parentId
+    }
+
+    return true
+  })
+}
+
 // Project drill-in lanes are git-driven: source them from `git worktree list` so
 // linked worktrees still appear even when their sessions aren't in the recents
 // payload currently loaded in memory.

@@ -130,9 +130,9 @@ export function ProjectOverviewRow({
   const s = t.sidebar
   const isActive = project.id === activeProjectId
   const [open, toggleOpen] = useWorkspaceNodeOpen(project.id)
-  // Folded away, so the subtree's loudest status speaks for it — a session that wants an answer
-  // inside a collapsed project (or a collapsed subproject of it) must not go invisible.
-  const attention = !open && attentionState && attentionState !== 'idle' ? attentionState : null
+  // The subtree's loudest status, shown whether the row is open or closed: a session that wants an
+  // answer inside a subproject must be visible without folding anything open.
+  const attention = attentionState && attentionState !== 'idle' ? attentionState : null
   const attentionLabel = attention ? sessionDotLabel(attention, s.row) : null
   // The appearance popover anchors here (the full row) so it opens flush with
   // the sidebar's content edge regardless of which side the sidebar is on.
@@ -312,11 +312,7 @@ export function ProjectOverviewRow({
         // Painted imperatively by session-drag.ts while a dragged session
         // hovers this row — a live "drop here to move" cue, not React state
         // (it must not repaint the sidebar on every pixel of pointer travel).
-        'rounded-[6px] data-[session-drop-hover=true]:outline-2 data-[session-drop-hover=true]:-outline-offset-2 data-[session-drop-hover=true]:outline-sidebar-ring',
-        // Painted by project-drag.ts while a dragged PROJECT is pulled sideways
-        // onto this row: nest it under this project. Tinted as well as ringed so
-        // "hold a project here" reads differently from "drop a session here".
-        'data-[project-drop-hover=true]:bg-(--ui-sidebar-surface-background) data-[project-drop-hover=true]:outline-2 data-[project-drop-hover=true]:-outline-offset-2 data-[project-drop-hover=true]:outline-sidebar-ring'
+        'rounded-[6px] data-[session-drop-hover=true]:outline-2 data-[session-drop-hover=true]:-outline-offset-2 data-[session-drop-hover=true]:outline-sidebar-ring'
       )}
       data-sessions-project={project.id}
       ref={ref}

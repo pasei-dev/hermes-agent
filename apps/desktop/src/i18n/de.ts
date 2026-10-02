@@ -4046,7 +4046,7 @@ export const deOverrides = {
       menuAddFolder: 'Ordner hinzufügen',
       menuNewSubproject: 'Neues Unterprojekt…',
       subprojectOf: name => `Innerhalb von ${name}`,
-      dragNestInto: name => `Unter ${name} einordnen`,
+      dragNestInto: name => `${name} als Unterprojekt hinzufügen`,
       dragTopLevel: 'Oberste Ebene',
       nestFailed: 'Projekt konnte nicht verschoben werden',
       menuSetActive: 'Als aktiv festlegen',

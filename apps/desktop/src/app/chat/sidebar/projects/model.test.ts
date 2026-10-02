@@ -5,7 +5,8 @@ import {
   orderProjectsByIds,
   projectDescendantIds,
   projectSubtreeSessionIds,
-  sortProjectsForOverview
+  sortProjectsForOverview,
+  visibleProjectRows
 } from './model'
 import { NO_PROJECT_ID, type SidebarProjectTree } from './workspace-groups'
 
@@ -178,5 +179,36 @@ describe('projectSubtreeSessionIds', () => {
     expect(projectSubtreeSessionIds(projects, 'dev').sort()).toEqual(['s_align', 's_dev', 's_leaf'])
     expect(projectSubtreeSessionIds(projects, 'align').sort()).toEqual(['s_align', 's_leaf'])
     expect(projectSubtreeSessionIds(projects, 'other')).toEqual(['s_other'])
+  })
+})
+
+describe('visibleProjectRows', () => {
+  const child = (id: string, parentId: string): SidebarProjectTree => ({ ...makeProject(id, 0), parentId })
+
+  const projects = [
+    makeProject('dev', 0),
+    child('align', 'dev'),
+    child('leaf', 'align'),
+    makeProject('other', 0)
+  ]
+
+  const open = (...ids: string[]) => (id: string) => ids.includes(id)
+
+  it('hides everything under a collapsed project, however deep', () => {
+    expect(visibleProjectRows(projects, open('dev', 'align', 'other')).map(p => p.id)).toEqual([
+      'dev',
+      'align',
+      'leaf',
+      'other'
+    ])
+    // `align` is open, but its parent `dev` is closed — align and leaf go with it. `dev` itself
+    // keeps its row: a project is only ever hidden by an ancestor, never by its own flag.
+    expect(visibleProjectRows(projects, open('align', 'other')).map(p => p.id)).toEqual(['dev', 'other'])
+    // The parent open again: only what its own closed child hides is gone.
+    expect(visibleProjectRows(projects, open('dev', 'other')).map(p => p.id)).toEqual(['dev', 'align', 'other'])
+  })
+
+  it('leaves a project whose parent is not in the list standing on its own', () => {
+    expect(visibleProjectRows([child('orphan', 'gone')], open('dev')).map(p => p.id)).toEqual(['orphan'])
   })
 })

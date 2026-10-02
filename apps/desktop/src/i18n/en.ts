@@ -3665,7 +3665,7 @@ export const en: Translations = {
       menuAddFolder: 'Add folder',
       menuNewSubproject: 'New subproject…',
       subprojectOf: name => `Inside ${name}`,
-      dragNestInto: name => `Nest in ${name}`,
+      dragNestInto: name => `Add subproject to ${name}`,
       dragTopLevel: 'Top level',
       nestFailed: 'Could not move project',
       menuSetActive: 'Set active',

@@ -4057,7 +4057,7 @@ export const frOverrides = {
       menuAddFolder: 'Ajouter un dossier',
       menuNewSubproject: 'Nouveau sous-projet…',
       subprojectOf: name => `Dans ${name}`,
-      dragNestInto: name => `Imbriquer dans ${name}`,
+      dragNestInto: name => `Ajouter un sous-projet à ${name}`,
       dragTopLevel: 'Niveau supérieur',
       nestFailed: 'Impossible de déplacer le projet',
       menuSetActive: 'Définir comme actif',

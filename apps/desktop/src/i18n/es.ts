@@ -4038,7 +4038,7 @@ export const esOverrides = {
       menuAddFolder: 'Agregar carpeta',
       menuNewSubproject: 'Nuevo subproyecto…',
       subprojectOf: name => `Dentro de ${name}`,
-      dragNestInto: name => `Anidar en ${name}`,
+      dragNestInto: name => `Añadir subproyecto a ${name}`,
       dragTopLevel: 'Nivel superior',
       nestFailed: 'No se pudo mover el proyecto',
       menuSetActive: 'Establecer activo',

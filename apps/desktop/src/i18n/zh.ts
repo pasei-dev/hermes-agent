@@ -3434,7 +3434,7 @@ export const zh = defineLocale({
       menuAddFolder: '添加文件夹',
       menuNewSubproject: '新建子项目…',
       subprojectOf: name => `位于 ${name} 内`,
-      dragNestInto: name => `嵌套到 ${name}`,
+      dragNestInto: name => `添加子项目到 ${name}`,
       dragTopLevel: '顶层',
       nestFailed: '无法移动项目',
       menuSetActive: '设为活动',
