@@ -1165,6 +1165,9 @@ export interface ProjectInfo {
   archived: boolean
   created_at: number
   folders: ProjectFolder[]
+  /** Nesting: null = nest by folder containment, "" = top level, a project id = that parent.
+   *  Optional because a backend older than this field simply omits it. */
+  parent_id?: null | string
 }
 
 export interface ProjectsPayload {

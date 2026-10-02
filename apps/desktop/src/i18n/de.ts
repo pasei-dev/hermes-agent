@@ -4044,6 +4044,8 @@ export const deOverrides = {
       menuAppearance: 'Aussehen',
       noColor: 'Keine Farbe',
       menuAddFolder: 'Ordner hinzufügen',
+      menuNewSubproject: 'Neues Unterprojekt…',
+      subprojectOf: name => `Innerhalb von ${name}`,
       menuSetActive: 'Als aktiv festlegen',
       menuDelete: 'Löschen',
       moveToProject: 'In Projekt verschieben',

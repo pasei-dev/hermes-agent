@@ -503,6 +503,23 @@ describe('createProject', () => {
     expect($activeProjectId.get()).toBe('p_new')
   })
 
+  it('nests the new project under the parent it was given', async () => {
+    const created = {
+      folders: [],
+      id: 'p_child',
+      name: 'Align',
+      parent_id: 'p_dev',
+      primary_path: '/srv/dev/m4l/align'
+    }
+
+    const request = vi.fn().mockResolvedValue({ project: created })
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+
+    await createProject({ folders: ['/srv/dev/m4l/align'], name: 'Align', parentId: 'p_dev', use: true })
+
+    expect(request).toHaveBeenCalledWith('projects.create', expect.objectContaining({ parent_id: 'p_dev' }))
+  })
+
   it('marks the backend stale and surfaces a friendly error when projects.create is missing', async () => {
     activeGateway.mockReturnValue({
       connectionState: 'open',

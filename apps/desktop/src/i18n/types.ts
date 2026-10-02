@@ -3087,6 +3087,8 @@ export interface Translations {
       menuAppearance: string
       noColor: string
       menuAddFolder: string
+      menuNewSubproject: string
+      subprojectOf: (name: string) => string
       menuSetActive: string
       menuDelete: string
       moveToProject: string

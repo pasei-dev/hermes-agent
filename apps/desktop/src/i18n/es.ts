@@ -4036,6 +4036,8 @@ export const esOverrides = {
       menuAppearance: 'Apariencia',
       noColor: 'Sin color',
       menuAddFolder: 'Agregar carpeta',
+      menuNewSubproject: 'Nuevo subproyecto…',
+      subprojectOf: name => `Dentro de ${name}`,
       menuSetActive: 'Establecer activo',
       menuDelete: 'Borrar',
       moveToProject: 'Mover a proyecto',

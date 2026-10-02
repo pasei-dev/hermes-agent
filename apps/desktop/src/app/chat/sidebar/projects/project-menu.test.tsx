@@ -32,6 +32,7 @@ vi.mock('@/i18n', () => ({
           menuAddFolder: 'Add folder',
           menuAppearance: 'Appearance',
           menuDelete: 'Delete',
+          menuNewSubproject: 'New subproject',
           menuRename: 'Rename',
           menuSetActive: 'Set active',
           noColor: 'No color',
@@ -60,6 +61,7 @@ vi.mock('@/store/projects', () => ({
   copyPath: vi.fn(),
   deleteProject: vi.fn(),
   openProjectAddFolder: vi.fn(),
+  openProjectCreate: vi.fn(),
   openProjectRename: vi.fn(),
   revealPath: vi.fn(),
   setActiveProject: vi.fn(),
@@ -104,5 +106,17 @@ describe('ProjectMenu', () => {
     // real button through the full Tip > PopoverAnchor > DropdownMenuTrigger
     // chain rather than getting silently dropped on an intermediate wrapper.
     expect(await screen.findByRole('button', { name: 'No color' })).toBeTruthy()
+  }, 15000)
+
+  it('offers "New subproject" and hands the row to the create dialog as its parent', async () => {
+    const { openProjectCreate } = vi.mocked(await import('@/store/projects'))
+
+    render(<ProjectMenu isActive={false} project={project} />)
+
+    openTriggerMenu(screen.getByRole('button', { name: 'Actions' }))
+
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'New subproject' }))
+
+    expect(openProjectCreate).toHaveBeenCalledWith({ id: 'p1', name: 'Test D' })
   }, 15000)
 })

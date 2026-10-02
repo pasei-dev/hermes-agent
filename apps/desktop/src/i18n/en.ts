@@ -3663,6 +3663,8 @@ export const en: Translations = {
       menuAppearance: 'Appearance',
       noColor: 'No color',
       menuAddFolder: 'Add folder',
+      menuNewSubproject: 'New subproject…',
+      subprojectOf: name => `Inside ${name}`,
       menuSetActive: 'Set active',
       menuDelete: 'Delete',
       moveToProject: 'Move to project',

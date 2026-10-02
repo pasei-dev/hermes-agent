@@ -3432,6 +3432,8 @@ export const zh = defineLocale({
       menuAppearance: '外观',
       noColor: '无颜色',
       menuAddFolder: '添加文件夹',
+      menuNewSubproject: '新建子项目…',
+      subprojectOf: name => `位于 ${name} 内`,
       menuSetActive: '设为活动',
       menuDelete: '删除',
       moveToProject: '移动到项目',

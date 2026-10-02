@@ -167,6 +167,7 @@ export function ProjectDialog() {
           folders,
           idea: idea.trim() || undefined,
           name: trimmed,
+          parentId: state?.parentId,
           use: true
         })
 
@@ -204,6 +205,12 @@ export function ProjectDialog() {
           <DialogTitle>{title}</DialogTitle>
           {mode === 'create' && <DialogDescription>{p.createDesc}</DialogDescription>}
         </DialogHeader>
+
+        {mode === 'create' && state?.parentName && (
+          <p className="text-[0.6875rem] font-medium text-(--ui-text-tertiary)">
+            {p.subprojectOf(state.parentName)}
+          </p>
+        )}
 
         {mode !== 'add-folder' && (
           <Input

@@ -4055,6 +4055,8 @@ export const frOverrides = {
       menuAppearance: 'Apparence',
       noColor: 'Aucune couleur',
       menuAddFolder: 'Ajouter un dossier',
+      menuNewSubproject: 'Nouveau sous-projet…',
+      subprojectOf: name => `Dans ${name}`,
       menuSetActive: 'Définir comme actif',
       menuDelete: 'Supprimer',
       moveToProject: 'Déplacer vers un projet',
