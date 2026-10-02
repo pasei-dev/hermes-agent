@@ -88,17 +88,53 @@ def _(rid, params, pdb, conn) -> dict:
     return _ok(rid, {"project": _require_project(pdb, conn, params).to_dict()})
 
 
+def _refuse_tree_loop(pdb, conn, child_id: str, parent_id) -> None:
+    """Reject a move that would nest ``child_id`` under one of its own descendants.
+
+    Walks the *effective* parent chain (explicit links plus folder containment, the same resolution the
+    sidebar renders), so dragging a project under its own folder-child is refused rather than coming
+    back as two flat rows. ``parent_id`` None means "back to containment", so the derived parent is the
+    proposal in that case.
+    """
+    from tui_gateway import project_tree
+    nodes = [p.to_dict() for p in pdb.list_projects(conn, include_archived=True)]
+    for node in nodes:
+        if str(node.get("id") or "") == str(child_id):
+            node["parent_id"] = None  # let containment answer for the project being moved
+    parents = project_tree.effective_parent_map(nodes)
+    cursor = parents.get(str(child_id))
+    if parent_id is not None:
+        cursor = str(parent_id) or None
+    seen = {str(child_id)}
+    while cursor:
+        if cursor in seen:
+            raise ValueError("that move would nest a project under one of its own descendants")
+        seen.add(cursor)
+        cursor = parents.get(cursor)
+
+
 @_projects_method("projects.create")
 def _(rid, params, pdb, conn) -> dict:
     pid = pdb.create_project(
         conn, name=str(params.get("name") or ""), folders=params.get("folders") or [],
-        **_pick(params, "slug", "primary_path", "description", "icon", "color", "board_slug"))
+        **_pick(params, "slug", "primary_path", "description", "icon", "color", "board_slug", "parent_id"))
     if params.get("use"):
         pdb.set_active(conn, pid)
     from hermes_cli.observability.shared_metrics_signals import record_feature_used
     record_feature_used("projects")
     proj = pdb.get_project(conn, pid)
     return _ok(rid, {"project": proj.to_dict() if proj else None})
+
+
+@_projects_method("projects.set_parent")
+def _(rid, params, pdb, conn) -> dict:
+    """Nest a project under another: ``parent_id`` names the parent, ``""`` is the top level, and an
+    omitted/None value hands the project back to folder containment. Refuses looping moves."""
+    proj = _require_project(pdb, conn, params)
+    parent_id = params.get("parent_id")
+    _refuse_tree_loop(pdb, conn, proj.id, parent_id)
+    pdb.set_project_parent(conn, proj.id, parent_id)
+    return _ok(rid, {"project": pdb.get_project(conn, proj.id).to_dict()})
 
 
 @_projects_method("projects.archive")
