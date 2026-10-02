@@ -1,41 +1,32 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  expandRowsToGroups,
-  NEST_TRAVEL_PX,
-  type ProjectNestRow,
-  resolveProjectDropIntent
-} from './project-drag'
+import { expandRowsToGroups, NEST_TRAVEL_PX, type ProjectNestRow, resolveProjectDropIntent } from './project-drag'
 import type { SidebarProjectTree } from './workspace-groups'
 
 const project = (id: string, over: Partial<SidebarProjectTree> = {}): SidebarProjectTree =>
   ({ id, isAuto: false, label: id, parentId: null, ...over }) as SidebarProjectTree
 
 // Geometry only matters for the hit test; the element is never read by the pure resolver.
-const row = (id: string, top: number): ProjectNestRow =>
-  ({ el: null as unknown as HTMLElement, id, rect: { bottom: top + 20, left: 0, right: 200, top } })
+const header = (id: string, top: number): Pick<ProjectNestRow, 'el' | 'id' | 'rect'> => ({
+  el: null as unknown as HTMLElement,
+  id,
+  rect: { bottom: top + 20, left: 0, right: 200, top }
+})
 
+/** `dev` is open with `align` nested inside it; `other` is the next project after dev's region. */
 const tree = [
   project('dev', { label: 'Dev' }),
   project('align', { label: 'Align', parentId: 'dev' }),
-  project('leaf', { label: 'Leaf', parentId: 'align' }),
-  project('other', { label: 'Other' }),
-  project('scanned', { label: 'Scanned', isAuto: true })
+  project('other')
 ]
 
-const rows = [row('dev', 0), row('align', 20), row('leaf', 40), row('other', 60), row('scanned', 80)]
+// 20px rows: dev's row, then 60px of dev's own region below it (align's row and the sessions of
+// both), then other.
+const rows = expandRowsToGroups(tree, [header('dev', 0), header('align', 20), header('other', 100)])
 
-/** Drag `activeId` sideways-right onto `targetId`'s row. */
-const onto = (activeId: string, targetId: string) => {
-  const y = rows.find(candidate => candidate.id === targetId)!.rect.top + 10
-
-  return resolveProjectDropIntent({
-    activeId,
-    pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y },
-    projects: tree,
-    rows
-  })
-}
+/** Drag `other` sideways-right to a point. */
+const onto = (activeId: string, y: number) =>
+  resolveProjectDropIntent({ activeId, pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y }, projects: tree, rows })
 
 describe('resolveProjectDropIntent', () => {
   it('leaves a mostly-vertical drag to the reorder', () => {
@@ -44,8 +35,16 @@ describe('resolveProjectDropIntent', () => {
     ).toBeNull()
   })
 
-  it('nests into the row a rightward drag is over', () => {
-    expect(onto('other', 'dev')).toEqual({ kind: 'into', targetId: 'dev' })
+  it("nests into the project whose own row the pointer is on — nested projects included", () => {
+    expect(onto('other', 10)).toEqual({ kind: 'into', targetId: 'dev' })
+    // The one way to reach a project that is already nested.
+    expect(onto('other', 30)).toEqual({ kind: 'into', targetId: 'align' })
+  })
+
+  it('nests into the ROOT of the region when the pointer is between rows', () => {
+    // 70px down: below align's own row, still inside dev's region — where dev's own sessions sit.
+    // The area belongs to dev, so dev takes the subproject, not the nearest descendant.
+    expect(onto('other', 70)).toEqual({ kind: 'into', targetId: 'dev' })
   })
 
   it('takes a nested project out on a leftward drag, whatever it is over', () => {
@@ -66,43 +65,42 @@ describe('resolveProjectDropIntent', () => {
   })
 
   it('refuses itself, its own descendants, and discovered rows', () => {
-    expect(onto('dev', 'dev')).toBeNull()
-    expect(onto('dev', 'align')).toBeNull()
-    expect(onto('dev', 'leaf')).toBeNull()
-    expect(onto('other', 'scanned')).toBeNull()
+    const scanned = project('scanned', { isAuto: true })
+    const withAuto = expandRowsToGroups([...tree, scanned], [header('scanned', 120), header('other', 100)])
+
+    // Its own row is skipped outright — during a drag it is under the pointer.
+    expect(onto('dev', 10)).toBeNull()
+    // A descendant region resolves to the descendant, which cannot take its own ancestor.
+    expect(onto('dev', 30)).toBeNull()
+    expect(
+      resolveProjectDropIntent({
+        activeId: 'other',
+        pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y: 130 },
+        projects: [...tree, scanned],
+        rows: withAuto
+      })
+    ).toBeNull()
   })
 
   it('does nothing when the drag ends away from every row', () => {
-    expect(
-      resolveProjectDropIntent({ activeId: 'other', pointer: { dx: 60, x: 480, y: 480 }, projects: tree, rows })
-    ).toBeNull()
+    expect(onto('other', 480)).toBeNull()
   })
 })
 
 describe('expandRowsToGroups', () => {
-  // Headers only (that is what the DOM query yields), so the group's extent is read off the next
-  // header that is not nested inside it.
-  const projects = [project('dev', { label: 'Dev' }), project('align', { parentId: 'dev' }), project('other')]
-  const headers = [row('dev', 0), row('align', 60), row('other', 100)]
-
-  it('stretches each project row over the rows of its own group', () => {
-    expect(expandRowsToGroups(projects, headers).map(g => [g.id, g.rect.bottom])).toEqual([
-      ['dev', 100],
-      ['align', 100],
-      ['other', 120]
+  it('stretches each row over the region it heads', () => {
+    expect(rows.map(row => [row.id, row.rect.bottom, row.group.bottom])).toEqual([
+      ['dev', 20, 100],
+      ['align', 40, 100],
+      ['other', 120, 120]
     ])
   })
 
-  it('lets a release between the rows of a group nest into it, and the deepest group win', () => {
-    const groups = expandRowsToGroups(projects, headers)
-    // 90px down the list: below align's own row, inside both dev's and align's group.
-    expect(
-      resolveProjectDropIntent({
-        activeId: 'other',
-        pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y: 90 },
-        projects,
-        rows: groups
-      })
-    ).toEqual({ kind: 'into', targetId: 'align' })
+  it('contains a nested project inside its parent, so the parent keeps the pointer', () => {
+    const dev = rows.find(row => row.id === 'dev')!
+    const align = rows.find(row => row.id === 'align')!
+
+    expect(align.group.top).toBeGreaterThan(dev.group.top)
+    expect(align.group.bottom).toBe(dev.group.bottom)
   })
 })

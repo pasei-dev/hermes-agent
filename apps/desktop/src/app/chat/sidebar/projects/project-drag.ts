@@ -5,18 +5,22 @@
  * drag rather than adding a rival one, and the two are told apart by the gesture file trees use —
  * sideways travel. Straight up/down still reorders (untouched); sideways is structural:
  *
- *   drag right, anywhere over another project's group → add it as a subproject of that project
- *   drag left                                         → move out to the top level
+ *   drag right, anywhere over another project's region → add it as a subproject of that project
+ *   drag left                                          → move out to the top level
  *
- * "Group", not "row": the hit area is the project's whole visible group — its row and everything
- * rendered under it while it is open — so a release between two of its rows, or in the gap below it,
- * nests just as its own row does. Groups nest, so the deepest one under the pointer wins.
+ * Which project, exactly? Point at a project's OWN row and you get that project — the only way to
+ * reach a nested one. Anywhere else in its region (between its rows, over its sessions, over the
+ * subprojects nested inside it) you get the ROOT of that region: the outermost project it belongs to.
+ * A nested project's territory is part of its parent's, so a release between a subproject's rows
+ * nests into the parent, never into whichever descendant happened to be nearest.
  *
  * What the release will do is shown before it happens: a chip beside the pointer reads "Add subproject
- * to <name>" or "Top level", and the whole group it would land in is outlined. Neither appears while
- * the answer is a plain reorder, or a place a project cannot go — a discovered (auto) row owns no
+ * to <name>" or "Top level", and the whole region it would land in — nested subprojects included — is
+ * outlined. Both follow the list as it scrolls, and neither appears while the answer is a plain
+ * reorder (a mostly-vertical drag) or a place a project cannot go: a discovered (auto) row owns no
  * project record, a project cannot be parented to itself or to one of its own descendants, and a
- * project already at the top level has nothing to pull out of.
+ * project already at the top level has nothing to pull out of. Row tooltips are muted for the length
+ * of the drag, so the chip is the only text saying what is about to happen.
  *
  * The backend owns the same rule (`projects.set_parent`, which refuses looping moves); this module
  * only decides intent, paints it, and hands the move to the store.
@@ -34,8 +38,13 @@ import type { SidebarProjectTree } from './workspace-groups'
 
 /** Row tag `ProjectOverviewRow` puts on every project row (the same one session drops use). */
 const ROW_ATTR = 'data-sessions-project'
-/** Marks the outline drawn around the group a drop would nest into. */
+/** Marks the outline drawn around the region a drop would nest into. */
 const ZONE_ATTR = 'data-project-nest-zone'
+/** Set on `<body>` for the length of a project drag. */
+const DRAG_ATTR = 'data-project-drag'
+/** Tooltips (the caret's "Show/Hide … sessions" one especially) are noise mid-drag: the chip is the
+ *  thing saying what the release does, and a second label disagreeing with it is worse than none. */
+const MUTE_CSS = `body[${DRAG_ATTR}] [role="tooltip"]{display:none!important}`
 
 /** Sideways travel (px) before a drag means "nest" / "take out" instead of "reorder". */
 export const NEST_TRAVEL_PX = 18
@@ -43,7 +52,10 @@ export const NEST_TRAVEL_PX = 18
 export interface ProjectNestRow {
   el: HTMLElement
   id: string
+  /** The row itself — pointing here means THIS project. */
   rect: ZoneRect
+  /** The row plus every row of the region it heads, nested subprojects included. */
+  group: ZoneRect
 }
 
 export interface ProjectDropPoint {
@@ -64,18 +76,33 @@ const snapRect = (el: HTMLElement): ZoneRect => {
 
 const area = (rect: ZoneRect) => (rect.right - rect.left) * (rect.bottom - rect.top)
 
+/** Every visible project row with the geometry of the moment: a `rect` for the row itself, a `group`
+ *  for the region it heads. Re-read on every pointer move and on scroll, so the answer survives a
+ *  list that scrolls or reorders underneath the pointer. */
+export function readProjectRows(projects: SidebarProjectTree[]): ProjectNestRow[] {
+  return expandRowsToGroups(
+    projects,
+    queryAllVisible<HTMLElement>(`[${ROW_ATTR}]`).map(el => ({
+      el,
+      id: el.dataset.sessionsProject || '',
+      rect: snapRect(el)
+    }))
+  )
+}
+
 /**
- * Widen each project row's hit area to cover its whole group: the row itself plus every row rendered
+ * Give each project row the extent of the region it heads: the row itself plus every row rendered
  * under it while it is open, down to the next row that is NOT nested inside it.
  *
- * Rows arrive as headers only, so no element carries the group's extent — the extent is what the
- * neighbouring header says: this project's group ends where the next project outside its subtree
- * begins, and the last group ends at the list's last row. A collapsed project therefore owns the gap
- * beneath it, which is exactly the space a "drop it in here" release lands on.
+ * Rows arrive as headers only, so no element carries the region's extent — the extent is what the
+ * neighbouring header says: this project's region ends where the next project outside its subtree
+ * begins, and the last region ends at the list's last row. A collapsed project therefore owns the gap
+ * beneath it, which is exactly the space a "drop it in here" release lands on. A nested project's
+ * region sits inside its parent's, which keeps going over the child's own subprojects.
  */
 export function expandRowsToGroups(
   projects: SidebarProjectTree[],
-  rows: ProjectNestRow[]
+  rows: Pick<ProjectNestRow, 'el' | 'id' | 'rect'>[]
 ): ProjectNestRow[] {
   const sorted = [...rows].sort((a, b) => a.rect.top - b.rect.top)
   const last = sorted[sorted.length - 1]
@@ -85,16 +112,9 @@ export function expandRowsToGroups(
     const next = sorted.slice(index + 1).find(candidate => !subtree.has(candidate.id))
     const bottom = Math.max(row.rect.bottom, next ? next.rect.top : (last?.rect.bottom ?? row.rect.bottom))
 
-    return { ...row, rect: { ...row.rect, bottom } }
+    return { ...row, group: { ...row.rect, bottom } }
   })
 }
-
-/** The innermost row whose group the point is inside. Groups nest, so a point sits in several at
- *  once and the deepest — the smallest — one is the project the release belongs to. */
-const hitRow = (rows: ProjectNestRow[], x: number, y: number): ProjectNestRow | undefined =>
-  rows
-    .filter(row => row.id && rectContains(row.rect, x, y))
-    .sort((a, b) => area(a.rect) - area(b.rect))[0]
 
 /** Pure resolution, so the policy can be tested without a DOM: what does a release here do? */
 export function resolveProjectDropIntent({
@@ -121,14 +141,24 @@ export function resolveProjectDropIntent({
     return active?.parentId ? { kind: 'top' } : null
   }
 
-  // Pulled right: nest into whichever group the pointer is inside.
-  const row = hitRow(rows, pointer.x, pointer.y)
+  // Pulled right. The dragged row is out of the running — it is sitting under
+  // the pointer by definition.
+  const targets = rows.filter(row => row.id && row.id !== activeId)
 
-  if (!row) {
+  const candidate =
+    // The row itself: the one way to name a nested project directly.
+    targets.find(row => rectContains(row.rect, pointer.x, pointer.y)) ??
+    // Otherwise the region the pointer is in — outermost first, because the drag
+    // is addressing the whole area and the whole area belongs to its root.
+    targets
+      .filter(row => rectContains(row.group, pointer.x, pointer.y))
+      .sort((a, b) => area(b.group) - area(a.group))[0]
+
+  if (!candidate) {
     return null
   }
 
-  const target = projects.find(project => project.id === row.id)
+  const target = projects.find(project => project.id === candidate.id)
 
   // Auto (discovered) rows have no project record to parent to, and nothing
   // nests under itself or one of its own descendants.
@@ -139,7 +169,7 @@ export function resolveProjectDropIntent({
   return { kind: 'into', targetId: target.id }
 }
 
-/** The outline around the pending target group — the "it will land in here" affordance. */
+/** The outline around the pending target region — the "it will land in here" affordance. */
 function createZoneOutline() {
   const el = document.createElement('div')
 
@@ -160,10 +190,27 @@ function createZoneOutline() {
   }
 }
 
+/** Injected once, on the first drag: the rule that mutes tooltips while one is in flight. */
+let muteStyle: HTMLStyleElement | null = null
+
+const muteTooltips = (on: boolean) => {
+  if (on && !muteStyle) {
+    muteStyle = document.createElement('style')
+    muteStyle.textContent = MUTE_CSS
+    document.head.appendChild(muteStyle)
+  }
+
+  if (on) {
+    document.body.setAttribute(DRAG_ATTR, '')
+  } else {
+    document.body.removeAttribute(DRAG_ATTR)
+  }
+}
+
 /**
- * The `ReorderableList` policy for the projects list: snapshots the groups when a drag engages, paints
- * the pending outcome on every move, and commits it on release. Only the drop answers non-null, and
- * only for a structural move — everything else stays a reorder.
+ * The `ReorderableList` policy for the projects list: reads the rows when a drag engages, re-reads
+ * them on every move and on scroll, paints the pending outcome, and commits it on release. Only the
+ * drop answers non-null, and only for a structural move — everything else stays a reorder.
  */
 export function createProjectNestResolver(deps: {
   /** The sidebar's projects, read live: labels, nesting and auto flags change between drags. */
@@ -174,6 +221,8 @@ export function createProjectNestResolver(deps: {
   strings: { nestInto: (name: string) => string; topLevel: string }
 }): NestResolver {
   let rows: ProjectNestRow[] = []
+  let activeId = ''
+  let lastPointer: ProjectDropPoint | null = null
   let ghost: DragGhost | null = null
   let zone: ReturnType<typeof createZoneOutline> | null = null
 
@@ -184,20 +233,61 @@ export function createProjectNestResolver(deps: {
     zone = null
   }
 
+  /** Read the list again — it may have scrolled, or reordered under the pointer — and repaint. */
+  const repaint = (pointer: ProjectDropPoint | null) => {
+    if (!pointer || !activeId) {
+      return
+    }
+
+    const projects = deps.projects()
+
+    rows = readProjectRows(projects)
+
+    const intent = resolveProjectDropIntent({ activeId, pointer, projects, rows })
+    const row = intent?.kind === 'into' ? rows.find(candidate => candidate.id === intent.targetId) : null
+
+    if (intent) {
+      if (!ghost) {
+        ghost = createDragGhost('')
+      }
+
+      const target = intent.kind === 'into' ? projects.find(project => project.id === intent.targetId) : null
+
+      ghost.setLabel(intent.kind === 'top' ? deps.strings.topLevel : deps.strings.nestInto(target?.label ?? ''))
+      ghost.moveTo(pointer.x, pointer.y)
+    } else {
+      ghost?.destroy()
+      ghost = null
+    }
+
+    if (row) {
+      zone ??= createZoneOutline()
+      zone.paint(row.group)
+    } else {
+      zone?.destroy()
+      zone = null
+    }
+  }
+
+  // The list can scroll without the pointer moving — the sidebar's own scroller, or dnd-kit's edge
+  // auto-scroll — so the geometry is re-read on scroll as well as on move.
+  const onScroll = () => repaint(lastPointer)
+
   const teardown = () => {
     hidePaint()
+    muteTooltips(false)
+    window.removeEventListener('scroll', onScroll, true)
     rows = []
+    lastPointer = null
+    activeId = ''
   }
 
   return info => {
     if (info.phase === 'start') {
-      const snapshot = queryAllVisible<HTMLElement>(`[${ROW_ATTR}]`).map(el => ({
-        el,
-        id: el.dataset.sessionsProject || '',
-        rect: snapRect(el)
-      }))
-
-      rows = expandRowsToGroups(deps.projects(), snapshot)
+      activeId = info.activeId
+      rows = readProjectRows(deps.projects())
+      muteTooltips(true)
+      window.addEventListener('scroll', onScroll, true)
 
       return null
     }
@@ -208,41 +298,23 @@ export function createProjectNestResolver(deps: {
       return null
     }
 
-    const projects = deps.projects()
-
-    const intent = info.pointer
-      ? resolveProjectDropIntent({ activeId: info.activeId, pointer: info.pointer, projects, rows })
-      : null
-
     if (info.phase === 'move') {
-      const row = intent?.kind === 'into' ? rows.find(candidate => candidate.id === intent.targetId) : null
-
-      if (info.pointer && intent) {
-        const target = intent.kind === 'into' ? projects.find(project => project.id === intent.targetId) : null
-
-        if (!ghost) {
-          ghost = createDragGhost('')
-        }
-
-        ghost.setLabel(intent.kind === 'top' ? deps.strings.topLevel : deps.strings.nestInto(target?.label ?? ''))
-        ghost.moveTo(info.pointer.x, info.pointer.y)
-      } else {
-        hidePaint()
-      }
-
-      if (row) {
-        zone ??= createZoneOutline()
-        zone.paint(row.rect)
-      } else {
-        zone?.destroy()
-        zone = null
-      }
+      lastPointer = info.pointer
+      repaint(lastPointer)
 
       return null
     }
 
     // Drop: commit when this is a structural move that actually changes something, then hand the drop
     // over (a non-null answer) so the list does not also reorder.
+    const projects = deps.projects()
+
+    rows = readProjectRows(projects)
+
+    const intent = info.pointer
+      ? resolveProjectDropIntent({ activeId: info.activeId, pointer: info.pointer, projects, rows })
+      : null
+
     const active = projects.find(project => project.id === info.activeId)
     const unchanged = intent?.kind === 'into' ? active?.parentId === intent.targetId : !active?.parentId
 

@@ -257,13 +257,17 @@ export function ProjectOverviewRow({
         <>
           {project.isAuto ? <Tip label={s.projects.autoDiscovered}>{labelLink}</Tip> : labelLink}
           {attention && (
+            // Same geometry as a session row's dot: a fixed cell, self-centred in the row and
+            // centring the dot in itself, so the two dots sit on one axis.
             <span
               aria-label={attentionLabel?.ariaLabel}
-              className={cn('ml-1.5 shrink-0', sessionDotClassName(attention))}
+              className="grid size-3.5 shrink-0 self-center place-items-center"
               data-project-attention=""
               role="status"
               title={attentionLabel?.title}
-            />
+            >
+              <span className={sessionDotClassName(attention)} />
+            </span>
           )}
         </>
       }
