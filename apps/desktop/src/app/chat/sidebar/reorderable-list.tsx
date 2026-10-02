@@ -1,4 +1,4 @@
-import type { CollisionDetection, useSensors } from '@dnd-kit/core'
+import type { ClientRect, CollisionDetection, UniqueIdentifier, useSensors } from '@dnd-kit/core'
 import {
   closestCenter,
   DndContext,
@@ -57,10 +57,19 @@ export interface NestOutcome {
  * dnd-kit's default (`closestCenter`) slides the other items as soon as the pointer nears them, so a
  * target row can move out from under the pointer mid-drag — which reads as the row running away just
  * before you drop. A policy with its own meaning on the pointer's position (a nest target, say) needs
- * that position to mean one thing, so while `quiet` says true the list reports "no drop target": the
- * dragged item keeps its offset, nothing shifts, and the policy's own hit test is the only thing
- * answering. `quiet` must be a PURE function of the pointer — a reflow here re-measures the rows the
- * policy just read.
+ * that position to mean one thing, so while `quiet` says true the list reports a drop target that is
+ * the DRAGGED item itself. Pinning `over` to the active item is what keeps the dragged row under the
+ * pointer: dnd-kit's sortable transform is `displaceItem ? strategy(...) : null`, and `displaceItem`
+ * needs `over` — so reporting NO target (an empty collision list) does not merely stop the reflow, it
+ * nulls the dragged row's transform too and drops the row back into its original slot. `over` equal to
+ * the active id makes the strategy yield a zero displacement, so the row holds still instead.
+ *
+ * The gate has to be HYSTERETIC, not instantaneous. Entering a row pins the crossing; leaving it
+ * releases the crossing only once the pointer is clear of the row's box, so passing over a project and
+ * coming back does not flip the reorder twice on the way through.
+ *
+ * `quiet` must be a PURE function of the pointer — a reflow here re-measures the rows the policy just
+ * read.
  */
 export type ReorderQuietZone = (pointer: null | { x: number; y: number }) => boolean
 
@@ -151,6 +160,100 @@ export function createDropClickSwallow(): DropClickSwallow {
   }
 }
 
+/**
+ * The collision pass for a list with a `quietZone`, as a resettable object.
+ *
+ * Returning NO collision is not how you hold a row still — dnd-kit takes `over` from the first
+ * collision, and the sortable transform is `displaceItem ? strategy(...) : null` with `displaceItem`
+ * requiring `over`. An empty list therefore nulls the dragged row's transform and it snaps back into
+ * its original slot. So the dragged item always collides with ITSELF: the strategy sees
+ * `index === activeIndex` and yields a zero displacement, which is exactly "held under the pointer".
+ *
+ * The pin is hysteretic. While the pointer is inside a claimed row the reorder is held; it is released
+ * only once the pointer is past that row's box by `slop` pixels, in the direction it was travelling.
+ * A pointer on its way back out spends frames inside the row it just left, and an instant gate would
+ * resume the reorder inside it — swapping on the way through instead of once past the box. Requiring
+ * the crossing to clear the edge is what makes "past a project and back" behave the same as the first
+ * pass.
+ */
+export interface ReorderPin {
+  clear: () => void
+  detect: CollisionDetection
+  /** The policy this pin was built for, so a changed policy can replace it rather than go stale. */
+  quiet: ReorderQuietZone | undefined
+}
+
+/** How far past a row's edge the pointer must go before a held reorder resumes. */
+const EDGE_SLOP = 2
+
+export function createReorderPin(
+  quietZone: ReorderQuietZone | undefined,
+  { slop = EDGE_SLOP }: { slop?: number } = {}
+): ReorderPin {
+  // The row whose box the pointer is currently inside, or has only just left.
+  let held: null | UniqueIdentifier = null
+
+  /** Has the pointer got clear of this row's box, by `slop`, on EITHER edge? */
+  const cleared = (rect: ClientRect | undefined, pointer: null | { x: number; y: number }) => {
+    if (!rect || !pointer) {
+      return true
+    }
+
+    return pointer.y < rect.top - slop || pointer.y > rect.top + rect.height + slop
+  }
+
+  return {
+    clear: () => {
+      held = null
+    },
+    detect: args => {
+      const pointer = pointerOf(args.pointerCoordinates)
+
+      if (pointer && quietZone?.(pointer)) {
+        // Claimed. Hold the row the pointer is inside, so the pointer never has to be inside a
+        // droppable for this to work: the dragged row's own id is the fallback. Holding the ACTIVE row
+        // is what keeps the dragged row under the pointer — `over` stays valid, so the sortable
+        // transform survives, and the strategy's `index === activeIndex` branch gives it a zero
+        // displacement with no other row disturbed.
+        held = rowsAt(args.droppableRects, pointer) ?? args.active.id
+
+        return [{ id: held }]
+      }
+
+      if (held !== null) {
+        if (!cleared(args.droppableRects.get(held), pointer)) {
+          // Inside the row we held on, or within the slop of its edge. A pointer on its way back out
+          // spends frames in exactly this band, and releasing here would swap on the way THROUGH the
+          // project instead of once the pointer has crossed its box. Holding it is what makes "past a
+          // project and back again" cross each box the same way in both directions.
+          return [{ id: held }]
+        }
+
+        held = null
+      }
+
+      return closestCenter(args)
+    },
+    quiet: quietZone
+  }
+}
+
+/** The droppable whose rect contains the pointer. */
+const rowsAt = (rects: Map<UniqueIdentifier, ClientRect>, pointer: { x: number; y: number }) => {
+  for (const [id, rect] of rects) {
+    if (
+      pointer.x >= rect.left &&
+      pointer.x <= rect.left + rect.width &&
+      pointer.y >= rect.top &&
+      pointer.y <= rect.top + rect.height
+    ) {
+      return id
+    }
+  }
+
+  return null
+}
+
 // One self-contained, nesting-safe reorderable list. It owns its DndContext, so a
 // drag only ever collides with THIS list's own items — drop it at any depth (repos,
 // worktrees, sessions) and reordering "just works" without leaking into the lists
@@ -191,12 +294,25 @@ export function ReorderableList({
   // One swallow per list instance (see createDropClickSwallow): the flag must not be shared.
   const swallow = useRef(createDropClickSwallow()).current
 
+  // The pin holds per-drag state, so it is rebuilt whenever the policy changes and cleared when a
+  // drag ends: a stale pin would hold the NEXT drag still before it started.
+  const pin = useRef(createReorderPin(quietZone))
+
+  if (pin.current.quiet !== quietZone) {
+    pin.current = createReorderPin(quietZone)
+  }
+
+  const detectCollision = pin.current.detect
+
   /** The dragged row's element, for the release-click swallow to scope itself to. */
   const activeRow = (id: string): HTMLElement | null =>
     document.querySelector<HTMLElement>(`[data-session-row="${id}"]`)
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { activatorEvent, active, over } = event
+
+    // This drag is over; the pin must not reach the next one.
+    pin.current.clear()
 
     // dnd-kit only restores focus for keyboard drags; after a pointer drop the
     // browser leaves :focus on the grab handle, which keeps a focus-within
@@ -236,16 +352,14 @@ export function ReorderableList({
     }
   }
 
-  // The default `closestCenter` would slide the rows out from under the pointer; while the drag sits
-  // in a spot the policy claims, the list stops answering so nothing moves.
-  const detectCollision: CollisionDetection = args =>
-    quietZone?.(pointerOf(args.pointerCoordinates)) ? [] : closestCenter(args)
-
   return (
     <DndContext
       autoScroll={reorderAutoScroll}
       collisionDetection={detectCollision}
-      onDragCancel={event => void resolveNest?.(nestInfo('cancel', event))}
+      onDragCancel={event => {
+        pin.current.clear()
+        void resolveNest?.(nestInfo('cancel', event))
+      }}
       onDragEnd={handleDragEnd}
       onDragMove={event => void resolveNest?.(nestInfo('move', event))}
       onDragStart={event => void resolveNest?.(nestInfo('start', event))}
