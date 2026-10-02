@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type * as React from 'react'
+import { useRef } from 'react'
 
 // Sidebar reordering is a strictly vertical list. The dragged item's transform
 // is rendered Y-only in useSortableBindings (no x, no scale); this just stops
@@ -36,7 +37,19 @@ export interface NestDropInfo {
   pointer: null | { dx: number; x: number; y: number }
 }
 
-export type NestResolver = (info: NestDropInfo) => null | { targetId: null | string }
+export type NestResolver = (info: NestDropInfo) => null | NestOutcome
+
+/**
+ * What a policy did with a drop, plus the two elements the release `click` may land on: the dragged
+ * row itself, and the row the pointer was over when the policy took the drop (a nest target). The list
+ * hands both to the drop-click swallow so the release cannot also activate a row — see
+ * `createDropClickSwallow`.
+ */
+export interface NestOutcome {
+  /** The nest target's row, when the policy committed a nest. */
+  targetEl?: HTMLElement | null
+  targetId: null | string
+}
 
 /**
  * Opt-in gate on a list's reordering: while the drag is in a "quiet" spot, nothing reflows.
@@ -59,6 +72,84 @@ type NestDragEvent = DragCancelEvent | DragEndEvent | DragMoveEvent | DragStartE
 const pointerOf = (
   coordinates: null | { x: number; y: number }
 ): null | { x: number; y: number } => (coordinates ? { x: coordinates.x, y: coordinates.y } : null)
+
+/**
+ * Swallow exactly the one `click` a finished pointer drag leaves behind.
+ *
+ * The release `click` lands on whatever is under the pointer, which is a row in a DIFFERENT list from
+ * the one that just dragged — so the swallow has to cover the whole document, but only ever the ONE
+ * click a drag produces. Anything broader (a window-level flag consulted later) would eat the user's
+ * next real click on an unrelated row.
+ *
+ * Scope, in order of what the browser can do:
+ *  - the click's target is the dragged row or something inside it → always ours (the row never moved)
+ *  - the click's target is inside the dragged row's region and the drag ended ON a nest target →
+ *    ours; that release is a nest, and the row under the pointer must not also activate
+ *  - anything else (a release in a gap, a keyboard drag, a click far from the drag) → not ours
+ *
+ * The armed flag is per-list: two sidebar lists can have a drag in flight independently, and one
+ * list's drag must not disarm or swallow another list's click.
+ */
+export interface DropClickSwallow {
+  /** Arm the swallow for a drag that just ended over `nestTarget` (null when it ended elsewhere). */
+  arm: (draggedEl: HTMLElement | null, nestTarget: HTMLElement | null) => void
+  /** Whether this list currently owns the swallow. */
+  readonly armed: boolean
+}
+
+/** The nearest ancestor (inclusive) carrying `attr`, up to `root`. */
+const closestWithin = (node: EventTarget | null, attr: string, root: HTMLElement | null): HTMLElement | null => {
+  if (!(node instanceof HTMLElement)) {
+    return null
+  }
+
+  const found = node.closest<HTMLElement>(`[${attr}]`)
+
+  return found && (!root || root.contains(found)) ? found : null
+}
+
+export function createDropClickSwallow(): DropClickSwallow {
+  let owner: HTMLElement | null = null
+  let nestTarget: HTMLElement | null = null
+
+  const isOurs = (event: MouseEvent): boolean => {
+    const target = event.target
+
+    // The dragged row itself.
+    if (owner && closestWithin(target, 'data-session-row', owner) === owner) {
+      return true
+    }
+
+    // A nest release: the pointer was over the target row, so the release click belongs to it.
+    return Boolean(nestTarget && closestWithin(target, 'data-project-row', nestTarget) === nestTarget)
+  }
+
+  return {
+    armed: false,
+    arm: (draggedEl, target) => {
+      owner = draggedEl
+      nestTarget = target
+
+      if (!draggedEl && !target) {
+        return
+      }
+
+      window.addEventListener(
+        'click',
+        event => {
+          if (isOurs(event)) {
+            event.stopPropagation()
+            event.preventDefault()
+          }
+
+          owner = null
+          nestTarget = null
+        },
+        { capture: true, once: true }
+      )
+    }
+  }
+}
 
 // One self-contained, nesting-safe reorderable list. It owns its DndContext, so a
 // drag only ever collides with THIS list's own items — drop it at any depth (repos,
@@ -97,6 +188,13 @@ export function ReorderableList({
     }
   }
 
+  // One swallow per list instance (see createDropClickSwallow): the flag must not be shared.
+  const swallow = useRef(createDropClickSwallow()).current
+
+  /** The dragged row's element, for the release-click swallow to scope itself to. */
+  const activeRow = (id: string): HTMLElement | null =>
+    document.querySelector<HTMLElement>(`[data-session-row="${id}"]`)
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { activatorEvent, active, over } = event
 
@@ -108,9 +206,21 @@ export function ReorderableList({
       ;(document.activeElement as HTMLElement | null)?.blur()
     }
 
+    // A pointer drag ends with the pointer still down over whatever is under it, so the browser
+    // delivers a `click` to that element on release. On a row whose own press is also a drop target
+    // (a nest, say) that click reads as a plain activation and does the wrong thing — entering the
+    // project, or running the row's action — the instant you let go. Keyboard drags never produce one.
+    if (!(activatorEvent instanceof KeyboardEvent)) {
+      swallow.arm(activeRow(String(active.id)), null)
+    }
+
     // The policy sees every drop — nest or plain reorder — so it can always tear
     // its paint down; a non-null answer means it also handled the outcome.
-    if (resolveNest?.(nestInfo('drop', event))) {
+    const outcome = resolveNest?.(nestInfo('drop', event))
+
+    if (outcome) {
+      swallow.arm(activeRow(String(active.id)), outcome.targetEl ?? null)
+
       return
     }
 

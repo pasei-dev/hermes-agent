@@ -408,7 +408,15 @@ export function createProjectNestResolver(deps: {
       deps.setParent(info.activeId, intent.targetId)
     }
 
-    return { targetId: intent.targetId }
+    // The row the pointer was over, so the release click can be swallowed: it lands on that row, and
+    // that row's own press is "enter this project". The swallow scopes by `data-project-row`, so this
+    // must be the ROW element, not the wrapper.
+    const targetRow = rows.find(candidate => candidate.id === intent.targetId)
+
+    return {
+      targetEl: targetRow?.el.querySelector<HTMLElement>(`[${HEADER_ATTR}]`) ?? null,
+      targetId: intent.targetId
+    }
   }
 
   return { quiet, resolve }
