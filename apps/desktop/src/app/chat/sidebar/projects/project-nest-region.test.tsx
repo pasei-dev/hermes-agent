@@ -115,9 +115,9 @@ describe('project nest regions', () => {
   const other = node('p_other', { label: 'Other', parentId: '' })
   const projects = [parent, child, other]
 
-  /** 20px a row, and a project's wrapper also holds its own preview rows — the shape the real
-   *  sidebar produces, where a project's block is taller than its own row. `draggedTop` slides one
-   *  row up under the pointer, the way dnd-kit transforms the item being dragged. */
+  /** 18px a row with a 4px gap after each project block — the shape the real sidebar produces, where a
+   *  project's block is taller than its own row and the space between two blocks is a reorder target.
+   *  `draggedTop` slides one row up under the pointer, the way dnd-kit transforms the dragged item. */
   const lay = (elements: HTMLElement[], draggedTop: null | number = null) => {
     const tops = new Map<string, { bottom: number; top: number }>()
     let cursor = 0
@@ -128,8 +128,8 @@ describe('project nest regions', () => {
       const top = id === 'p_other' && draggedTop !== null ? draggedTop : cursor
 
       tops.set(`block:${id}`, { bottom: top + height, top })
-      tops.set(`row:${id}`, { bottom: top + 20, top })
-      cursor += height
+      tops.set(`row:${id}`, { bottom: top + 18, top })
+      cursor += height + 4
     }
 
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
@@ -174,36 +174,42 @@ describe('project nest regions', () => {
     // under the pointer matches at all.
     lay(elements, 30)
 
-    const truncated = readProjectRows(projects).find(row => row.id === 'p_parent')!
+    const truncated = readProjectRows(projects)
+    const cutParent = truncated.find(row => row.id === 'p_parent')!
+    const cutChild = truncated.find(row => row.id === 'p_child')!
 
-    expect(truncated.group.bottom).toBe(truncated.block.bottom)
+    // With the dragged row in the geometry it reads as the parent's next non-descendant, so the
+    // region stops at the pointer — above the nested project's own row.
+    expect(cutParent.group.bottom).toBeLessThan(cutChild.rect.top)
 
     const rows = readProjectRows(projects, 'p_other')
     const parentRow = rows.find(row => row.id === 'p_parent')!
     const childRow = rows.find(row => row.id === 'p_child')!
 
     expect(rows.map(row => row.id)).toEqual(['p_parent', 'p_child'])
-    expect(parentRow.group.bottom).toBe(childRow.block.bottom)
+    // With it gone, the parent's region reaches the child — the frame spans the nested project.
+    expect(parentRow.group.bottom).toBeGreaterThan(childRow.rect.bottom)
 
-    // A release between the rows of that region — the nested project's own session row — belongs to
-    // the ROOT, not to the child whose block it sits in.
+    // A release on the child's own row names the child — the region frame spans both, but the
+    // target is the row the pointer is actually on.
     expect(
       resolveProjectDropIntent({
         activeId: 'p_other',
-        pointer: { dx: 22, x: 40, y: childRow.block.top + 30 },
-        projects,
-        rows
-      })
-    ).toEqual({ kind: 'into', targetId: 'p_parent' })
-
-    // Pointing at the child's own row still names the child.
-    expect(
-      resolveProjectDropIntent({
-        activeId: 'p_other',
-        pointer: { dx: 22, x: 40, y: childRow.rect.top + 10 },
+        pointer: { x: 40, y: childRow.rect.top + 10 },
         projects,
         rows
       })
     ).toEqual({ kind: 'into', targetId: 'p_child' })
+
+    // A release in the gap between the two rows is a reorder — the drag must not fall back to "the
+    // region I am somewhere inside" and nest into the parent.
+    expect(
+      resolveProjectDropIntent({
+        activeId: 'p_other',
+        pointer: { x: 40, y: (parentRow.rect.bottom + childRow.rect.top) / 2 },
+        projects,
+        rows
+      })
+    ).toBeNull()
   })
 })

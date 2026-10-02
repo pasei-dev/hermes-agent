@@ -248,15 +248,18 @@ export function SidebarSessionsSection({
 }: SidebarSessionsSectionProps) {
   const { t } = useI18n()
 
-  // Dragging a project sideways onto another nests it there (see projects/project-drag.ts). The
-  // resolver must outlive a mid-drag re-render — dnd-kit re-renders on every order change — so it is
-  // memoised and reads the projects from the store instead of closing over the `projectOverview` prop.
+  // Dropping a project onto another's row nests it there, and dropping it in a gap between rows
+  // reorders (see projects/project-drag.ts). The resolver must outlive a mid-drag re-render — dnd-kit
+  // re-renders on every order change — so it is memoised and reads the projects from the store
+  // instead of closing over the `projectOverview` prop.
   const resolveProjectNest = useMemo(
     () =>
       createProjectNestResolver({
         projects: () => $projectTree.get(),
         setParent: (id, parentId) =>
           void setProjectParent(id, parentId).catch(err => notifyError(err, t.sidebar.projects.nestFailed)),
+        setTopLevel: id =>
+          void setProjectParent(id, '').catch(err => notifyError(err, t.sidebar.projects.nestFailed)),
         strings: { nestInto: t.sidebar.projects.dragNestInto, topLevel: t.sidebar.projects.dragTopLevel }
       }),
     [t]
@@ -665,7 +668,13 @@ export function SidebarSessionsSection({
         open={sectionOpen}
       />
       {sectionOpen && (
-        <SidebarGroupContent className={resolvedContentClassName}>
+        <SidebarGroupContent
+          className={resolvedContentClassName}
+          // The projects drag paints its outline as a fixed overlay on <body>, so it needs this
+          // pane's box to clamp the outline to — an unclipped outline runs past a scrolled list's
+          // last row and out over whatever sits beside the sidebar.
+          data-project-pane={projectOverview ? '' : undefined}
+        >
           {inner}
           {footer}
         </SidebarGroupContent>
