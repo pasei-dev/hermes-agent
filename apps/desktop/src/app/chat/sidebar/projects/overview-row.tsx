@@ -281,6 +281,10 @@ export function ProjectOverviewRow({
     <div
       className={cn(
         dragging && 'relative z-10',
+        // A folder-nested project sits one indent under its parent (the same
+        // `pl-2` a project's own nested rows use) — grouping only, its sessions
+        // stay its own.
+        project.parentId && 'pl-2',
         // Painted imperatively by session-drag.ts while a dragged session
         // hovers this row — a live "drop here to move" cue, not React state
         // (it must not repaint the sidebar on every pixel of pointer travel).

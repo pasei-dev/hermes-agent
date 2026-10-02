@@ -146,6 +146,69 @@ export function orderProjectsByIds(projects: SidebarProjectTree[], orderIds: str
   ])
 }
 
+// Nest each project under its folder-ancestor, keeping the incoming order within every level.
+//
+// The result stays a FLAT, parent-first list — the overview renders that order and indents the rows
+// whose project names a parent (`project.parentId`), so nothing downstream (virtualisation, drag
+// order, owner maps) has to learn a nested shape. A `parentId` naming an absent project is treated
+// as top level rather than dropping the row, so filtering or dismissing a parent can't orphan a
+// child out of the sidebar. Membership is untouched: the child keeps its own sessions.
+export function nestProjectsByParent(projects: SidebarProjectTree[]): SidebarProjectTree[] {
+  const present = new Set(projects.map(project => project.id))
+
+  const parentOf = (project: SidebarProjectTree): null | string =>
+    project.parentId && project.parentId !== project.id && present.has(project.parentId)
+      ? project.parentId
+      : null
+
+  const children = new Map<string, SidebarProjectTree[]>()
+
+  const nested = projects.filter(project => parentOf(project))
+
+  // Nothing nests: hand the caller the same list it passed in (same contract as
+  // `orderProjectsByIds`), so an unnested sidebar keeps referential stability.
+  if (!nested.length) {
+    return projects
+  }
+
+  for (const project of nested) {
+    const parent = parentOf(project)
+
+    if (parent) {
+      children.set(parent, [...(children.get(parent) ?? []), project])
+    }
+  }
+
+  const out: SidebarProjectTree[] = []
+  const placed = new Set<string>()
+
+  const push = (project: SidebarProjectTree): void => {
+    if (placed.has(project.id)) {
+      return
+    }
+
+    placed.add(project.id)
+    out.push(project)
+
+    for (const child of children.get(project.id) ?? []) {
+      push(child)
+    }
+  }
+
+  for (const project of projects) {
+    if (!parentOf(project)) {
+      push(project)
+    }
+  }
+
+  // Belt and braces: a cycle in `parentId` would leave every member rootless and silently drop rows.
+  for (const project of projects) {
+    push(project)
+  }
+
+  return out
+}
+
 // Project drill-in lanes are git-driven: source them from `git worktree list` so
 // linked worktrees still appear even when their sessions aren't in the recents
 // payload currently loaded in memory.

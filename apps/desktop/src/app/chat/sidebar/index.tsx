@@ -161,6 +161,7 @@ import { ProjectDialog } from './project-dialog'
 import { filterToSessionBearingProjects, resolveLiveProjectFilter } from './project-filter'
 import {
   excludeProjectSessions,
+  nestProjectsByParent,
   orderProjectsByIds,
   overlayLiveLanes,
   overlayLivePreviews,
@@ -1042,7 +1043,10 @@ export function ChatSidebar({
     // Layer the user's manual drag-order on top of the deterministic sort. Empty
     // (default) returns `sorted` untouched; projects the user hasn't ordered yet
     // keep their sorted position rather than jumping the hand-picked list.
-    return orderProjectsByIds(sorted, projectOrderIds)
+    //
+    // Nesting last: a project whose folder sits inside another's follows its
+    // parent (`nestProjectsByParent`) whatever order the two were dragged into.
+    return nestProjectsByParent(orderProjectsByIds(sorted, projectOrderIds))
   }, [
     projectTree,
     dismissedAutoProjects,

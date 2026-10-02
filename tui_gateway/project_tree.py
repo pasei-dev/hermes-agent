@@ -345,6 +345,32 @@ def _project_for_session(
     return max((index.match(t) for t in candidates), key=lambda hit: hit[1])[0]
 
 
+def _assign_parent_projects(nodes: list[dict], folders_by_id: dict[str, list[str]]) -> None:
+    """Set ``parentId``: the nearest OTHER node whose folder strictly contains one of this node's.
+
+    DISPLAY GROUPING ONLY. Session ownership stays with ``_FolderIndex`` above, so a parent never
+    also claims its child's sessions — that duplicate-listing class is what #109007 / #91932 / #70790
+    / #114638 were closed against. The renderer nests a child under its parent; nothing else reads it.
+    """
+    keys = {
+        pid: [_comparison_segments(f) for f in folders if f]
+        for pid, folders in folders_by_id.items()
+    }
+    for node in nodes:
+        own = keys.get(node["id"]) or []
+        best_id, best_len = None, -1
+        for other in nodes:
+            if other["id"] == node["id"]:
+                continue
+            for parent_key in keys.get(other["id"]) or []:
+                if not parent_key or len(parent_key) <= best_len:
+                    continue
+                if any(len(parent_key) < len(own_key) and own_key[:len(parent_key)] == parent_key
+                       for own_key in own):
+                    best_id, best_len = other["id"], len(parent_key)
+        node["parentId"] = best_id
+
+
 def _project_node(
     pid: str, label: str, path: Optional[str], repos: list[dict], session_count: int,
     last_active: float, preview_sessions: list[dict], sessions: Optional[list[dict]] = None,
@@ -497,5 +523,15 @@ def build_tree(
         homeless.sort(key=_session_time, reverse=True)
         _scope(homeless)
         result.insert(0, _home_project(homeless, hydrate, _previews(homeless)))
+
+    # Display grouping: a project whose folder sits inside another project's folder renders nested
+    # under it. Ownership was decided by the folder index above and is not re-derived here.
+    folders_by_id = {
+        p["id"]: [f.get("path") or "" for f in p.get("folders") or []]
+        for p in active_projects
+    }
+    for node in result:
+        folders_by_id.setdefault(node["id"], [p for p in [node.get("path")] if p])
+    _assign_parent_projects(result, folders_by_id)
 
     return {"projects": result, "scoped_session_ids": scoped_ids}

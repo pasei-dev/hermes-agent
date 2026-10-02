@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { orderProjectsByIds, sortProjectsForOverview } from './model'
+import { nestProjectsByParent, orderProjectsByIds, sortProjectsForOverview } from './model'
 import { NO_PROJECT_ID, type SidebarProjectTree } from './workspace-groups'
 
 function makeProject(id: string, sessionCount: number): SidebarProjectTree {
@@ -74,5 +74,70 @@ describe('sortProjectsForOverview', () => {
     const projects = [makeProject('scanned', 0), active, home()]
 
     expect(ids(sortProjectsForOverview(projects, 'active'))).toEqual([NO_PROJECT_ID, 'active', 'scanned'])
+  })
+})
+
+describe('nestProjectsByParent', () => {
+  // An explicit project keeps its own sessions; `parentId` only decides where
+  // its row renders. The backend derives it from nested project folders.
+  const child = (id: string, parentId: string): SidebarProjectTree => ({
+    ...makeProject(id, 1),
+    isAuto: false,
+    parentId
+  })
+
+  it('moves a nested project directly under its parent', () => {
+    const projects = [makeProject('other', 1), makeProject('dev', 1), child('align', 'dev')]
+
+    expect(ids(nestProjectsByParent(projects))).toEqual(['other', 'dev', 'align'])
+  })
+
+  it('keeps Home first and the incoming order within a level', () => {
+    const projects = [
+      home(),
+      makeProject('dev', 1),
+      makeProject('other', 1),
+      child('align', 'dev'),
+      child('router', 'dev')
+    ]
+
+    expect(ids(nestProjectsByParent(projects))).toEqual([
+      NO_PROJECT_ID,
+      'dev',
+      'align',
+      'router',
+      'other'
+    ])
+  })
+
+  it('nests a chain parent-first', () => {
+    const projects = [child('align', 'dev'), child('dev', 'ws'), makeProject('ws', 1)]
+
+    expect(ids(nestProjectsByParent(projects))).toEqual(['ws', 'dev', 'align'])
+  })
+
+  it('leaves a child at top level when its parent is gone', () => {
+    // Hiding or dismissing the parent must not take the child's row with it.
+    const projects = [makeProject('other', 1), child('align', 'gone')]
+
+    expect(ids(nestProjectsByParent(projects))).toEqual(['other', 'align'])
+  })
+
+  it('ignores a self-referential parent id', () => {
+    const projects = [child('align', 'align')]
+
+    expect(nestProjectsByParent(projects)).toBe(projects)
+  })
+
+  it('returns the same list when nothing nests', () => {
+    const projects = [makeProject('a', 1), makeProject('b', 1)]
+
+    expect(nestProjectsByParent(projects)).toBe(projects)
+  })
+
+  it('never drops a row when parent ids form a cycle', () => {
+    const projects = [child('a', 'b'), child('b', 'a')]
+
+    expect(ids(nestProjectsByParent(projects)).sort()).toEqual(['a', 'b'])
   })
 })
