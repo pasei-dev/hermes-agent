@@ -785,7 +785,7 @@ describe('repository discovery policy', () => {
 
     expect(scanRepos).not.toHaveBeenCalled()
     expect(request).toHaveBeenCalledWith('projects.record_repos', {
-      discovery_policy: { enabled: false, exclude_paths: [], roots: [] },
+      discovery_policy: { enabled: false, exclude_paths: [], nested: false, roots: [] },
       profile: 'default',
       repos: []
     })
@@ -814,17 +814,33 @@ describe('repository discovery policy', () => {
     expect(getHermesConfig).toHaveBeenCalledWith('default')
     expect(scanRepos).toHaveBeenCalledWith(['/work'], {
       enabled: true,
-      excludePaths: ['/work/vendor']
+      excludePaths: ['/work/vendor'],
+      nested: false
     })
     expect(request).toHaveBeenCalledWith('projects.record_repos', {
       discovery_policy: {
         enabled: true,
         exclude_paths: ['/work/vendor'],
+        nested: false,
         roots: ['/work']
       },
       profile: 'default',
       repos: [{ label: 'repo', root: '/work/repo' }]
     })
+  })
+
+  it('passes nested repo discovery through to the scan only when the setting is on', async () => {
+    gatewayWith(vi.fn(async () => ({ accepted: false, repos: [] })))
+    const scanRepos = vi.fn().mockResolvedValue([])
+    desktopGit.mockReturnValue({ scanRepos } as never)
+    getHermesConfig.mockResolvedValue({
+      desktop: { repo_scan_enabled: true, repo_scan_nested: true, repo_scan_roots: ['/work'] }
+    })
+
+    await scanAndRecordRepos(true)
+
+    // Opt-in `desktop.repo_scan_nested` must reach the walker, or the setting would do nothing.
+    expect(scanRepos).toHaveBeenCalledWith(['/work'], expect.objectContaining({ nested: true }))
   })
 
   it('does not scan the local filesystem for remote connections but still refreshes the project tree', async () => {
@@ -963,7 +979,7 @@ describe('repository discovery policy', () => {
     await pending
 
     expect(request).toHaveBeenCalledWith('projects.record_repos', {
-      discovery_policy: { enabled: true, exclude_paths: [], roots: ['/work'] },
+      discovery_policy: { enabled: true, exclude_paths: [], nested: false, roots: ['/work'] },
       profile: 'launch',
       repos: [{ label: 'repo', root: '/work/repo' }]
     })

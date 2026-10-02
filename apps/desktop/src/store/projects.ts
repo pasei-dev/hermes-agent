@@ -734,6 +734,8 @@ export async function moveSessionToProject(
 
 export interface RepoDiscoveryPolicy {
   enabled: boolean
+  /** Also discover repos nested inside a discovered repo, shown as subprojects. */
+  nested: boolean
   roots: string[]
   exclude_paths: string[]
 }
@@ -746,12 +748,15 @@ export function repoDiscoveryPolicyFromConfig(config: unknown): RepoDiscoveryPol
       ? (desktopValue as {
           repo_scan_enabled?: unknown
           repo_scan_exclude_paths?: unknown
+          repo_scan_nested?: unknown
           repo_scan_roots?: unknown
         })
       : {}
 
   return {
     enabled: desktop.repo_scan_enabled !== false,
+    // Opt-in, and additive: it does nothing without the scan itself.
+    nested: desktop.repo_scan_nested === true,
     roots: Array.isArray(desktop.repo_scan_roots)
       ? desktop.repo_scan_roots.filter((value): value is string => typeof value === 'string')
       : [],
@@ -865,7 +870,8 @@ export async function scanAndRecordRepos(force = false): Promise<void> {
 
       const repos = await scan(policy.roots, {
         enabled: true,
-        excludePaths: policy.exclude_paths
+        excludePaths: policy.exclude_paths,
+        nested: policy.nested
       })
 
       if (state.generation !== generation) {

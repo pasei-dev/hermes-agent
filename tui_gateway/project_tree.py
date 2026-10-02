@@ -544,6 +544,10 @@ def build_tree(
         info = resolve(raw_root) if resolve else None
         root = (info or {}).get("repo_root") or raw_root
         root_key = _path_key(root)
+        # `folder_index` holds only DECLARED projects, so this is the "inside a real project" case:
+        # its sessions are owned there, and it is not surfaced a second time as its own row. A repo
+        # inside another DISCOVERED repo is not in this index and does get its own row — that is the
+        # nested repo `_assign_parent_projects` then nests under its parent, one step below.
         if root_key in seen or _junk(root) or folder_index.match(root)[0]:
             continue
         seen.add(root_key)
