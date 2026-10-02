@@ -145,7 +145,11 @@ def _preamble(evt: dict, title: str, intro: str, completed_at: float, *, with_go
     dispatched_at = evt.get("dispatched_at")
     if isinstance(dispatched_at, (int, float)):
         ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(dispatched_at))
-        lines.append(f"Dispatched: {ts} ({_format_age(completed_at - dispatched_at)} ago)")
+        # ``completed_at - dispatched_at`` is the task's runtime, not its age.
+        lines.append(
+            f"Dispatched: {ts} ({_format_age(time.time() - dispatched_at)} ago, "
+            f"ran {_format_age(completed_at - dispatched_at)})"
+        )
     if with_goal:
         lines.append(f"Original goal: {evt.get('goal', '') or ''}")
     if evt.get("context"):

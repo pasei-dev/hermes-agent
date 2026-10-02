@@ -197,6 +197,25 @@ def test_rich_reinjection_block_is_self_contained():
         assert needle in text, f"missing {needle!r}"
 
 
+def test_reinjection_block_reports_true_age_not_runtime():
+    def runner():
+        return {"status": "completed", "summary": "The answer is 42.",
+                "api_calls": 1, "duration_seconds": 4.0, "model": "test-model"}
+
+    ad.dispatch_async_delegation(
+        goal="Compute the meaning of life", context="", toolsets=[], role="leaf",
+        model="test-model", session_key="", runner=runner, max_async_children=3,
+    )
+    evt = _drain_one()
+    assert evt is not None
+    now = time.time()
+    evt["dispatched_at"] = now - 11_100      # re-injected ~3h after dispatch
+    evt["completed_at"] = now - 11_096       # the task itself ran 4s
+    text = format_process_notification(evt)
+    assert text is not None
+    assert "(3h5m ago, ran 4s)" in text, text
+
+
 def test_dispatch_rejected_at_capacity():
     ev = threading.Event()
 
