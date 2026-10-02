@@ -3089,6 +3089,9 @@ export interface Translations {
       menuAddFolder: string
       menuNewSubproject: string
       subprojectOf: (name: string) => string
+      dragNestInto: (name: string) => string
+      dragTopLevel: string
+      nestFailed: string
       menuSetActive: string
       menuDelete: string
       moveToProject: string

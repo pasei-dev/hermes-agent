@@ -28,6 +28,7 @@ import {
   refreshProjectTree,
   resolveNewSessionCwd,
   scanAndRecordRepos,
+  setProjectParent,
   startWorkInRepo,
   updateProject
 } from './projects'
@@ -518,6 +519,70 @@ describe('createProject', () => {
     await createProject({ folders: ['/srv/dev/m4l/align'], name: 'Align', parentId: 'p_dev', use: true })
 
     expect(request).toHaveBeenCalledWith('projects.create', expect.objectContaining({ parent_id: 'p_dev' }))
+  })
+
+  it('nests a dragged project through projects.set_parent, patching the row before the RPC lands', async () => {
+    const row = {
+      id: 'p_child',
+      isAuto: false,
+      label: 'Align',
+      parentId: null,
+      path: '/srv/dev/m4l/align',
+      previewSessions: [],
+      repos: [],
+      sessionCount: 0
+    } as SidebarProjectTree
+
+    const request = vi.fn(async (method: string) => {
+      if (method === 'projects.set_parent') {
+        // The sidebar groups by parentId, so the row must already sit under its new
+        // parent while the write is in flight — not one round-trip later.
+        expect($projectTree.get().find(node => node.id === 'p_child')?.parentId).toBe('p_dev')
+
+        return { project: { id: 'p_child', parent_id: 'p_dev' } }
+      }
+
+      return { active_id: 'p_child', projects: [], scoped_session_ids: [] }
+    })
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+    $projectTree.set([row])
+
+    await setProjectParent('p_child', 'p_dev')
+
+    expect(request).toHaveBeenCalledWith(
+      'projects.set_parent',
+      expect.objectContaining({ id: 'p_child', parent_id: 'p_dev' })
+    )
+  })
+
+  it('moves a project back out to the top level with an empty parent', async () => {
+    const request = vi.fn(async (method: string) =>
+      method === 'projects.set_parent'
+        ? { project: { id: 'p_child' } }
+        : { active_id: null, projects: [], scoped_session_ids: [] }
+    )
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+    $projectTree.set([
+      {
+        id: 'p_child',
+        isAuto: false,
+        label: 'Align',
+        parentId: 'p_dev',
+        path: '/srv/dev/m4l/align',
+        previewSessions: [],
+        repos: [],
+        sessionCount: 0
+      } as SidebarProjectTree
+    ])
+
+    await setProjectParent('p_child', '')
+
+    expect(request).toHaveBeenCalledWith(
+      'projects.set_parent',
+      expect.objectContaining({ id: 'p_child', parent_id: '' })
+    )
   })
 
   it('marks the backend stale and surfaces a friendly error when projects.create is missing', async () => {

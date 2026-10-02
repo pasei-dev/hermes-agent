@@ -27,6 +27,8 @@ import {
   listGroupNodeId,
   toggleWorkspaceNodeCollapsed
 } from '@/store/layout'
+import { notifyError } from '@/store/notifications'
+import { $projectTree, setProjectParent } from '@/store/projects'
 import { sessionPinId } from '@/store/session'
 import { $sessionDotStateById, hasLiveTurn } from '@/store/session-dot-state'
 
@@ -41,6 +43,7 @@ import {
   SidebarWorkspaceGroup,
   type SidebarWorkspaceTree
 } from './projects'
+import { createProjectNestResolver } from './projects/project-drag'
 import { WorkspaceAddButton } from './projects/workspace-header'
 import { ReorderableList, useSortableBindings } from './reorderable-list'
 import { SidebarSessionSkeletons } from './section-states'
@@ -242,6 +245,21 @@ export function SidebarSessionsSection({
   card = false
 }: SidebarSessionsSectionProps) {
   const { t } = useI18n()
+
+  // Dragging a project sideways onto another nests it there (see projects/project-drag.ts). The
+  // resolver must outlive a mid-drag re-render — dnd-kit re-renders on every order change — so it is
+  // memoised and reads the projects from the store instead of closing over the `projectOverview` prop.
+  const resolveProjectNest = useMemo(
+    () =>
+      createProjectNestResolver({
+        projects: () => $projectTree.get(),
+        setParent: (id, parentId) =>
+          void setProjectParent(id, parentId).catch(err => notifyError(err, t.sidebar.projects.nestFailed)),
+        strings: { nestInto: t.sidebar.projects.dragNestInto, topLevel: t.sidebar.projects.dragTopLevel }
+      }),
+    [t]
+  )
+
   const showAllSessions = useStore($sidebarShowAllSessions)
   const dividerLabels = t.sidebar.dateDivider
   const statusDividerLabels = t.sidebar.statusDivider
@@ -550,6 +568,7 @@ export function SidebarSessionsSection({
           <ReorderableList
             ids={sortableProjects.map(project => project.id)}
             onReorder={onReorderProjects}
+            resolveNest={resolveProjectNest}
             sensors={dndSensors}
           >
             {rows}

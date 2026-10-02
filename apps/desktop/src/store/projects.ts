@@ -1225,6 +1225,29 @@ export async function addProjectFolder(
   reconcileProjects()
 }
 
+/**
+ * Nest a project under another one — `parentId` names the parent, `""` moves it back out to the top
+ * level.
+ *
+ * Optimistic on the tree node alone: `parentId` is what the sidebar groups by, so the row lands under
+ * its new parent immediately and a failed move rolls the snapshot back.
+ */
+export async function setProjectParent(id: string, parentId: string): Promise<void> {
+  const context = await activeProjectsContext(writableProjectProfile())
+  const snap = snapshotProjects()
+
+  $projectTree.set(snap.tree.map(node => (node.id === id ? { ...node, parentId: parentId || null } : node)))
+
+  await persistOrRollback(snap, () =>
+    gatewayRequestOn(
+      context.gateway,
+      'projects.set_parent',
+      projectParams({ id, parent_id: parentId }, context.profile)
+    )
+  )
+  reconcileProjects()
+}
+
 // True when the session currently open in the main pane belongs to `projectId`.
 // Used so deleting a project you have a session open from kicks you back to the
 // intro draft instead of stranding you in a now-orphaned view.

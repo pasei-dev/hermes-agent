@@ -288,7 +288,11 @@ export function ProjectOverviewRow({
         // Painted imperatively by session-drag.ts while a dragged session
         // hovers this row — a live "drop here to move" cue, not React state
         // (it must not repaint the sidebar on every pixel of pointer travel).
-        'rounded-[6px] data-[session-drop-hover=true]:outline-2 data-[session-drop-hover=true]:-outline-offset-2 data-[session-drop-hover=true]:outline-sidebar-ring'
+        'rounded-[6px] data-[session-drop-hover=true]:outline-2 data-[session-drop-hover=true]:-outline-offset-2 data-[session-drop-hover=true]:outline-sidebar-ring',
+        // Painted by project-drag.ts while a dragged PROJECT is pulled sideways
+        // onto this row: nest it under this project. Tinted as well as ringed so
+        // "hold a project here" reads differently from "drop a session here".
+        'data-[project-drop-hover=true]:bg-(--ui-sidebar-surface-background) data-[project-drop-hover=true]:outline-2 data-[project-drop-hover=true]:-outline-offset-2 data-[project-drop-hover=true]:outline-sidebar-ring'
       )}
       data-sessions-project={project.id}
       ref={ref}
