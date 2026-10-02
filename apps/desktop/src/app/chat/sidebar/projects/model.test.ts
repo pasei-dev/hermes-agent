@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { nestProjectsByParent, orderProjectsByIds, sortProjectsForOverview } from './model'
+import {
+  nestProjectsByParent,
+  orderProjectsByIds,
+  projectDescendantIds,
+  projectSubtreeSessionIds,
+  sortProjectsForOverview
+} from './model'
 import { NO_PROJECT_ID, type SidebarProjectTree } from './workspace-groups'
 
 function makeProject(id: string, sessionCount: number): SidebarProjectTree {
@@ -139,5 +145,38 @@ describe('nestProjectsByParent', () => {
     const projects = [child('a', 'b'), child('b', 'a')]
 
     expect(ids(nestProjectsByParent(projects)).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('projectDescendantIds', () => {
+  it('walks the nest transitively and includes the project itself', () => {
+    const projects = [
+      makeProject('dev', 0),
+      { ...makeProject('align', 0), parentId: 'dev' },
+      { ...makeProject('leaf', 0), parentId: 'align' },
+      makeProject('other', 0)
+    ]
+
+    expect([...projectDescendantIds(projects, 'dev')].sort()).toEqual(['align', 'dev', 'leaf'])
+    expect([...projectDescendantIds(projects, 'leaf')]).toEqual(['leaf'])
+    expect([...projectDescendantIds(projects, 'other')]).toEqual(['other'])
+  })
+})
+
+describe('projectSubtreeSessionIds', () => {
+  // Ownership is deepest-wins, so a subproject's sessions are absent from its
+  // ancestor's own `sessionIds` — which is exactly why a collapsed parent has to
+  // collect them to show a status.
+  const projects = [
+    { ...makeProject('dev', 1), sessionIds: ['s_dev'] },
+    { ...makeProject('align', 1), parentId: 'dev', sessionIds: ['s_align'] },
+    { ...makeProject('leaf', 0), parentId: 'align', sessionIds: ['s_leaf'] },
+    { ...makeProject('other', 1), sessionIds: ['s_other'] }
+  ]
+
+  it('folds nested sessions into their ancestors', () => {
+    expect(projectSubtreeSessionIds(projects, 'dev').sort()).toEqual(['s_align', 's_dev', 's_leaf'])
+    expect(projectSubtreeSessionIds(projects, 'align').sort()).toEqual(['s_align', 's_leaf'])
+    expect(projectSubtreeSessionIds(projects, 'other')).toEqual(['s_other'])
   })
 })

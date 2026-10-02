@@ -30,7 +30,7 @@ import {
 import { notifyError } from '@/store/notifications'
 import { $projectTree, setProjectParent } from '@/store/projects'
 import { sessionPinId } from '@/store/session'
-import { $sessionDotStateById, hasLiveTurn } from '@/store/session-dot-state'
+import { $sessionDotStateById, hasLiveTurn, rollupDotState } from '@/store/session-dot-state'
 
 import { SidebarDateDivider, SidebarSectionMeta } from './chrome'
 import { GatewayProfileGroups } from './gateway-groups'
@@ -38,6 +38,7 @@ import { mergeVisibleReorder, orderRowsWithinGroups, reorderableRowIds } from '.
 import {
   EnteredProjectContent,
   ProjectOverviewRow,
+  projectSubtreeSessionIds,
   type SidebarProjectTree,
   type SidebarSessionGroup,
   SidebarWorkspaceGroup,
@@ -543,6 +544,9 @@ export function SidebarSessionsSection({
     const projectRow = (project: SidebarProjectTree, Component: typeof ProjectOverviewRow) => (
       <Component
         activeProjectId={activeProjectId}
+        // The loudest status anywhere under this project, folded up from its own sessions and every
+        // nested project's — a collapsed row still reports work waiting inside it.
+        attentionState={rollupDotState(dotStates, projectSubtreeSessionIds(projectOverview, project.id))}
         hiddenSessionCount={projectOverviewHidden?.counts[project.id]}
         isSessionHidden={projectOverviewHidden?.isHidden}
         key={project.id}

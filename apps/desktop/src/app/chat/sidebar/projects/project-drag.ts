@@ -25,6 +25,7 @@ import { createDragGhost, type DragGhost } from '@/lib/drag-ghost'
 
 import type { NestResolver } from '../reorderable-list'
 
+import { projectDescendantIds } from './model'
 import type { SidebarProjectTree } from './workspace-groups'
 
 /** Row tag `ProjectOverviewRow` puts on every project row (the same one session drops use). */
@@ -55,39 +56,6 @@ const snapRect = (el: HTMLElement): ZoneRect => {
   const r = el.getBoundingClientRect()
 
   return { bottom: r.bottom, left: r.left, right: r.right, top: r.top }
-}
-
-/**
- * The dragged project plus everything already nested under it, transitively, and the project itself —
- * so `has(id)` answers "is this the dragged row, or one of its descendants?".
- */
-export function projectDescendantIds(
-  projects: Pick<SidebarProjectTree, 'id' | 'parentId'>[],
-  id: string
-): Set<string> {
-  const children = new Map<string, string[]>()
-
-  for (const project of projects) {
-    if (project.parentId) {
-      children.set(project.parentId, [...(children.get(project.parentId) ?? []), project.id])
-    }
-  }
-
-  const seen = new Set<string>([id])
-  const queue = [...(children.get(id) ?? [])]
-
-  while (queue.length) {
-    const next = queue.pop() as string
-
-    if (seen.has(next)) {
-      continue
-    }
-
-    seen.add(next)
-    queue.push(...(children.get(next) ?? []))
-  }
-
-  return seen
 }
 
 /** Pure resolution, so the policy can be tested without a DOM: what does a release here do? */

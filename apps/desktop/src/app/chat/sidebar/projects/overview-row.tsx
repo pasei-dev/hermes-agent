@@ -10,7 +10,9 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { $sidebarShowAllSessions } from '@/store/layout'
 import { fetchProjectSessions, projectProfile } from '@/store/projects'
+import type { SessionDotState } from '@/store/session-dot-state'
 
+import { sessionDotClassName, sessionDotLabel } from '../../session-status-dot'
 import {
   SIDEBAR_LEAD_ICON_SIZE,
   SidebarGroupRow,
@@ -96,6 +98,10 @@ interface ProjectOverviewRowProps {
   /** How many of the backend's `sessionCount` that predicate hides, so
    *  "Show all N" promises only rows the view will actually render. */
   hiddenSessionCount?: number
+  /** The loudest status anywhere in this project's subtree — its own sessions and every nested
+   *  project's. Painted only while the row is collapsed: an expanded row shows its sessions' own
+   *  dots, and a second dot on the parent would just double the ink. */
+  attentionState?: SessionDotState
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
@@ -113,6 +119,7 @@ export function ProjectOverviewRow({
   previewSessions,
   isSessionHidden,
   hiddenSessionCount = 0,
+  attentionState,
   reorderable = false,
   dragging = false,
   dragHandleProps,
@@ -123,6 +130,10 @@ export function ProjectOverviewRow({
   const s = t.sidebar
   const isActive = project.id === activeProjectId
   const [open, toggleOpen] = useWorkspaceNodeOpen(project.id)
+  // Folded away, so the subtree's loudest status speaks for it — a session that wants an answer
+  // inside a collapsed project (or a collapsed subproject of it) must not go invisible.
+  const attention = !open && attentionState && attentionState !== 'idle' ? attentionState : null
+  const attentionLabel = attention ? sessionDotLabel(attention, s.row) : null
   // The appearance popover anchors here (the full row) so it opens flush with
   // the sidebar's content edge regardless of which side the sidebar is on.
   const rowRef = useRef<HTMLDivElement>(null)
@@ -242,7 +253,20 @@ export function ProjectOverviewRow({
       }
       className={cn(dragging && 'cursor-grabbing bg-(--ui-sidebar-surface-background)')}
       data-glass-opaque={dragging ? '' : undefined}
-      label={project.isAuto ? <Tip label={s.projects.autoDiscovered}>{labelLink}</Tip> : labelLink}
+      label={
+        <>
+          {project.isAuto ? <Tip label={s.projects.autoDiscovered}>{labelLink}</Tip> : labelLink}
+          {attention && (
+            <span
+              aria-label={attentionLabel?.ariaLabel}
+              className={cn('ml-1.5 shrink-0', sessionDotClassName(attention))}
+              data-project-attention=""
+              role="status"
+              title={attentionLabel?.title}
+            />
+          )}
+        </>
+      }
       lead={lead}
       // The label is grab surface too, not just the lead's grabber — the
       // pointer activator only (the full handle stays on the grabber, see

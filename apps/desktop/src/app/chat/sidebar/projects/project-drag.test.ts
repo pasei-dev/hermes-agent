@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  NEST_TRAVEL_PX,
-  projectDescendantIds,
-  type ProjectNestRow,
-  resolveProjectDropIntent
-} from './project-drag'
+import { NEST_TRAVEL_PX, type ProjectNestRow, resolveProjectDropIntent } from './project-drag'
 import type { SidebarProjectTree } from './workspace-groups'
 
 const project = (id: string, over: Partial<SidebarProjectTree> = {}): SidebarProjectTree =>
@@ -76,13 +71,5 @@ describe('resolveProjectDropIntent', () => {
     expect(
       resolveProjectDropIntent({ activeId: 'other', pointer: { dx: 60, x: 480, y: 480 }, projects: tree, rows })
     ).toBeNull()
-  })
-})
-
-describe('projectDescendantIds', () => {
-  it('walks the nest transitively and includes the project itself', () => {
-    expect([...projectDescendantIds(tree, 'dev')].sort()).toEqual(['align', 'dev', 'leaf'])
-    expect([...projectDescendantIds(tree, 'leaf')]).toEqual(['leaf'])
-    expect([...projectDescendantIds(tree, 'other')]).toEqual(['other'])
   })
 })

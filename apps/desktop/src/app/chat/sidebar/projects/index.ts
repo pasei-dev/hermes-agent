@@ -4,6 +4,7 @@ export {
   nestProjectsByParent,
   orderProjectsByIds,
   PROJECT_PREVIEW_COUNT,
+  projectSubtreeSessionIds,
   projectTreeCwd,
   sortProjectsForOverview,
   useRepoWorktreeMap

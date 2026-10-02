@@ -209,6 +209,57 @@ export function nestProjectsByParent(projects: SidebarProjectTree[]): SidebarPro
   return out
 }
 
+/**
+ * The dragged project plus everything nested under it, transitively, and the project itself — so
+ * `has(id)` answers "is this that project, or one of its descendants?".
+ */
+export function projectDescendantIds(
+  projects: Pick<SidebarProjectTree, 'id' | 'parentId'>[],
+  id: string
+): Set<string> {
+  const children = new Map<string, string[]>()
+
+  for (const project of projects) {
+    if (project.parentId) {
+      children.set(project.parentId, [...(children.get(project.parentId) ?? []), project.id])
+    }
+  }
+
+  const seen = new Set<string>([id])
+  const queue = [...(children.get(id) ?? [])]
+
+  while (queue.length) {
+    const next = queue.pop() as string
+
+    if (seen.has(next)) {
+      continue
+    }
+
+    seen.add(next)
+    queue.push(...(children.get(next) ?? []))
+  }
+
+  return seen
+}
+
+/**
+ * Every session a project stands for: its own rows plus the rows of every project nested under it,
+ * transitively. This is what a collapsed row folds its status up from — ownership is deepest-wins, so
+ * a subproject's sessions belong to the subproject and are absent from its ancestors' `sessionIds`.
+ */
+export function projectSubtreeSessionIds(projects: SidebarProjectTree[], id: string): string[] {
+  const subtree = projectDescendantIds(projects, id)
+  const ids: string[] = []
+
+  for (const project of projects) {
+    if (subtree.has(project.id)) {
+      ids.push(...(project.sessionIds ?? []))
+    }
+  }
+
+  return ids
+}
+
 // Project drill-in lanes are git-driven: source them from `git worktree list` so
 // linked worktrees still appear even when their sessions aren't in the recents
 // payload currently loaded in memory.
