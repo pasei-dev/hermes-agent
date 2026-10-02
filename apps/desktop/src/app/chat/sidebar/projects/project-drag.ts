@@ -36,8 +36,11 @@ import type { NestResolver } from '../reorderable-list'
 import { projectDescendantIds } from './model'
 import type { SidebarProjectTree } from './workspace-groups'
 
-/** Row tag `ProjectOverviewRow` puts on every project row (the same one session drops use). */
+/** Row tag `ProjectOverviewRow` puts on every project wrapper — the row plus its own session rows. */
 const ROW_ATTR = 'data-sessions-project'
+/** The project's own row element inside that wrapper. Pointing here means THIS project; anywhere
+ *  else in its block (its session rows) or its region (nested subprojects) means its root. */
+const HEADER_ATTR = 'data-project-row'
 /** Marks the outline drawn around the region a drop would nest into. */
 const ZONE_ATTR = 'data-project-nest-zone'
 /** Set on `<body>` for the length of a project drag. */
@@ -52,9 +55,11 @@ export const NEST_TRAVEL_PX = 18
 export interface ProjectNestRow {
   el: HTMLElement
   id: string
-  /** The row itself — pointing here means THIS project. */
+  /** The project's own row — pointing here means THIS project. */
   rect: ZoneRect
-  /** The row plus every row of the region it heads, nested subprojects included. */
+  /** The project's rendered block: its row and its own session rows. */
+  block: ZoneRect
+  /** The block extended over every row of the region it heads, nested subprojects included. */
   group: ZoneRect
 }
 
@@ -78,15 +83,30 @@ const area = (rect: ZoneRect) => (rect.right - rect.left) * (rect.bottom - rect.
 
 /** Every visible project row with the geometry of the moment: a `rect` for the row itself, a `group`
  *  for the region it heads. Re-read on every pointer move and on scroll, so the answer survives a
- *  list that scrolls or reorders underneath the pointer. */
-export function readProjectRows(projects: SidebarProjectTree[]): ProjectNestRow[] {
+ *  list that scrolls or reorders underneath the pointer.
+ *
+ *  `excludeId` drops the row being dragged. It is not a boundary: dnd-kit slides it under the pointer,
+ *  so leaving it in would end the region above it exactly where the pointer is — the frame would stop
+ *  at the dragged row and nothing under the pointer would match at all.
+ */
+export function readProjectRows(projects: SidebarProjectTree[], excludeId = ''): ProjectNestRow[] {
   return expandRowsToGroups(
     projects,
-    queryAllVisible<HTMLElement>(`[${ROW_ATTR}]`).map(el => ({
-      el,
-      id: el.dataset.sessionsProject || '',
-      rect: snapRect(el)
-    }))
+    queryAllVisible<HTMLElement>(`[${ROW_ATTR}]`)
+      .filter(el => (el.dataset.sessionsProject || '') !== excludeId)
+      .map(el => {
+        const block = snapRect(el)
+        const header = el.querySelector<HTMLElement>(`[${HEADER_ATTR}]`)
+
+        return {
+          block,
+          el,
+          id: el.dataset.sessionsProject || '',
+          // No header element (an older row, or a skin that drops it): the block stands in, and the
+          // whole row counts as the project's own.
+          rect: header ? snapRect(header) : block
+        }
+      })
   )
 }
 
@@ -102,17 +122,17 @@ export function readProjectRows(projects: SidebarProjectTree[]): ProjectNestRow[
  */
 export function expandRowsToGroups(
   projects: SidebarProjectTree[],
-  rows: Pick<ProjectNestRow, 'el' | 'id' | 'rect'>[]
+  rows: Pick<ProjectNestRow, 'block' | 'el' | 'id' | 'rect'>[]
 ): ProjectNestRow[] {
-  const sorted = [...rows].sort((a, b) => a.rect.top - b.rect.top)
+  const sorted = [...rows].sort((a, b) => a.block.top - b.block.top)
   const last = sorted[sorted.length - 1]
 
   return sorted.map((row, index) => {
     const subtree = projectDescendantIds(projects, row.id)
     const next = sorted.slice(index + 1).find(candidate => !subtree.has(candidate.id))
-    const bottom = Math.max(row.rect.bottom, next ? next.rect.top : (last?.rect.bottom ?? row.rect.bottom))
+    const bottom = Math.max(row.block.bottom, next ? next.block.top : (last?.block.bottom ?? row.block.bottom))
 
-    return { ...row, group: { ...row.rect, bottom } }
+    return { ...row, group: { ...row.block, bottom } }
   })
 }
 
@@ -241,7 +261,7 @@ export function createProjectNestResolver(deps: {
 
     const projects = deps.projects()
 
-    rows = readProjectRows(projects)
+    rows = readProjectRows(projects, activeId)
 
     const intent = resolveProjectDropIntent({ activeId, pointer, projects, rows })
     const row = intent?.kind === 'into' ? rows.find(candidate => candidate.id === intent.targetId) : null
@@ -285,7 +305,7 @@ export function createProjectNestResolver(deps: {
   return info => {
     if (info.phase === 'start') {
       activeId = info.activeId
-      rows = readProjectRows(deps.projects())
+      rows = readProjectRows(deps.projects(), activeId)
       muteTooltips(true)
       window.addEventListener('scroll', onScroll, true)
 
@@ -309,7 +329,7 @@ export function createProjectNestResolver(deps: {
     // over (a non-null answer) so the list does not also reorder.
     const projects = deps.projects()
 
-    rows = readProjectRows(projects)
+    rows = readProjectRows(projects, info.activeId)
 
     const intent = info.pointer
       ? resolveProjectDropIntent({ activeId: info.activeId, pointer: info.pointer, projects, rows })

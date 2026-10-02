@@ -7,22 +7,27 @@ const project = (id: string, over: Partial<SidebarProjectTree> = {}): SidebarPro
   ({ id, isAuto: false, label: id, parentId: null, ...over }) as SidebarProjectTree
 
 // Geometry only matters for the hit test; the element is never read by the pure resolver.
-const header = (id: string, top: number): Pick<ProjectNestRow, 'el' | 'id' | 'rect'> => ({
+const row = (
+  id: string,
+  top: number,
+  height: number
+): Pick<ProjectNestRow, 'block' | 'el' | 'id' | 'rect'> => ({
+  block: { bottom: top + height, left: 0, right: 220, top },
   el: null as unknown as HTMLElement,
   id,
-  rect: { bottom: top + 20, left: 0, right: 200, top }
+  // The project's own row is one line tall; whatever follows inside the block is its session rows.
+  rect: { bottom: top + 20, left: 0, right: 220, top }
 })
 
-/** `dev` is open with `align` nested inside it; `other` is the next project after dev's region. */
+/** `dev` is open with `align` nested inside it; `other` follows dev's region. */
 const tree = [
   project('dev', { label: 'Dev' }),
   project('align', { label: 'Align', parentId: 'dev' }),
   project('other')
 ]
 
-// 20px rows: dev's row, then 60px of dev's own region below it (align's row and the sessions of
-// both), then other.
-const rows = expandRowsToGroups(tree, [header('dev', 0), header('align', 20), header('other', 100)])
+// dev: own row 0–20, a session row 20–40. align: own row 40–60, a session row 60–80. other: 80–100.
+const rows = expandRowsToGroups(tree, [row('dev', 0, 40), row('align', 40, 40), row('other', 80, 20)])
 
 /** Drag `other` sideways-right to a point. */
 const onto = (activeId: string, y: number) =>
@@ -38,20 +43,22 @@ describe('resolveProjectDropIntent', () => {
   it("nests into the project whose own row the pointer is on — nested projects included", () => {
     expect(onto('other', 10)).toEqual({ kind: 'into', targetId: 'dev' })
     // The one way to reach a project that is already nested.
-    expect(onto('other', 30)).toEqual({ kind: 'into', targetId: 'align' })
+    expect(onto('other', 50)).toEqual({ kind: 'into', targetId: 'align' })
   })
 
-  it('nests into the ROOT of the region when the pointer is between rows', () => {
-    // 70px down: below align's own row, still inside dev's region — where dev's own sessions sit.
-    // The area belongs to dev, so dev takes the subproject, not the nearest descendant.
+  it('nests into the ROOT of the region everywhere else, sessions included', () => {
+    // 70px down: align's OWN session row — inside align's block and dev's region alike. The area
+    // belongs to dev, so dev takes the subproject, not the nearest nested project.
     expect(onto('other', 70)).toEqual({ kind: 'into', targetId: 'dev' })
+    // And dev's own session row, likewise.
+    expect(onto('other', 30)).toEqual({ kind: 'into', targetId: 'dev' })
   })
 
   it('takes a nested project out on a leftward drag, whatever it is over', () => {
     expect(
       resolveProjectDropIntent({
         activeId: 'align',
-        pointer: { dx: -(NEST_TRAVEL_PX + 2), x: 40, y: 30 },
+        pointer: { dx: -(NEST_TRAVEL_PX + 2), x: 40, y: 50 },
         projects: tree,
         rows
       })
@@ -60,22 +67,22 @@ describe('resolveProjectDropIntent', () => {
 
   it('offers no top-level move to a project that is already there', () => {
     expect(
-      resolveProjectDropIntent({ activeId: 'other', pointer: { dx: -40, x: 40, y: 30 }, projects: tree, rows })
+      resolveProjectDropIntent({ activeId: 'other', pointer: { dx: -40, x: 40, y: 50 }, projects: tree, rows })
     ).toBeNull()
   })
 
   it('refuses itself, its own descendants, and discovered rows', () => {
     const scanned = project('scanned', { isAuto: true })
-    const withAuto = expandRowsToGroups([...tree, scanned], [header('scanned', 120), header('other', 100)])
+    const withAuto = expandRowsToGroups([...tree, scanned], [row('other', 80, 20), row('scanned', 100, 20)])
 
-    // Its own row is skipped outright — during a drag it is under the pointer.
+    // The dragged row is out of the geometry entirely — it is under the pointer by definition.
     expect(onto('dev', 10)).toBeNull()
-    // A descendant region resolves to the descendant, which cannot take its own ancestor.
-    expect(onto('dev', 30)).toBeNull()
+    // A descendant's own row resolves to the descendant, which cannot take its own ancestor.
+    expect(onto('dev', 50)).toBeNull()
     expect(
       resolveProjectDropIntent({
         activeId: 'other',
-        pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y: 130 },
+        pointer: { dx: NEST_TRAVEL_PX + 4, x: 40, y: 110 },
         projects: [...tree, scanned],
         rows: withAuto
       })
@@ -89,10 +96,10 @@ describe('resolveProjectDropIntent', () => {
 
 describe('expandRowsToGroups', () => {
   it('stretches each row over the region it heads', () => {
-    expect(rows.map(row => [row.id, row.rect.bottom, row.group.bottom])).toEqual([
-      ['dev', 20, 100],
-      ['align', 40, 100],
-      ['other', 120, 120]
+    expect(rows.map(row => [row.id, row.rect.bottom, row.block.bottom, row.group.bottom])).toEqual([
+      ['dev', 20, 40, 80],
+      ['align', 60, 80, 80],
+      ['other', 100, 100, 100]
     ])
   })
 
