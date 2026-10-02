@@ -1,4 +1,4 @@
-import type { useSensors } from '@dnd-kit/core'
+import type { CollisionDetection, useSensors } from '@dnd-kit/core'
 import {
   closestCenter,
   DndContext,
@@ -38,7 +38,27 @@ export interface NestDropInfo {
 
 export type NestResolver = (info: NestDropInfo) => null | { targetId: null | string }
 
+/**
+ * Opt-in gate on a list's reordering: while the drag is in a "quiet" spot, nothing reflows.
+ *
+ * dnd-kit's default (`closestCenter`) slides the other items as soon as the pointer nears them, so a
+ * target row can move out from under the pointer mid-drag — which reads as the row running away just
+ * before you drop. A policy with its own meaning on the pointer's position (a nest target, say) needs
+ * that position to mean one thing, so while `quiet` says true the list reports "no drop target": the
+ * dragged item keeps its offset, nothing shifts, and the policy's own hit test is the only thing
+ * answering. `quiet` must be a PURE function of the pointer — a reflow here re-measures the rows the
+ * policy just read.
+ */
+export type ReorderQuietZone = (pointer: null | { x: number; y: number }) => boolean
+
 type NestDragEvent = DragCancelEvent | DragEndEvent | DragMoveEvent | DragStartEvent
+
+/** dnd-kit hands collision detection the pointer's position relative to the droppable container,
+ *  which is the viewport box for this list — so it IS client coordinates. A null is the keyboard
+ *  drag (no pointer), which no quiet zone can claim. */
+const pointerOf = (
+  coordinates: null | { x: number; y: number }
+): null | { x: number; y: number } => (coordinates ? { x: coordinates.x, y: coordinates.y } : null)
 
 // One self-contained, nesting-safe reorderable list. It owns its DndContext, so a
 // drag only ever collides with THIS list's own items — drop it at any depth (repos,
@@ -50,12 +70,14 @@ export function ReorderableList({
   children,
   ids,
   onReorder,
+  quietZone,
   resolveNest,
   sensors
 }: {
   children: React.ReactNode
   ids: string[]
   onReorder: (ids: string[]) => void
+  quietZone?: ReorderQuietZone
   resolveNest?: NestResolver
   sensors?: ReturnType<typeof useSensors>
 }) {
@@ -104,10 +126,15 @@ export function ReorderableList({
     }
   }
 
+  // The default `closestCenter` would slide the rows out from under the pointer; while the drag sits
+  // in a spot the policy claims, the list stops answering so nothing moves.
+  const detectCollision: CollisionDetection = args =>
+    quietZone?.(pointerOf(args.pointerCoordinates)) ? [] : closestCenter(args)
+
   return (
     <DndContext
       autoScroll={reorderAutoScroll}
-      collisionDetection={closestCenter}
+      collisionDetection={detectCollision}
       onDragCancel={event => void resolveNest?.(nestInfo('cancel', event))}
       onDragEnd={handleDragEnd}
       onDragMove={event => void resolveNest?.(nestInfo('move', event))}

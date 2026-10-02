@@ -252,7 +252,7 @@ export function SidebarSessionsSection({
   // reorders (see projects/project-drag.ts). The resolver must outlive a mid-drag re-render — dnd-kit
   // re-renders on every order change — so it is memoised and reads the projects from the store
   // instead of closing over the `projectOverview` prop.
-  const resolveProjectNest = useMemo(
+  const projectNest = useMemo(
     () =>
       createProjectNestResolver({
         projects: () => $projectTree.get(),
@@ -264,6 +264,9 @@ export function SidebarSessionsSection({
       }),
     [t]
   )
+
+  const resolveProjectNest = projectNest.resolve
+  const projectQuietZone = projectNest.quiet
 
   const showAllSessions = useStore($sidebarShowAllSessions)
   const dividerLabels = t.sidebar.dateDivider
@@ -582,6 +585,10 @@ export function SidebarSessionsSection({
           <ReorderableList
             ids={sortableProjects.map(project => project.id)}
             onReorder={onReorderProjects}
+            // Over a project row the list stops reflowing, so the row cannot slide out from under
+            // the pointer before the drop. The gap between rows stays live, and that is where
+            // reordering happens.
+            quietZone={projectQuietZone}
             resolveNest={resolveProjectNest}
             sensors={dndSensors}
           >

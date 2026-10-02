@@ -33,7 +33,7 @@ import { rectContains } from '@/components/pane-shell/tree/renderer/drag-session
 import type { ZoneRect } from '@/components/pane-shell/tree/zones-engine'
 import { createDragGhost, type DragGhost } from '@/lib/drag-ghost'
 
-import type { NestResolver } from '../reorderable-list'
+import type { NestResolver, ReorderQuietZone } from '../reorderable-list'
 
 import { projectDescendantIds } from './model'
 import type { SidebarProjectTree } from './workspace-groups'
@@ -248,21 +248,34 @@ const muteTooltips = (on: boolean) => {
  * them on every move and on scroll, paints the pending outcome, and commits it on release. Only the
  * drop answers non-null, and only when the outcome was structural — a plain reorder is answered by
  * null so the list handles it itself.
+ *
+ * `quiet` is the half that keeps a nest target still: while the pointer is over any project row the
+ * list stops reflowing, so a row cannot slide out from under the pointer just before the drop.
  */
+export interface ProjectNestPolicy {
+  /** Hand this to `ReorderableList`'s `quietZone`. */
+  quiet: ReorderQuietZone
+  /** Hand this to `ReorderableList`'s `resolveNest`. */
+  resolve: NestResolver
+}
+
+/** The row under the pointer, ignoring the dragged one (which is out of the geometry). */
+const rowAt = (rows: ProjectNestRow[], activeId: string, x: number, y: number) =>
+  rows.find(row => row.id !== activeId && rectContains(row.rect, x, y))
+
 export function createProjectNestResolver(deps: {
   /** The sidebar's projects, read live: labels, nesting and auto flags change between drags. */
   projects: () => SidebarProjectTree[]
   /** Commit a nest through the store (RPC + optimistic tree patch). */
   setParent: (projectId: string, parentId: string) => void
   /**
-   * Outdent: clear the project's parent. `afterId` is the project it should sit after at the top
-   * level — where it was released — but the ORDER is left to the list's own reorder so the two
-   * cannot disagree.
+   * Outdent: clear the project's parent. The ORDER is left to the list's own reorder, so the project
+   * lands where it was released instead of being pulled back under its old parent.
    */
   setTopLevel: (projectId: string) => void
   /** Chip text for each outcome. */
   strings: { nestInto: (name: string) => string; topLevel: string }
-}): NestResolver {
+}): ProjectNestPolicy {
   let rows: ProjectNestRow[] = []
   let activeId = ''
   let lastPointer: ProjectDropPoint | null = null
@@ -327,7 +340,22 @@ export function createProjectNestResolver(deps: {
     activeId = ''
   }
 
-  return info => {
+  /**
+   * Claim every spot over a project row, not just the spot that currently means a nest. A self, a
+   * descendant or an auto row cannot be a nest target — but the row still must not shuffle under the
+   * pointer, or the frame and the row would disagree about where the release landed. It reads the
+   * geometry rather than resolving an intent, so it stays pure and the collision pass cannot move a
+   * row by asking it a question.
+   */
+  const quiet: ReorderQuietZone = pointer => {
+    if (!pointer || !activeId) {
+      return false
+    }
+
+    return Boolean(rowAt(readProjectRows(deps.projects(), activeId), activeId, pointer.x, pointer.y))
+  }
+
+  const resolve: NestResolver = info => {
     if (info.phase === 'start') {
       activeId = info.activeId
       rows = readProjectRows(deps.projects(), activeId)
@@ -382,4 +410,6 @@ export function createProjectNestResolver(deps: {
 
     return { targetId: intent.targetId }
   }
+
+  return { quiet, resolve }
 }

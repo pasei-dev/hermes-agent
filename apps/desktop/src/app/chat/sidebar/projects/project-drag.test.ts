@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { expandRowsToGroups, type ProjectNestRow, resolveProjectDropIntent } from './project-drag'
+import {
+  createProjectNestResolver,
+  expandRowsToGroups,
+  type ProjectNestRow,
+  resolveProjectDropIntent
+} from './project-drag'
 import type { SidebarProjectTree } from './workspace-groups'
 
 const project = (id: string, over: Partial<SidebarProjectTree> = {}): SidebarProjectTree =>
@@ -96,6 +101,99 @@ describe('resolveProjectDropIntent', () => {
     expect(drop('dev', 50, projects, withAuto)).toBeNull()
     // An auto row has no project record to nest into.
     expect(drop('tail', 138, projects, withAuto)).toBeNull()
+  })
+})
+
+describe('the reorder quiet zone', () => {
+  // The bug it fixes: `closestCenter` slid the rows as the pointer approached, so a nest target moved
+  // out from under the pointer just before the drop — the row appeared to run away.
+  const policy = () =>
+    createProjectNestResolver({
+      projects: () => [
+        project('dev'),
+        project('align', { parentId: 'dev' }),
+        project('other'),
+        project('tail')
+      ],
+      setParent: vi.fn(),
+      setTopLevel: vi.fn(),
+      strings: { nestInto: (name: string) => `Add subproject to ${name}`, topLevel: 'Top level' }
+    })
+
+  /** Stand the rows up in a document the way `readProjectRows` expects to find them. */
+  const mountRows = (projects: SidebarProjectTree[]) => {
+    const tops = new Map<string, { bottom: number; top: number }>()
+    let cursor = 0
+
+    for (const id of ['dev', 'align', 'other', 'tail']) {
+      tops.set(`block:${id}`, { bottom: cursor + 38, top: cursor })
+      tops.set(`row:${id}`, { bottom: cursor + 18, top: cursor })
+      cursor += 42
+    }
+
+    for (const node of projects) {
+      const block = document.createElement('div')
+      const row = document.createElement('div')
+
+      block.setAttribute('data-sessions-project', node.id)
+      row.setAttribute('data-project-row', node.id)
+      block.append(row)
+      document.body.append(block)
+    }
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const id = this.dataset.sessionsProject
+      const key = id ? `block:${id}` : this.dataset.projectRow ? `row:${this.dataset.projectRow}` : ''
+      const rect = tops.get(key) ?? { bottom: 0, top: 0 }
+
+      return {
+        ...rect,
+        height: rect.bottom - rect.top,
+        left: 0,
+        right: 220,
+        toJSON: () => ({}),
+        width: 220,
+        x: 0,
+        y: rect.top
+      } as DOMRect
+    })
+
+    return tops
+  }
+
+  it('claims every row and leaves the gaps and empty space live', () => {
+    const projects = [
+      project('dev'),
+      project('align', { parentId: 'dev' }),
+      project('other'),
+      project('tail')
+    ]
+
+    mountRows(projects)
+
+    const { quiet, resolve } = policy()
+
+    resolve({ activeId: 'tail', overId: null, phase: 'start', pointer: { dx: 0, x: 40, y: 130 } })
+
+    // Every project row is claimed — a nest, and equally a self or a descendant, which must not
+    // shuffle either: the frame and the row have to agree about where the release landed.
+    expect(quiet({ x: 40, y: 10 })).toBe(true)
+    expect(quiet({ x: 40, y: 52 })).toBe(true)
+    expect(quiet({ x: 40, y: 94 })).toBe(true)
+    expect(quiet({ x: 40, y: 136 })).toBe(false)
+
+    // The gaps between rows, and the space below the list, are where reordering happens.
+    expect(quiet({ x: 40, y: 40 })).toBe(false)
+    expect(quiet({ x: 40, y: 82 })).toBe(false)
+    expect(quiet({ x: 40, y: 400 })).toBe(false)
+    // A keyboard drag has no pointer and no rows to claim.
+    expect(quiet(null)).toBe(false)
+
+    resolve({ activeId: 'tail', overId: null, phase: 'cancel', pointer: null })
+
+    // Only the elements this test appended.
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
   })
 })
 
