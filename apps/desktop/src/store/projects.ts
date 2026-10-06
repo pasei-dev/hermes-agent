@@ -16,8 +16,15 @@ import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesk
 import { desktopGit } from '@/lib/desktop-git'
 import { isMissingRestEndpoint, isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { isUnderPath } from '@/lib/path-compare'
+import { stampRowsWithOwningConnection } from '@/lib/session-owner-stamp'
 import { revealFile } from '@/store/file-actions'
-import { $gateway, activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
+import {
+  $gateway,
+  activeGateway,
+  activeGatewayConnectionId,
+  ensureActiveGatewayOpen,
+  isActivePrimary
+} from '@/store/gateway'
 import { $sidebarShowAllSessions, setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
 import {
@@ -339,22 +346,41 @@ function isRetryableProjectTreeReadError(error: unknown): boolean {
   return message.includes('request timed out') || message.includes('gateway connection closed')
 }
 
-interface ActiveProjectsContext {
+interface ProjectRowOwner {
+  connectionId: null | string
+  // `local` served as an active registry SECONDARY: its bare rows would
+  // resolve to the window primary, so they need the owner tag.
+  stampLocal: boolean
+}
+
+interface ActiveProjectsContext extends ProjectRowOwner {
   gateway: HermesGateway
   profile: string
 }
 
+function projectRowOwner(): ProjectRowOwner {
+  const connectionId = activeGatewayConnectionId()
+
+  return { connectionId, stampLocal: connectionId === 'local' && !isActivePrimary() }
+}
+
 function stillOnProjectsContext(context: ActiveProjectsContext): boolean {
-  return activeGateway() === context.gateway && projectProfile() === context.profile
+  return stillOnWritableProjectOwner(context) && projectProfile() === context.profile
 }
 
 // Writes follow the selected gateway/profile even if the sidebar is showing
 // All profiles. That filter changes the view, not the destination.
-function stillOnWritableProjectOwner(context: ActiveProjectsContext): boolean {
-  return activeGateway() === context.gateway && normalizeProfileKey($activeGatewayProfile.get()) === context.profile
+function stillOnWritableProjectOwner(context: Omit<ActiveProjectsContext, 'stampLocal'>): boolean {
+  return (
+    activeGateway() === context.gateway &&
+    normalizeProfileKey($activeGatewayProfile.get()) === context.profile &&
+    activeGatewayConnectionId() === context.connectionId
+  )
 }
 
 async function activeProjectsContext(profile = projectProfile()): Promise<ActiveProjectsContext> {
+  const { connectionId, stampLocal } = projectRowOwner()
+
   if (!profile || profile === ALL_PROFILES) {
     throw new Error('Projects are unavailable while viewing all profiles')
   }
@@ -365,11 +391,11 @@ async function activeProjectsContext(profile = projectProfile()): Promise<Active
     gateway = await ensureActiveGatewayOpen()
   }
 
-  if (!gateway || !stillOnWritableProjectOwner({ gateway, profile })) {
+  if (!gateway || !stillOnWritableProjectOwner({ connectionId, gateway, profile })) {
     throw new Error('Active Hermes profile changed while connecting')
   }
 
-  return { gateway, profile }
+  return { connectionId, gateway, profile, stampLocal }
 }
 
 function applyPayload(payload: ProjectsPayload): void {
@@ -424,12 +450,47 @@ const PROJECT_TREE_REQUEST_TIMEOUT_MS = 60_000
 
 let projectTreeRefreshGeneration = 0
 
-function applyProjectTreePayload(res: ProjectTreePayload): void {
+// Like REST session-list rows, tree-only rows need their registry owner, stamped
+// at the response boundary rather than derived on click. The canonical stamper
+// owns the rules: a row that already names an owner is never re-owned, and
+// `local` stays bare so the primary keeps the legacy profile door (#94166).
+// The one addition is `local` as a registry secondary (see ProjectRowOwner).
+function stampProjectSessions(sessions: SessionInfo[], owner: ProjectRowOwner): SessionInfo[] {
+  if (owner.connectionId !== 'local') {
+    return stampRowsWithOwningConnection(sessions, owner.connectionId)
+  }
+
+  return owner.stampLocal
+    ? sessions.map(session => (session.connection_id?.trim() ? session : { ...session, connection_id: 'local' }))
+    : sessions
+}
+
+function tagProjectSessionConnection(project: SidebarProjectTree, owner: ProjectRowOwner): SidebarProjectTree {
+  if (!owner.connectionId || (owner.connectionId === 'local' && !owner.stampLocal)) {
+    return project
+  }
+
+  return {
+    ...project,
+    ...(project.previewSessions ? { previewSessions: stampProjectSessions(project.previewSessions, owner) } : {}),
+    repos: project.repos.map(repo => ({
+      ...repo,
+      groups: repo.groups.map(group => ({ ...group, sessions: stampProjectSessions(group.sessions, owner) }))
+    }))
+  }
+}
+
+function applyProjectTreePayload(res: ProjectTreePayload, owner: ProjectRowOwner): void {
   const scoped = new Set(res.scoped_session_ids ?? [])
   // The tree refreshes on every sessions.changed and window focus, and most of
   // those answers are unchanged. Keep unchanged nodes by reference so the
   // entered project doesn't refetch and rebuild on a no-op (#77591).
-  $projectTree.set(replaceEqualDeep($projectTree.get(), res.projects ?? []))
+  $projectTree.set(
+    replaceEqualDeep(
+      $projectTree.get(),
+      (res.projects ?? []).map(project => tagProjectSessionConnection(project, owner))
+    )
+  )
   $activeProjectId.set(res.active_id ?? null)
   const tombstones = $removedSessionIds.get()
 
@@ -483,7 +544,7 @@ async function refreshProjectTreeOn(context: ActiveProjectsContext): Promise<voi
       return
     }
 
-    applyProjectTreePayload(res)
+    applyProjectTreePayload(res, context)
     markProjectsRpcSuccess()
   } catch (err) {
     if (generation === projectTreeRefreshGeneration && stillOnProjectsContext(context)) {
@@ -518,6 +579,7 @@ export async function refreshProjectTree(): Promise<void> {
 // the REST fan-out reads every profile's databases directly instead of asking
 // us to hold a backend open per profile just to draw lanes.
 async function refreshProjectTreeAcrossProfiles(): Promise<void> {
+  const owner = projectRowOwner()
   const generation = ++projectTreeRefreshGeneration
   $projectTreeLoading.set(true)
 
@@ -529,11 +591,15 @@ async function refreshProjectTreeAcrossProfiles(): Promise<void> {
 
     // A profile switch mid-flight leaves this payload describing the wrong
     // scope; the newer refresh owns the tree.
-    if (generation !== projectTreeRefreshGeneration || $profileScope.get() !== ALL_PROFILES) {
+    if (
+      generation !== projectTreeRefreshGeneration ||
+      $profileScope.get() !== ALL_PROFILES ||
+      activeGatewayConnectionId() !== owner.connectionId
+    ) {
       return
     }
 
-    applyProjectTreePayload(res)
+    applyProjectTreePayload(res, owner)
     markProjectsRpcSuccess()
   } catch (err) {
     markProjectsRpcFailure(err)
@@ -604,7 +670,10 @@ export async function fetchProjectSessions(
       return null
     }
 
-    return dropRemovedProjectSessions(res.project ?? null, removalSnapshot)
+    return dropRemovedProjectSessions(
+      res.project ? tagProjectSessionConnection(res.project, context) : null,
+      removalSnapshot
+    )
   } catch (error) {
     if (
       (generation !== null && generation !== projectSessionsRefreshGeneration) ||
@@ -740,6 +809,8 @@ export async function moveSessionToProject(
 
 export interface RepoDiscoveryPolicy {
   enabled: boolean
+  /** Also discover repos nested inside a discovered repo, shown as subprojects. */
+  nested: boolean
   roots: string[]
   exclude_paths: string[]
 }
@@ -752,12 +823,15 @@ export function repoDiscoveryPolicyFromConfig(config: unknown): RepoDiscoveryPol
       ? (desktopValue as {
           repo_scan_enabled?: unknown
           repo_scan_exclude_paths?: unknown
+          repo_scan_nested?: unknown
           repo_scan_roots?: unknown
         })
       : {}
 
   return {
     enabled: desktop.repo_scan_enabled !== false,
+    // Opt-in, and additive: it does nothing without the scan itself.
+    nested: desktop.repo_scan_nested === true,
     roots: Array.isArray(desktop.repo_scan_roots)
       ? desktop.repo_scan_roots.filter((value): value is string => typeof value === 'string')
       : [],
@@ -871,7 +945,8 @@ export async function scanAndRecordRepos(force = false): Promise<void> {
 
       const repos = await scan(policy.roots, {
         enabled: true,
-        excludePaths: policy.exclude_paths
+        excludePaths: policy.exclude_paths,
+        nested: policy.nested
       })
 
       if (state.generation !== generation) {
@@ -921,6 +996,8 @@ export interface CreateProjectInput {
   color?: string
   boardSlug?: string
   use?: boolean
+  /** Nest the new project under this one — the "New subproject" flow in a project's menu. */
+  parentId?: string
   // Free-text project idea; written to IDEA.md at the primary folder on create.
   idea?: string
   /** Where a "New project" DRAG dropped the project (tab-strip slot / pane
@@ -1015,6 +1092,7 @@ function projectInfoToTreeNode(project: ProjectInfo): SidebarProjectTree {
     color: project.color ?? null,
     icon: project.icon ?? null,
     isAuto: false,
+    parentId: project.parent_id ?? null,
     repos: [],
     sessionCount: 0,
     previewSessions: []
@@ -1047,6 +1125,7 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
           icon: input.icon,
           color: input.color,
           board_slug: input.boardSlug,
+          parent_id: input.parentId,
           use: input.use ?? false
         },
         context.profile
@@ -1242,6 +1321,29 @@ export async function addProjectFolder(
   reconcileProjects()
 }
 
+/**
+ * Nest a project under another one — `parentId` names the parent, `""` moves it back out to the top
+ * level.
+ *
+ * Optimistic on the tree node alone: `parentId` is what the sidebar groups by, so the row lands under
+ * its new parent immediately and a failed move rolls the snapshot back.
+ */
+export async function setProjectParent(id: string, parentId: string): Promise<void> {
+  const context = await activeProjectsContext(writableProjectProfile())
+  const snap = snapshotProjects()
+
+  $projectTree.set(snap.tree.map(node => (node.id === id ? { ...node, parentId: parentId || null } : node)))
+
+  await persistOrRollback(snap, () =>
+    gatewayRequestOn(
+      context.gateway,
+      'projects.set_parent',
+      projectParams({ id, parent_id: parentId }, context.profile)
+    )
+  )
+  reconcileProjects()
+}
+
 // True when the session currently open in the main pane belongs to `projectId`.
 // Used so deleting a project you have a session open from kicks you back to the
 // intro draft instead of stranding you in a now-orphaned view.
@@ -1312,11 +1414,15 @@ export interface ProjectDialogState {
   mode: 'add-folder' | 'create' | 'rename'
   projectId?: string
   name?: string
+  /** Create mode: nest the new project under this one — "New subproject" in a row's menu. */
+  parentId?: string
+  parentName?: string
 }
 
 export const $projectDialog = atom<null | ProjectDialogState>(null)
 
-export function openProjectCreate(): void {
+/** Open the create dialog; passing a project nests the new one under it. */
+export function openProjectCreate(parent?: { id: string; name: string }): void {
   if ($projectsRpcAvailable.get() === false) {
     notify({
       kind: 'warning',
@@ -1326,7 +1432,7 @@ export function openProjectCreate(): void {
     return
   }
 
-  $projectDialog.set({ mode: 'create' })
+  $projectDialog.set({ mode: 'create', parentId: parent?.id, parentName: parent?.name })
 }
 
 /** Clear the armed "New project" drag placement — on dialog close, so a later
