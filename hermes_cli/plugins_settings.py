@@ -134,15 +134,12 @@ def plugin_settings_fields(plugin_id: str, plugin_dir: Optional[Path]) -> List[D
                 choices = [str(value), *choices]
         else:
             choices = spec.get("choices", spec.get("enum"))
-        group = str(spec.get("group") or "").strip()
         field: Dict[str, Any] = {
             "key": key, "type": kind,
             "label": str(spec.get("label") or spec.get("title") or key),
             "description": str(spec.get("description") or ""),
             "required": bool(spec.get("required")),
         }
-        if group:
-            field["group"] = group
         if kind == "secret":
             env = secret_env_name(plugin_id, key, spec)
             field.update({"env": env, "has_value": get_env_value(env) is not None})
