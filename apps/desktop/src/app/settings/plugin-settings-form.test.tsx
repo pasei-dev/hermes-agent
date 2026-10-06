@@ -149,3 +149,50 @@ describe('plugin settings labels and helper copy', () => {
     expect(joinSentences('Lone description')).toBe('Lone description')
   })
 })
+
+const GROUPED_FIELDS: PluginSettingField[] = [
+  {
+    description: '',
+    group: 'impl',
+    key: 'lanes.impl.model',
+    label: 'model',
+    required: false,
+    type: 'string',
+    value: 'a'
+  },
+  {
+    description: '',
+    group: 'impl',
+    key: 'lanes.impl.effort',
+    label: 'reasoning',
+    required: false,
+    type: 'string',
+    value: 'low'
+  },
+  {
+    description: '',
+    group: 'review',
+    key: 'lanes.review.model',
+    label: 'model',
+    required: false,
+    type: 'string',
+    value: 'b'
+  },
+  { description: '', key: 'rail_lane', label: 'Rail lane', required: false, type: 'string', value: 'impl' }
+]
+
+describe('PluginSettingsForm grouping', () => {
+  afterEach(cleanup)
+
+  it('heads each group once, and leaves an ungrouped field without one', () => {
+    render(<PluginSettingsForm disabled={false} fields={GROUPED_FIELDS} idPrefix="p" onSave={vi.fn()} title="Delegation" />)
+
+    // One heading per group, not per field: the two `impl` fields share theirs.
+    expect(screen.getAllByRole('heading', { name: 'impl' })).toHaveLength(1)
+    expect(screen.getAllByRole('heading', { name: 'review' })).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: 'Rail lane' })).toBeNull()
+    // The rows are still there, under their headings.
+    expect(screen.getByLabelText('reasoning')).toBeTruthy()
+    expect(screen.getByLabelText('Rail lane')).toBeTruthy()
+  })
+})

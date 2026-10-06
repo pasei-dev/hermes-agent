@@ -78,6 +78,9 @@ export interface PluginSettingField {
   value?: unknown
   default?: unknown
   choices?: string[]
+  /** The block this field belongs to in the manifest's `config_schema`; consecutive fields sharing
+   *  one render under a single heading. Absent means the field stands alone. */
+  group?: string
   env?: string
   has_value?: boolean
 }

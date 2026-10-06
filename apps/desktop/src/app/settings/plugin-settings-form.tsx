@@ -278,6 +278,23 @@ export function collectChanges(fields: PluginSettingField[], draft: PluginSettin
   return { values, secrets }
 }
 
+/** Consecutive fields that share a `group` render under one heading, in schema order — a manifest with
+ *  per-lane keys reads as sections instead of one 26-row list. A field with no group is its own block,
+ *  which is exactly today's row. */
+function groupFields(fields: PluginSettingField[]): { name: string; rows: PluginSettingField[] }[] {
+  const groups: { name: string; rows: PluginSettingField[] }[] = []
+
+  for (const field of fields) {
+    const name = field.group ?? ''
+    const last = groups[groups.length - 1]
+
+    if (last && last.name === name) {last.rows.push(field)}
+    else {groups.push({ name, rows: [field] })}
+  }
+
+  return groups
+}
+
 export function PluginSettingsForm({
   fields,
   idPrefix,
@@ -368,54 +385,63 @@ export function PluginSettingsForm({
         </p>
       )}
       <div>
-        {fields.map(field => {
-          const id = `${idPrefix}-${field.key}`
-          const Control = FIELD_CONTROLS[field.type]
-          const label = fieldLabel(field)
+        {groupFields(fields).map(group => (
+          <section className="mb-2 last:mb-0" key={group.name || '__ungrouped'}>
+            {group.name && (
+              <h3 className="mb-0.5 pt-4 text-[length:var(--conversation-caption-font-size)] font-medium text-muted-foreground">
+                {group.name}
+              </h3>
+            )}
+            {group.rows.map(field => {
+              const id = `${idPrefix}-${field.key}`
+              const Control = FIELD_CONTROLS[field.type]
+              const label = fieldLabel(field)
 
-          const control = (
-            <Control
-              disabled={disabled || saving}
-              field={field}
-              id={id}
-              onChange={raw => setDraft(current => ({ ...current, [field.key]: raw }))}
-              raw={draft[field.key] ?? ''}
-              secretSetHint={s.secretSet}
-            />
-          )
+              const control = (
+                <Control
+                  disabled={disabled || saving}
+                  field={field}
+                  id={id}
+                  onChange={raw => setDraft(current => ({ ...current, [field.key]: raw }))}
+                  raw={draft[field.key] ?? ''}
+                  secretSetHint={s.secretSet}
+                />
+              )
 
-          const description =
-            joinSentences(field.description, field.type === 'secret' && field.env ? s.secretStoredAs(field.env) : '') ||
-            undefined
+              const description =
+                joinSentences(field.description, field.type === 'secret' && field.env ? s.secretStoredAs(field.env) : '') ||
+                undefined
 
-          const rowTitle = (
-            <span className="inline-flex flex-wrap items-center gap-2">
-              <label htmlFor={id}>{label}</label>
-              {field.required && <Pill>{s.required}</Pill>}
-            </span>
-          )
+              const rowTitle = (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <label htmlFor={id}>{label}</label>
+                  {field.required && <Pill>{s.required}</Pill>}
+                </span>
+              )
 
-          // Editors too big for the control column take the full width under
-          // the description, as native config rows do.
-          return field.type === 'json' ? (
-            <ListRow
-              below={<div className="mt-3">{control}</div>}
-              data-tour={`plugin-field-${field.key}`}
-              description={description}
-              key={field.key}
-              title={rowTitle}
-              wide
-            />
-          ) : (
-            <ListRow
-              action={control}
-              data-tour={`plugin-field-${field.key}`}
-              description={description}
-              key={field.key}
-              title={rowTitle}
-            />
-          )
-        })}
+              // Editors too big for the control column take the full width under
+              // the description, as native config rows do.
+              return field.type === 'json' ? (
+                <ListRow
+                  below={<div className="mt-3">{control}</div>}
+                  data-tour={`plugin-field-${field.key}`}
+                  description={description}
+                  key={field.key}
+                  title={rowTitle}
+                  wide
+                />
+              ) : (
+                <ListRow
+                  action={control}
+                  data-tour={`plugin-field-${field.key}`}
+                  description={description}
+                  key={field.key}
+                  title={rowTitle}
+                />
+              )
+            })}
+          </section>
+        ))}
       </div>
     </form>
   )
