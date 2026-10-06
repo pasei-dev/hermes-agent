@@ -16,12 +16,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from hermes_cli.plugins_state import (
-    _nested_plugin_value,
-    _plugin_relative_segments,
-    _plugin_settings_entry,
-    save_plugin_setting,
-)
+from hermes_cli.plugins_state import _plugin_relative_segments, _plugin_settings_entry, save_plugin_setting
 
 logger = logging.getLogger(__name__)
 
@@ -79,30 +74,6 @@ def _field_type(spec: Mapping[str, Any]) -> str:
     return kind
 
 
-def _live_model_choices() -> List[str]:
-    """Model ids from the same catalogue the picker and ``/api/model/options`` use.
-
-    ``choices_from: models`` in a ``config_schema`` entry resolves through here, so a plugin can offer a
-    model dropdown without hardcoding an id: the list is whatever the profile's providers actually
-    advertise. Never raises — a catalogue that cannot be built yields no choices, and the field falls back
-    to the current value alone rather than to a broken panel.
-    """
-    try:
-        from hermes_cli.inventory import build_model_options_payload, load_picker_context
-
-        payload = build_model_options_payload(load_picker_context())
-        out: List[str] = []
-        for provider in payload.get("providers") or []:
-            for model_id in provider.get("models") or []:
-                text = str(model_id)
-                if text and text not in out:
-                    out.append(text)
-        return out
-    except Exception as exc:  # noqa: BLE001 — a settings panel must render whatever else is wrong
-        logger.debug("plugin settings: live model catalogue unavailable: %s", exc)
-        return []
-
-
 def plugin_settings_fields(plugin_id: str, plugin_dir: Optional[Path]) -> List[Dict[str, Any]]:
     """Renderable settings fields for one plugin: schema + the current value of each key.
 
@@ -118,22 +89,10 @@ def plugin_settings_fields(plugin_id: str, plugin_dir: Optional[Path]) -> List[D
     fields: List[Dict[str, Any]] = []
     for key, spec in schema.items():
         try:
-            segments = _plugin_relative_segments(key)
+            _plugin_relative_segments(key)
         except ValueError:
             continue  # a key the plugin could never read through ctx.get_config
         kind = _field_type(spec)
-        # Read the value the way it was written: ``save_plugin_setting`` nests a dotted key, so a flat
-        # ``current.get(key)`` here made every nested field render its default forever.
-        value = _nested_plugin_value(current, segments, spec.get("default"))
-        if kind != "secret" and spec.get("choices_from") == "models":
-            # A live list, so a plugin can offer a model dropdown without naming one. The current value is
-            # forced in: the form refuses a save whose value is not among the choices.
-            kind = "enum"
-            choices = _live_model_choices()
-            if value not in (None, "") and str(value) not in choices:
-                choices = [str(value), *choices]
-        else:
-            choices = spec.get("choices", spec.get("enum"))
         field: Dict[str, Any] = {
             "key": key, "type": kind,
             "label": str(spec.get("label") or spec.get("title") or key),
@@ -144,11 +103,12 @@ def plugin_settings_fields(plugin_id: str, plugin_dir: Optional[Path]) -> List[D
             env = secret_env_name(plugin_id, key, spec)
             field.update({"env": env, "has_value": get_env_value(env) is not None})
         else:
+            choices = spec.get("choices", spec.get("enum"))
             if kind == "enum":
                 field["choices"] = [str(c) for c in choices]
             if "default" in spec:
                 field["default"] = spec["default"]
-            field["value"] = value
+            field["value"] = current.get(key, spec.get("default"))
         fields.append(field)
     return fields
 
