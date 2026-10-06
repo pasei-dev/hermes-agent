@@ -1,7 +1,7 @@
 import { fireEvent } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createDropClickSwallow } from './reorderable-list'
+import { createDropClickSwallow, findSessionRow } from './reorderable-list'
 
 /**
  * The regression the swallow exists for: freezing the rows during a project drag (so a nest target
@@ -106,5 +106,26 @@ describe('createDropClickSwallow', () => {
     fireEvent.click(first.row)
 
     expect(first.onActivate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('findSessionRow', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+  })
+
+  it('finds a row whose id is not selector-safe, instead of throwing on it', () => {
+    // The gateway and profile groups sort by `JSON.stringify`ed arrays, so their ids carry quotes.
+    const id = JSON.stringify(['gateway', 'local'])
+    const row = document.createElement('div')
+
+    row.setAttribute('data-session-row', id)
+    document.body.append(row)
+
+    expect(findSessionRow(id)).toBe(row)
+  })
+
+  it('returns null when no row carries the id', () => {
+    expect(findSessionRow('s1')).toBeNull()
   })
 })

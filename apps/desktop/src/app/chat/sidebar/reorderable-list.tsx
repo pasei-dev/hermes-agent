@@ -117,6 +117,14 @@ const closestWithin = (node: EventTarget | null, attr: string, root: HTMLElement
   return found && (!root || root.contains(found)) ? found : null
 }
 
+/** The row carrying `data-session-row="<id>"`. Matched by attribute value, never through a selector
+ *  built out of `id`: sortable ids are opaque, and the gateway/profile groups' are `JSON.stringify`ed
+ *  arrays whose quotes made `[data-session-row="${id}"]` a CSS syntax error. */
+export const findSessionRow = (id: string): HTMLElement | null =>
+  [...document.querySelectorAll<HTMLElement>('[data-session-row]')].find(
+    row => row.dataset.sessionRow === id
+  ) ?? null
+
 export function createDropClickSwallow(): DropClickSwallow {
   let owner: HTMLElement | null = null
   let nestTarget: HTMLElement | null = null
@@ -304,10 +312,6 @@ export function ReorderableList({
 
   const detectCollision = pin.current.detect
 
-  /** The dragged row's element, for the release-click swallow to scope itself to. */
-  const activeRow = (id: string): HTMLElement | null =>
-    document.querySelector<HTMLElement>(`[data-session-row="${id}"]`)
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { activatorEvent, active, over } = event
 
@@ -327,7 +331,7 @@ export function ReorderableList({
     // (a nest, say) that click reads as a plain activation and does the wrong thing — entering the
     // project, or running the row's action — the instant you let go. Keyboard drags never produce one.
     if (!(activatorEvent instanceof KeyboardEvent)) {
-      swallow.arm(activeRow(String(active.id)), null)
+      swallow.arm(findSessionRow(String(active.id)), null)
     }
 
     // The policy sees every drop — nest or plain reorder — so it can always tear
@@ -335,7 +339,7 @@ export function ReorderableList({
     const outcome = resolveNest?.(nestInfo('drop', event))
 
     if (outcome) {
-      swallow.arm(activeRow(String(active.id)), outcome.targetEl ?? null)
+      swallow.arm(findSessionRow(String(active.id)), outcome.targetEl ?? null)
 
       return
     }
