@@ -21,7 +21,9 @@ const row = (
   id: string,
   top: number,
   height: number
-): Pick<ProjectNestRow, 'el' | 'id' | 'rect'> & { block: { bottom: number; left: number; right: number; top: number } } => ({
+): Pick<ProjectNestRow, 'el' | 'id' | 'rect'> & {
+  block: { bottom: number; left: number; right: number; top: number }
+} => ({
   block: { bottom: top + height, left: 0, right: 220, top },
   el: null as unknown as HTMLElement,
   id,
@@ -48,7 +50,7 @@ const drop = (activeId: string, y: number, over: SidebarProjectTree[] = tree, ov
   resolveProjectDropIntent({ activeId, pointer: { x: 40, y }, projects: over, rows: overRows })
 
 describe('resolveProjectDropIntent', () => {
-  it("nests into the project whose own ROW the pointer is on — nested projects included", () => {
+  it('nests into the project whose own ROW the pointer is on — nested projects included', () => {
     expect(drop('tail', 10)).toEqual({ kind: 'into', targetId: 'dev' })
     // The one way to reach a project that is already nested.
     expect(drop('tail', 50)).toEqual({ kind: 'into', targetId: 'align' })
@@ -109,12 +111,7 @@ describe('the reorder quiet zone', () => {
   // out from under the pointer just before the drop — the row appeared to run away.
   const policy = () =>
     createProjectNestResolver({
-      projects: () => [
-        project('dev'),
-        project('align', { parentId: 'dev' }),
-        project('other'),
-        project('tail')
-      ],
+      projects: () => [project('dev'), project('align', { parentId: 'dev' }), project('other'), project('tail')],
       setParent: vi.fn(),
       setTopLevel: vi.fn(),
       strings: { nestInto: (name: string) => `Add subproject to ${name}`, topLevel: 'Top level' }
@@ -162,12 +159,7 @@ describe('the reorder quiet zone', () => {
   }
 
   it('claims every row and leaves the gaps and empty space live', () => {
-    const projects = [
-      project('dev'),
-      project('align', { parentId: 'dev' }),
-      project('other'),
-      project('tail')
-    ]
+    const projects = [project('dev'), project('align', { parentId: 'dev' }), project('other'), project('tail')]
 
     mountRows(projects)
 
