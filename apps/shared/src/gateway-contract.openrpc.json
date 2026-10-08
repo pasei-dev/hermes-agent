@@ -31861,6 +31861,18 @@
             "default": null,
             "title": "Primary Path"
           },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Id"
+          },
           "archived": {
             "default": false,
             "title": "Archived",
@@ -34382,6 +34394,18 @@
             ],
             "default": null,
             "title": "Enabled"
+          },
+          "nested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Nested"
           },
           "roots": {
             "anyOf": [
