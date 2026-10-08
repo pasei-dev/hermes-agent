@@ -32068,6 +32068,11 @@
             "title": "Isauto",
             "type": "boolean"
           },
+          "discovered": {
+            "default": false,
+            "title": "Discovered",
+            "type": "boolean"
+          },
           "isNoProject": {
             "default": false,
             "title": "Isnoproject",
@@ -34354,6 +34359,11 @@
         "properties": {
           "enabled": {
             "title": "Enabled",
+            "type": "boolean"
+          },
+          "nested": {
+            "default": false,
+            "title": "Nested",
             "type": "boolean"
           },
           "roots": {
