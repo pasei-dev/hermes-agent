@@ -3986,11 +3986,6 @@ export const esOverrides = {
     editingQueuedInComposer: 'Editando turno en cola en el compositor',
     restoredDraftNotice: 'Se restauró tu mensaje sin enviar',
     restoredDraftUndo: 'Deshacer',
-    localSetup: {
-      title: 'Esto podría ejecutarse en este equipo',
-      text: (model: string) => `${model} cabe en este equipo. Gratis, y los chats se quedan en este equipo.`,
-      action: 'Muéstrame'
-    },
     queueEdit: 'Editar',
     queueExpand: 'Expandir',
     queueCollapse: 'Contraer',
