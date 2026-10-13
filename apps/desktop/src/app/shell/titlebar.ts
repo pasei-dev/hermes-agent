@@ -21,7 +21,7 @@ export function titlebarIconSizeCss(scale = 1): string {
   return `${TITLEBAR_ICON_SIZE * scale}px`
 }
 
-export const TITLEBAR_FALLBACK_WINDOW_BUTTON_X = 12
+export const TITLEBAR_FALLBACK_WINDOW_BUTTON_X = 20
 // Preserve other platforms' first paint until native window state arrives.
 const TITLEBAR_NON_MAC_FALLBACK_WINDOW_BUTTON_X = 24
 // Edge inset used when no left-side native controls take up that space —
