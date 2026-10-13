@@ -10,6 +10,7 @@ import { esModelMenu } from './es_model_menu'
 import { esNotices } from './es_notices'
 import { esOnboarding } from './es_onboarding'
 import { esProjects } from './es_projects'
+import { esRepoScanDescriptions, esRepoScanLabels } from './es_repo_scan'
 import { esSharedMetrics } from './es_shared_metrics'
 import { esUpdateChannel } from './es_update_channel'
 import { introEs } from './intro-es'
@@ -1180,11 +1181,7 @@ export const esOverrides = {
         personality: 'Personalidad',
         showReasoning: 'Bloques de razonamiento'
       },
-      desktop: {
-        repoScanEnabled: 'Detección automática de repositorios',
-        repoScanRoots: 'Carpetas de búsqueda de repositorios',
-        repoScanExcludePaths: 'Rutas de repositorio excluidas'
-      },
+      ...esRepoScanLabels,
       agent: {
         maxTurns: 'Pasos máximos del agente',
         imageInputMode: 'Adjuntos de imagen',
@@ -1357,12 +1354,7 @@ export const esOverrides = {
         personality: 'Estilo predeterminado del asistente para sesiones nuevas.',
         showReasoning: 'Muestra secciones de razonamiento cuando el backend las proporcione.'
       },
-      desktop: {
-        repoScanEnabled: 'Busca repositorios Git en carpetas locales para mostrarlos en Proyectos.',
-        repoScanRoots: 'Carpetas que se buscarán. Déjalo vacío para buscar en tu directorio de inicio.',
-        repoScanExcludePaths:
-          'Carpetas que se omitirán, junto con todos sus subdirectorios, durante la detección de repositorios.'
-      },
+      ...esRepoScanDescriptions,
       timezone: 'Identificador de zona horaria IANA. Vacío usa la zona horaria del sistema.',
       browser: {
         useRealProfile:

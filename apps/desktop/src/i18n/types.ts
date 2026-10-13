@@ -18,8 +18,8 @@ import type { ModelMenuTranslations } from './types_model_menu'
 import type { NoticeTranslations } from './types_notices'
 import type { OnboardingTranslations } from './types_onboarding'
 import type { SidebarProjectsTranslations } from './types_projects'
+import type { RepoScanSettingsTranslations } from './types_repo_scan'
 import type { SharedMetricsTranslations } from './types_shared_metrics'
-import type { UninstallSectionTranslations } from './types_uninstall_section'
 import type { UpdateChannelCopy } from './types_update_channel'
 
 /** The locales compiled into the app (`TRANSLATIONS`). */
@@ -590,7 +590,7 @@ export interface Translations extends NoticeTranslations {
     noResults: string
   }
 
-  settings: {
+  settings: RepoScanSettingsTranslations & {
     subpages: Record<string, string>
     closeSettings: string
     exportConfig: string
@@ -921,7 +921,6 @@ export interface Translations extends NoticeTranslations {
     }
     fieldLabels: Record<string, string>
     fieldDescriptions: Record<string, string>
-    uninstallSection: UninstallSectionTranslations
     poolLimits: {
       warmBotBackendsAria: string
       warmBotBackendsTitle: string

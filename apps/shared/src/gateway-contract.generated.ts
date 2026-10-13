@@ -2364,6 +2364,7 @@ export interface ProjectInfo {
   color?: string | null
   board_slug?: string | null
   primary_path?: string | null
+  parent_id?: string | null
   archived?: boolean
   created_at: number
   folders?: ProjectFolder[]
@@ -2383,7 +2384,7 @@ export interface ProjectIdParams {
 export interface ProjectResult {
   project: ProjectInfo
 }
-/** ``use`` also activates the new project. */
+/** ``use`` also activates the new project. ``parent_id`` nests it from the start — ``''`` for an explicit top level, an absent (or null) value leaves it to folder containment, and an unknown id falls back the same way. */
 export interface ProjectsCreateParams {
   profile?: string | null
   name: string
@@ -2394,6 +2395,7 @@ export interface ProjectsCreateParams {
   icon?: string | null
   color?: string | null
   board_slug?: string | null
+  parent_id?: string | null
   use?: boolean
 }
 export interface OptionalProjectResult {
@@ -2408,6 +2410,12 @@ export interface ProjectsUpdateParams {
   icon?: string | null
   color?: string | null
   board_slug?: string | null
+}
+/** ``parent_id`` names the project this one nests under in the sidebar; ``''`` moves it to the top level, and an absent (or null) value hands it back to folder containment. Looping moves are refused (5063). */
+export interface ProjectsSetParentParams {
+  profile?: string | null
+  id: string
+  parent_id?: string | null
 }
 export interface ProjectsAddFolderParams {
   profile?: string | null
@@ -2463,6 +2471,7 @@ export interface DiscoveredRepo {
 /** ``methods_projects._repo_discovery_policy`` — the effective ``desktop.repo_scan_*`` config. */
 export interface RepoDiscoveryPolicy {
   enabled: boolean
+  nested?: boolean
   roots: string[]
   exclude_paths: string[]
 }
@@ -2479,11 +2488,13 @@ export interface RecordRepoItem {
 /** The policy the desktop scanned under (short or ``repo_scan_*`` long keys both accepted). */
 export interface RepoDiscoveryPolicyParams {
   enabled?: boolean | null
+  nested?: boolean | null
   roots?: string[] | null
   exclude_paths?: string[] | null
   repo_scan_enabled?: boolean | null
   repo_scan_roots?: string[] | null
   repo_scan_exclude_paths?: string[] | null
+  repo_scan_nested?: boolean | null
 }
 export interface ProjectsRecordReposResult {
   repos: DiscoveredRepo[]
@@ -2505,9 +2516,11 @@ export interface ProjectTreeNode {
   id: string
   label: string
   path?: string | null
+  parentId?: string | null
   color?: string | null
   icon?: string | null
   isAuto?: boolean
+  discovered?: boolean
   isNoProject?: boolean
   sessionCount?: number
   lastActive?: number
@@ -5331,6 +5344,8 @@ export interface RpcMethods {
   'projects.remove_folder': { params: ProjectFolderParams; result: ProjectResult }
   /** Switch (or clear) the active project for the profile. */
   'projects.set_active': { params: ProjectsSetActiveParams; result: ActiveIdResult }
+  /** Nest a project under another, or move it back out; answers the refreshed project. */
+  'projects.set_parent': { params: ProjectsSetParentParams; result: ProjectResult }
   /** Make one attached folder the project's primary path. */
   'projects.set_primary': { params: ProjectFolderParams; result: ProjectResult }
   /** Project → repo → lane overview with counts and a few preview sessions per project. */
@@ -5690,6 +5705,7 @@ export const RPC_METHODS = [
   'projects.record_repos',
   'projects.remove_folder',
   'projects.set_active',
+  'projects.set_parent',
   'projects.set_primary',
   'projects.tree',
   'projects.update',
