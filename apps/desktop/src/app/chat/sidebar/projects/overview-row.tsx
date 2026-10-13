@@ -330,9 +330,7 @@ export function ProjectOverviewRow({
   // One cell, one mark: the subtree's loudest status while there is one, else the project's icon.
   // Swapping rather than adding is what puts the dot on the session rows' axis without spending a
   // second column on it.
-  const leadMark = attention
-    ? projectStatusDot({ label: attentionLabel, state: attention })
-    : projectIcon(project)
+  const leadMark = attention ? projectStatusDot({ label: attentionLabel, state: attention }) : projectIcon(project)
 
   const lead = reorderable ? (
     <SidebarRowGrab
@@ -361,9 +359,7 @@ export function ProjectOverviewRow({
       }
       className={cn(dragging && 'cursor-grabbing bg-(--ui-sidebar-surface-background)')}
       data-glass-opaque={dragging ? '' : undefined}
-      label={
-        <ProjectRowLabel isActive={isActive} onEnter={onEnter} project={project} />
-      }
+      label={<ProjectRowLabel isActive={isActive} onEnter={onEnter} project={project} />}
       lead={lead}
       // The label is grab surface too, not just the lead's grabber — the
       // pointer activator only (the full handle stays on the grabber, see
