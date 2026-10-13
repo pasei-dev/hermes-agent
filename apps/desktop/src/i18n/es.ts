@@ -524,6 +524,7 @@ export const esOverrides = {
     }
   },
   titlebar: {
+    back: 'Atrás',
     hideSidebar: 'Ocultar barra lateral',
     showSidebar: 'Mostrar barra lateral',
     search: 'Buscar',
