@@ -1,5 +1,5 @@
 import type * as React from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { $gateway } from '@/store/gateway'
 import { OFFICIAL_SKILLS_KEY } from '@/store/hub-actions'
+import { rememberedViewSubState, rememberViewSubState } from '@/store/view-memory'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -31,6 +32,9 @@ import { ToolsetsTab } from './toolsets/toolsets-tab'
 const CAPABILITY_MODES = ['skills', 'toolsets', 'connectors', 'plugins'] as const
 
 type CapabilityMode = (typeof CAPABILITY_MODES)[number]
+
+/** Key into the per-view sub-state memory (see `store/view-memory`). */
+const CAPABILITIES_MEMORY_KEY = 'capabilities'
 
 interface CapabilitiesViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
@@ -63,11 +67,29 @@ export function CapabilitiesView({
   ...props
 }: CapabilitiesViewProps) {
   const { t } = useI18n()
+  // Reopening the view lands on the pane last used. An explicit `?tab=` (a
+  // sidebar row / palette deep link) always wins — the remembered value is only
+  // the fallback when the route names none.
+  const rememberedMode = rememberedViewSubState(CAPABILITIES_MEMORY_KEY)
+
+  const defaultMode: CapabilityMode =
+    rememberedMode && (CAPABILITY_MODES as readonly string[]).includes(rememberedMode)
+      ? (rememberedMode as CapabilityMode)
+      : 'skills'
+
   // Both hooks run unconditionally (rules of hooks); embedded picks the local
   // one so tab clicks inside a dialog don't rewrite the page URL.
-  const routeTab = useRouteEnumParam('tab', CAPABILITY_MODES, 'skills')
+  const routeTab = useRouteEnumParam('tab', CAPABILITY_MODES, defaultMode)
   const localTab = useState<CapabilityMode>('skills')
   const [mode, setMode] = embedded ? localTab : routeTab
+
+  // Remember the pane whenever it changes. Embedded (Bot Mode's Advanced
+  // section) drives its own local tab and must never write the page's memory.
+  useEffect(() => {
+    if (!embedded) {
+      rememberViewSubState(CAPABILITIES_MEMORY_KEY, mode)
+    }
+  }, [embedded, mode])
   const gateway = useStoreSelector($gateway, g => (mode === 'connectors' ? g : null))
 
   const [query, setQuery] = useState('')
