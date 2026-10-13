@@ -248,6 +248,7 @@ export const ruOverrides = {
   },
 
   titlebar: {
+    back: 'Назад',
     hideSidebar: 'Скрыть боковую панель',
     showSidebar: 'Показать боковую панель',
     search: 'Поиск',

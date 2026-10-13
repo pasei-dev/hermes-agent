@@ -542,6 +542,7 @@ export interface Translations extends NoticeTranslations {
   }
 
   titlebar: {
+    back: string
     hideSidebar: string
     showSidebar: string
     search: string
