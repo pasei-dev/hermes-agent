@@ -136,7 +136,13 @@ describe('TreeSplit cascading expansion', () => {
     // which floored it to 0.01 and re-scaled the whole run: measured live, a
     // 420px drag moved the chat 231px while the donors gave up 549.
     disposers.push(
-      registry.register({ area: 'panes', data: { placement: 'right' }, id: 'squeezed', render: () => null, title: 'Squeezed' })
+      registry.register({
+        area: 'panes',
+        data: { placement: 'right' },
+        id: 'squeezed',
+        render: () => null,
+        title: 'Squeezed'
+      })
     )
 
     const tree = split(

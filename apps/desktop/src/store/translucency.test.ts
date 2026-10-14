@@ -294,7 +294,8 @@ describe('frost and area', () => {
 
     const rail = document.createElement('div')
     rail.setAttribute('data-slot', 'sidebar')
-    rail.getBoundingClientRect = () => ({ bottom: 400, height: 400, left: 0, right: 260, top: 0, width: 260 }) as DOMRect
+    rail.getBoundingClientRect = () =>
+      ({ bottom: 400, height: 400, left: 0, right: 260, top: 0, width: 260 }) as DOMRect
     document.body.appendChild(rail)
 
     // The watch is a MutationObserver, so one task turn is all it needs.

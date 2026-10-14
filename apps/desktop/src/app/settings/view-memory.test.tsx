@@ -47,8 +47,7 @@ function renderAt(pathname: string) {
   )
 }
 
-const navRow = (container: HTMLElement, id: string) =>
-  container.querySelector<HTMLElement>(`[data-tour="nav-${id}"]`)
+const navRow = (container: HTMLElement, id: string) => container.querySelector<HTMLElement>(`[data-tour="nav-${id}"]`)
 
 beforeEach(resetViewMemory)
 
