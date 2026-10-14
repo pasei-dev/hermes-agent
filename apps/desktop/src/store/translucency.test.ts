@@ -272,6 +272,38 @@ describe('frost and area', () => {
     setTranslucencyMode('clear')
     expect(document.documentElement.hasAttribute('data-hermes-glass-scope')).toBe(false)
   })
+
+  // A cold load applies the saved setting BEFORE React has rendered the rail, so
+  // the first measurement finds nothing and writes the seam at 0px — which in
+  // sidebar scope hands the opaque half of the body gradient the whole window.
+  // Nothing re-measured when the rail turned up (there was no element to observe),
+  // so glass stayed invisible until the reader touched the setting again.
+  it('re-measures the rail edge when the rail mounts after the setting applied', async () => {
+    if (!GLASS_SUPPORTED) {
+      return
+    }
+
+    setTranslucencyMode('glass')
+    setTranslucencyScope('sidebar')
+    setTranslucency(50)
+
+    const root = document.documentElement
+
+    // The state this test exists for: glass is on, no rail yet, seam pinned at 0.
+    expect(root.style.getPropertyValue('--glass-rail-edge')).toBe('0px')
+
+    const rail = document.createElement('div')
+    rail.setAttribute('data-slot', 'sidebar')
+    rail.getBoundingClientRect = () => ({ bottom: 400, height: 400, left: 0, right: 260, top: 0, width: 260 }) as DOMRect
+    document.body.appendChild(rail)
+
+    // The watch is a MutationObserver, so one task turn is all it needs.
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(root.style.getPropertyValue('--glass-rail-edge')).toBe('260px')
+
+    rail.remove()
+  })
 })
 
 // A held slider drag and a timed pulse from a picker click can overlap, which

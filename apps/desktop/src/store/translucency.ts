@@ -172,6 +172,24 @@ export const isChatWindow = (search = typeof window === 'undefined' ? '' : windo
 let railObserver: null | ResizeObserver = null
 let railTarget: Element | null = null
 let railTrackingOn = false
+// A cold load applies the saved setting before React has rendered the rail, so the
+// first measurement finds nothing and writes the seam at 0 — which in sidebar scope
+// hands the OPAQUE half of the body gradient the entire window. The ResizeObserver
+// cannot cover that case: there was no rail to observe. So a measurement that finds
+// no rail watches the document for one, instead of leaving the seam wrong until the
+// next settings change happens to re-run this.
+let railSeek: null | MutationObserver = null
+
+const seekRail = (): void => {
+  if (railSeek || !document.body || typeof MutationObserver === 'undefined') {
+    return
+  }
+
+  railSeek = new MutationObserver(() => {
+    measureRailEdge()
+  })
+  railSeek.observe(document.body, { childList: true, subtree: true })
+}
 
 const measureRailEdge = (): void => {
   const root = document.documentElement
@@ -192,10 +210,17 @@ const measureRailEdge = (): void => {
   if (!rail) {
     // No rail in this window (e.g. a pane-only layout): the seam sits at the
     // window edge and the whole field stays opaque — glass simply waits for
-    // a rail to exist.
+    // a rail to exist. Wait for one rather than measuring once and stopping.
     root.style.setProperty('--glass-rail-edge', '0px')
+    seekRail()
 
     return
+  }
+
+  // A rail is here, so whatever was watching for one has nothing left to do.
+  if (railSeek) {
+    railSeek.disconnect()
+    railSeek = null
   }
 
   const rect = rail.getBoundingClientRect()
@@ -239,6 +264,11 @@ const stopRailTracking = (): void => {
   }
 
   railTrackingOn = false
+
+  if (railSeek) {
+    railSeek.disconnect()
+    railSeek = null
+  }
 
   if (railObserver && railTarget) {
     railObserver.unobserve(railTarget)
