@@ -56,8 +56,11 @@ vi.mock('@/store/settings-scope', () => ({
 }))
 
 vi.mock('@/store/projects', async () => ({
-  // The Scan now row reads the in-flight atom off the same module.
+  // The Scan now row reads the in-flight atom off the same module, and the
+  // worktree refresh token lives there too — both are stubbed so the page's
+  // threading of each can be driven.
   $reposScanning: (await import('nanostores')).atom(false),
+  $worktreeRefreshToken: (await import('nanostores')).atom(0),
   repoDiscoveryPolicyFromConfig: () => ({ enabled: true, roots: [], exclude_paths: [] }),
   repoDiscoveryPolicySignature: (policy: unknown) => JSON.stringify(policy),
   scanAndRecordRepos: vi.fn().mockResolvedValue(undefined)
