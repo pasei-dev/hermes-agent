@@ -140,12 +140,19 @@ def tui_usage(stats: dict) -> dict:
 def publish_usage(turn, agent, *, record: bool = False) -> None:
     """One ``session.usage`` frame on the viewer's stream; never breaks the turn. At turn end
     (``record``) the same dict rides the captured execution result, so the turn's
-    ``message.complete`` carries main's ``usage`` (``session_settlement_recovery.completion_payload``)."""
+    ``message.complete`` carries main's ``usage`` (``session_settlement_recovery.completion_payload``).
+
+    ``SessionUsagePayload`` accepts either shape (``tui_gateway/contracts/events.py``): the flat
+    counters a classic CLI reads off its agent, or the TUI ``usage`` block (``tui_gateway``'s
+    ``_get_usage``) a viewer's status bar reads — ``total``/``context_used``/``cache_hit_pct``/
+    ``avg_tps``. The frame carries both, because the desktop reads only the block and a CLI
+    only the counters; the flat form alone left the desktop's cache-hit and tokens/sec items
+    empty for every provider while its context meter kept working off the pull RPC."""
     if agent is None:
         return
     with contextlib.suppress(Exception):
         stats = usage_stats(agent)
-        turn._publish_execution("session.usage", stats)
+        turn._publish_execution("session.usage", {**stats, "usage": tui_usage(stats)})
         if record:
             from gateway.session_results import execution_result
             captured = execution_result.get()

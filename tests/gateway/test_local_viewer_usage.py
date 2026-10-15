@@ -61,7 +61,10 @@ def test_each_api_step_publishes_usage_only_for_local_viewers(platform):
     kinds = [kind for kind, _ in published]
     if platform == Platform.LOCAL:
         usage = next(payload for kind, payload in published if kind == 'session.usage')
-        assert set(usage) == FIELDS and usage['api_calls'] == 2
+        # The flat counters plus the viewers' ``usage`` block (``SessionUsagePayload`` allows either
+        # shape; a CLI reads the counters, a desktop status bar the block).
+        assert set(usage) == FIELDS | {'usage'} and usage['api_calls'] == 2
+        assert usage['usage']['total'] == 155 and usage['usage']['avg_tps'] == 10.0
     else:
         assert 'session.usage' not in kinds
 
@@ -119,7 +122,9 @@ def test_local_viewer_turn_end_records_stats_for_the_completion():
         publish_usage(turn, _agent(), record=True)
     finally:
         execution_result.reset(token)
-    assert captured['session_usage'] == published[-1][1]
+    # The captured dict is the flat stats the completion payload re-shapes (the published frame
+    # carries the block beside them).
+    assert captured['session_usage'] == {k: v for k, v in published[-1][1].items() if k != 'usage'}
 
 
 def test_turn_end_publishes_the_agents_banner_info():
