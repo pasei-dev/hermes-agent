@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { hudTargetSessionId } from '@/app/hud/handoff'
 import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { $mainZoneLeft } from '@/components/pane-shell/tree/main-zone-anchor'
-import { resetLayoutTree } from '@/components/pane-shell/tree/store'
+import { resetLayoutTree, revealTreePane } from '@/components/pane-shell/tree/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
@@ -425,7 +425,7 @@ export function BackViewButton() {
         id: 'back',
         label: t.titlebar.back,
         onSelect: () => {
-          if (goBackToPreviousView(navigate)) {
+          if (goBackToPreviousView(navigate, revealTreePane)) {
             triggerHaptic('tap')
           }
         }
