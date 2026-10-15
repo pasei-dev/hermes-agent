@@ -96,6 +96,7 @@ import {
 import { reportPendingUpdateRun } from '@/store/shared-metrics'
 import { $archivedSessions } from '@/store/sidebar-archive'
 import { $titlebarAppActionsSide, titlebarAppActionsClusterCounts } from '@/store/titlebar-app-actions'
+import { noteViewChange } from '@/store/view-history'
 import { armWakeWord, stopClientCapture } from '@/store/wake-word'
 import { isAuxiliaryWindow, isBrowserWindow, isHudWindow, isMainWindow } from '@/store/windows'
 import { useSkinCommand } from '@/themes/use-skin-command'
@@ -355,6 +356,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // a focused session tile.
   useEffect(() => {
     syncWorkspaceRoute(location.pathname)
+    // The app's own view history — what the back affordance walks. Recorded here
+    // because this is the one effect that sees every navigation, whichever
+    // entry point made it (sidebar, palette, a plugin's `to` target, restore).
+    noteViewChange(location.pathname)
   }, [location.pathname])
 
   const {
