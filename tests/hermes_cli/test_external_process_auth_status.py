@@ -326,6 +326,30 @@ def test_cli_command_default_when_no_override(monkeypatch, _clean_copilot_env):
     assert _external_process_cli_command("copilot-acp", "copilot login") == "copilot login"
 
 
+def test_cli_command_kept_for_plugin_external_process_provider(monkeypatch):
+    # A plugin-registered external-process provider (e.g. a keyless model provider) signs in
+    # through Hermes itself, so the accounts catalog hands this function ``hermes auth add <id>``.
+    # Its process_command is the ACP interpreter, not a login CLI, and must NOT be spliced into
+    # that command — doing so rendered ``<python> auth add <id>`` in the sign-in popup.
+    from hermes_cli import auth
+    from hermes_cli.web_server_oauth import _external_process_cli_command
+
+    monkeypatch.setitem(
+        auth.PROVIDER_REGISTRY, "oc-free-test",
+        auth.ProviderConfig(id="oc-free-test", name="OpenCode Free", auth_type="external_process"),
+    )
+    # A resolving command is exactly what marks a provider verified — force it, so the case is
+    # the real one and not the empty-command fallthrough.
+    monkeypatch.setattr(
+        auth, "get_external_process_provider_status", lambda pid: {"command": "/usr/bin/python3"}
+    )
+
+    assert (
+        _external_process_cli_command("oc-free-test", "hermes auth add oc-free-test")
+        == "hermes auth add oc-free-test"
+    )
+
+
 # --- live catalog key from the Copilot CLI store -----------------------------
 
 
