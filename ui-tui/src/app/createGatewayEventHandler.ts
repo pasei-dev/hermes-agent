@@ -11,7 +11,6 @@ import { buildSetupRequiredSections, setupRequiredTitle } from '../content/setup
 import { usageFromTick } from '../domain/usage.js'
 import type {
   AnyGatewayEvent,
-  CommandsCatalogResponse,
   ConfigFullResponse,
   DelegationStatusResponse,
   GatewaySkin,
@@ -40,13 +39,15 @@ import {
   openCanonicalClarify,
   settleSharedPrompt
 } from './gatewayCanonicalEvents.js'
-import { applyGoalSnapshot } from './goalStatus.js'
+import { reportGatewayStartTimeout } from './gatewayStartTimeout.js'
 import type { GatewayEventHandlerContext, NoticeLevel } from './interfaces.js'
+import { applyControlSnapshot } from './loopStatus.js'
 import { getOverlayState, patchOverlayState, SENSITIVE_PROMPTS } from './overlayStore.js'
 import { markBubbleShown, newlyStartedRows } from './pendingBubbles.js'
 import { flashGoodVibes, flashPet } from './petFlashStore.js'
 import { forgetServerRequest } from './serverRequestStore.js'
 import { noteCanonicalCompletion } from './slash/canonicalSessionCommands.js'
+import { loadSlashCatalog } from './slashCatalog.js'
 import { reportStartupLatency } from './startupLatency.js'
 import { markNextSubmitVoice } from './submissionCore.js'
 import { captureDestination, isCurrentDestination } from './submissionDestination.js'
@@ -55,8 +56,6 @@ import { getTurnState } from './turnStore.js'
 import { getUiState, patchUiState } from './uiStore.js'
 import {
   backendReconnecting,
-  backendSlowStart,
-  backendSlowStartStatus,
   describeRpcError,
   describeTurnFailure,
   isBareErrorText,
@@ -915,32 +914,10 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
       void rpc('wake.start', { surface: 'tui' }).catch(() => undefined)
     }
 
-    // Bound to the live session when one exists (reconnect): project-local
-    // skills follow the session's repo. Before the first session the gateway
-    // uses the same workspace it seeds a new session with.
-    const catalogSid = getUiState().sid
-
-    rpc<CommandsCatalogResponse>('commands.catalog', catalogSid ? { session_id: catalogSid } : {})
-      .then(r => {
-        if (!r?.pairs) {
-          return
-        }
-
-        setCatalog({
-          canon: (r.canon ?? {}) as Record<string, string>,
-          categories: r.categories ?? [],
-          pairs: r.pairs as [string, string][],
-          skillCount: (r.skill_count ?? 0) as number,
-          sub: (r.sub ?? {}) as Record<string, string[]>
-        })
-
-        if (r.warning) {
-          turnController.pushActivity(String(r.warning), 'warn')
-        }
-      })
-      .catch((e: unknown) =>
-        turnController.pushActivity(t('gatewayMsg.startup.commandCatalogUnavailable', rpcErrorMessage(e)), 'info')
-      )
+    // The pre-session catalog; useSlashCatalog owns every session-bound load, reconnects included.
+    if (!getUiState().sid) {
+      void loadSlashCatalog(rpc, null, setCatalog)
+    }
 
     // Keep the recovery target until resume succeeds, including across a second
     // disconnect during setup or history loading. Recovery never resends the prompt.
@@ -1118,7 +1095,7 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
       }
 
       case 'session.control.update':
-        applyGoalSnapshot(sid, ev.payload?.control.goal ?? null)
+        applyControlSnapshot(sid, ev.payload?.control)
 
         return
 
@@ -1306,31 +1283,10 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
         return
       }
 
-      case 'gateway.start_timeout': {
-        // Still waiting (the ready timer does not give up) — say so, and point
-        // at /logs for the interpreter/cwd/stderr detail instead of printing
-        // paths here. Only failure-looking stderr lines are echoed inline so
-        // "wrong python" / "missing dep" stay diagnosable at a glance.
-        const { stderr_tail: stderrTail } = ev.payload ?? {}
-
-        setStatus(backendSlowStartStatus())
-        turnController.pushActivity(backendSlowStart(), 'warn')
-
-        const STDERR_LINE_CAP = 120
-        const STDERR_LINES_MAX = 4
-
-        const tailLines = (stderrTail ?? '')
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l && stderrLooksLikeProblem(l))
-          .slice(-STDERR_LINES_MAX)
-
-        for (const line of tailLines) {
-          turnController.pushActivity(line.slice(0, STDERR_LINE_CAP), 'error')
-        }
+      case 'gateway.start_timeout':
+        reportGatewayStartTimeout(ev.payload?.stderr_tail, setStatus)
 
         return
-      }
 
       case 'gateway.protocol_error':
         setStatus(t('gatewayMsg.status.protocolWarning'))

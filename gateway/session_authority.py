@@ -138,15 +138,22 @@ class SessionAuthority:
                 and source.user_id != actor.subject and 'session:operator' not in actor.capabilities):
             raise RuntimeStoreError('permission_denied')
 
-    def _require_admission_open(self):
-        if self.runner._draining or self.retiring:
+    def _require_admission_open(self, *, queue_only=False):
+        """``queue_only``: the caller only COMMITS a queued row (never claims or runs it). A restart's
+        after-turn wait accepts those (#139041): the row is durable FIFO input the next owner runs
+        exactly once, while this owner's claim path stays refused."""
+        if self.retiring:
             raise RuntimeStoreError('runtime_draining')
+        if self.runner._draining:
+            from gateway.drain_control import restart_wait_open
+            if not (queue_only and restart_wait_open(self.runner)):
+                raise RuntimeStoreError('runtime_draining')
 
-    def _admission_gate(self, authorize=None):
+    def _admission_gate(self, authorize=None, *, queue_only=False):
         """The admission gate re-checked inside an off-loop write transaction (with the caller's
         own guard), so a drain that began while the write waited on the writer still refuses it."""
         def guard(conn):
-            self._require_admission_open()
+            self._require_admission_open(queue_only=queue_only)
             if authorize is not None:
                 authorize(conn)
         return guard
@@ -424,17 +431,22 @@ class SessionAuthority:
                 results[sid] = exc.reason
         return results
 
-    async def submit(self, actor: Principal, request: Submission, *, _authorize_write=None):
+    async def submit(self, actor: Principal, request: Submission, *, _authorize_write=None, queue_while_restarting=False):
+        """``queue_while_restarting``: the caller is an interactive client attached to a restart's
+        after-turn wait, which commits the input queued for the next owner. Machine callers (a2a,
+        kanban, hosted rooms) keep the plain ``runtime_draining`` refusal and retry against the next
+        owner with their own stable request id; none of them reads a released waiter as queued."""
         self.authorize(actor, request.ref, 'session:submit')
         async with self.sessions[request.ref.session_id].mutation_lock:
             # Deletion can retire this session while the caller waits on its writer.
             self.authorize(actor, request.ref, 'session:submit')
             from gateway.session_ingress_media import capture_lease
             with capture_lease():  # captured bytes are held from capture until commit or refusal
-                return await self._submit(actor, request, _authorize_write=_authorize_write)
+                return await self._submit(actor, request, _authorize_write=_authorize_write,
+                                          queue_only=queue_while_restarting is True)
 
-    async def _submit(self, actor, request, *, _authorize_write=None):
-        self._require_admission_open()
+    async def _submit(self, actor, request, *, _authorize_write=None, queue_only=False):
+        self._require_admission_open(queue_only=queue_only)
         if (request.intent != 'queue' or not {'text'} <= set(request.payload) <= {
                 'text', 'attachments', 'finite', 'unattended', 'surface', 'voice_context', 'interrupted',
                 'voice_turn', 'display_kind', 'title_preview', 'turn_author', 'api_text', 'model_override', 'clarify_batch'}
@@ -449,12 +461,9 @@ class SessionAuthority:
         def admitted():
             # The exact durable identity (authenticated principal + target + request id); the
             # attachment fields it yields still pass the full payload-digest comparison below.
-            with self.db._read_ctx() as conn:
-                row = conn.execute('SELECT * FROM session_admissions WHERE principal_id=? AND '
-                                   'target_session_id=? AND request_id=?', (actor.subject,
-                                   request.ref.session_id, request.request_id)).fetchone()
-            from hermes_state_runtime import _row
-            return _row(row) if row is not None else None
+            from hermes_state_runtime import find_session_admission
+            return find_session_admission(self.db, principal_id=actor.subject,
+                                          session_id=request.ref.session_id, request_id=request.request_id)
         payload = {'text': request.payload['text'], **finite, **admit_surface(request.payload),
                    **admit_display(request.payload), **admit_cli_turn(request.payload),
                    **admit_attachments(request.payload.get('attachments'), admitted=admitted)}
@@ -472,7 +481,7 @@ class SessionAuthority:
                 return admit_session_input(self.db, epoch=self.epoch, principal_id=actor.subject,
                                            session_id=request.ref.session_id, request_id=request.request_id,
                                            payload=payload, intent=request.intent,
-                                           _authorize_write=self._admission_gate(_authorize_write))
+                                           _authorize_write=self._admission_gate(_authorize_write, queue_only=queue_only))
             except Exception:
                 self._release_refused_capture(request, payload)
                 raise
