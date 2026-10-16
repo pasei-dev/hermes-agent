@@ -83,7 +83,13 @@ def restore_local_session(authority, sid):
             store._ensure_loaded_locked()
             current = store._entries.get(route)
             if current is not None and current.session_id != target:
-                raise RuntimeStoreError('admission_conflict')
+                # The receipt owns this route: a local id is minted from its identity, so an entry
+                # naming any other session is stale routing damage, not a rival conversation (the
+                # #54878 stale-route heal can mint a fresh id for a local route). Repoint, the way
+                # the lineage branch below does, instead of refusing every mount forever.
+                logging.getLogger(__name__).warning(
+                    'Local route %s repointed from stale entry %s to receipt target %s',
+                    route, current.session_id, target)
             # The receipt is the creation copy; a persisted entry for the same target keeps the
             # route's explicit ``/yolo`` toggle (an OFF over a ``--yolo`` launch must survive a
             # cold restore). An untoggled entry stays None and keeps following the launch policy.
@@ -101,8 +107,14 @@ def restore_local_session(authority, sid):
     else:
         with store._lock:
             current = store._entry_locked(route)
-            if current is None or current.session_id not in receipt.get('lineage', [sid]):
+            if current is None:
                 raise RuntimeStoreError('admission_conflict')
+            # The receipt owns the route's target (see the mount branch): an entry naming a lineage
+            # member other than the tip is reconciled to the tip, and stale damage is repaired.
+            if current.session_id != target:
+                logging.getLogger(__name__).warning(
+                    'Local route %s repointed from stale entry %s to receipt target %s',
+                    route, current.session_id, target)
             current.session_id = target
     return SessionRef(authority.profile_id, sid)
 
