@@ -372,23 +372,60 @@ def _continue_text(st: _Trunc, _retry: TurnRetryState, assistant_message: Any) -
 
 def _model_output_limit(agent: Any) -> Optional[int]:
     """The model's real max output tokens when Hermes knows it, else None."""
-    if getattr(agent, "api_mode", None) != "anthropic_messages":
+    model = getattr(agent, "model", None) or ""
+    if getattr(agent, "api_mode", None) == "anthropic_messages":
+        # Local: only Anthropic-Messages turns need the adapter module.
+        from agent.anthropic_adapter import _get_anthropic_max_output
+        return _get_anthropic_max_output(model)
+    # Any other route: the offline models.dev catalog carries the vendor's documented output
+    # ceiling for most models (deepseek-flash: 393216), so the boost can stop at it instead of
+    # buying a provider 400 and a second recovery rung.
+    try:
+        from agent.models_dev import get_model_info
+        info = get_model_info(getattr(agent, "provider", "") or "", model)
+    except (ImportError, OSError, ValueError, TypeError, KeyError):
         return None
-    # Local: only Anthropic-Messages turns need the adapter module.
-    from agent.anthropic_adapter import _get_anthropic_max_output
-    return _get_anthropic_max_output(getattr(agent, "model", None) or "")
+    limit = getattr(info, "max_output", 0) if info is not None else 0
+    return int(limit) if limit and int(limit) > 0 else None
 
 
-def boosted_output_cap(agent: Any, requested_cap: Optional[int], n: int, base: Optional[int] = None) -> int:
+def _observed_output_tokens(agent: Any, response: Any) -> Optional[int]:
+    """Output tokens the provider produced for a truncated response, or None.
+
+    With no ``max_tokens`` on the wire this number IS the provider's own output default, and
+    ``boosted_output_cap`` needs it to retry ABOVE that default instead of below it."""
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return None
+    try:
+        tokens = normalize_usage(
+            usage, provider=getattr(agent, "provider", None), api_mode=getattr(agent, "api_mode", None)
+        ).output_tokens
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    return tokens or None
+
+
+def boosted_output_cap(agent: Any, requested_cap: Optional[int], n: int, base: Optional[int] = None,
+                       observed: Optional[int] = None) -> int:
     """Output budget for truncation retry ``n`` (1-based): ``base·2ⁿ``, never below the
     failed request's cap, at most ``max(32768, 2×cap)``, and never above the model's
-    known output limit. ``base`` defaults to max_tokens, else the cap actually sent.
+    known output limit. ``base`` defaults to max_tokens, else the cap actually sent, else
+    the output the provider actually allowed (``observed``).
 
     A ceiling equal to the requested cap would re-send the same budget (#72770); a
     ceiling past the model limit only buys a provider 400 (#79715).
+
+    ``observed`` is load-bearing when the failed request carried NO cap: it then ran on the
+    provider's own default, which is routinely far larger than any number Hermes would
+    invent (DeepSeek: 8K without thinking, 64K with it, against a 384K maximum). Seeding
+    the 4096 floor there sends a SMALLER budget than the one that just truncated, so every
+    retry re-truncates and the turn ends on the output-length error.
     """
     if base is None:
-        base = agent.max_tokens or requested_cap or 4096
+        base = agent.max_tokens or requested_cap or (max(observed, 32768) if observed else 0)
+    if not base:
+        base = 4096
     anchor = requested_cap or base
     limit = _model_output_limit(agent)
     if limit and anchor >= limit:
@@ -410,7 +447,8 @@ def _retry_truncated_tool_call(st: _Trunc, api_kwargs: Any) -> TruncationVerdict
         else:
             agent._buffer_vprint(f"⚠️  Truncated tool call detected — retrying API call ({n}/4)...")
         agent._ephemeral_max_output_tokens = boosted_output_cap(
-            agent, agent._requested_output_cap_from_api_kwargs(api_kwargs), n
+            agent, agent._requested_output_cap_from_api_kwargs(api_kwargs), n,
+            observed=_observed_output_tokens(agent, getattr(st, "response", None)),
         )
         return st.done("continue")  # don't append the broken response
     agent._flush_status_buffer()

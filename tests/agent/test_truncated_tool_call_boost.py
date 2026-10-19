@@ -9,18 +9,22 @@ from agent.turn_retry_state import TurnRetryState
 from agent.turn_truncation import _retry_truncated_tool_call
 
 
-def _agent(max_tokens, requested_cap, **extra):
-    return SimpleNamespace(
+def _agent(max_tokens, requested_cap, observed=None, **extra):
+    agent = SimpleNamespace(
         max_tokens=max_tokens,
         _ephemeral_max_output_tokens=None,
         _buffer_vprint=lambda *a, **k: None,
         _requested_output_cap_from_api_kwargs=lambda kw: requested_cap,
         **extra,
     )
+    agent.response = (
+        SimpleNamespace(usage=SimpleNamespace(completion_tokens=observed)) if observed else None
+    )
+    return agent
 
 
 def _tool_call_budgets(agent, attempts=4):
-    st = SimpleNamespace(agent=agent, truncated_tool_call_retries=0, is_stub=False)
+    st = SimpleNamespace(agent=agent, truncated_tool_call_retries=0, is_stub=False, response=agent.response)
     st.done = lambda action, result=None: action
     budgets = []
     for _ in range(attempts):
@@ -35,7 +39,7 @@ def _length_continuation_budgets(agent, attempts=4):
         _retry = TurnRetryState()
         _retry.restart_with_length_continuation = True
         verdict = apply_retry_restarts(
-            agent, _retry=_retry, response=None, interrupted=False, messages=[],
+            agent, _retry=_retry, response=agent.response, interrupted=False, messages=[],
             conversation_history=[], user_message="hi", api_kwargs={}, current_turn_user_idx=0,
             final_response=None, retry_count=0, max_retries=3, api_call_count=1,
             restart_count=0, length_continue_retries=n,
@@ -69,3 +73,14 @@ def test_boost_clamped_to_known_model_output_limit(site):
 
 def test_small_explicit_max_tokens_ladder_still_capped_at_floor():
     assert _tool_call_budgets(_agent(4096, None)) == [8192, 16384, 32768, 32768]
+
+
+@pytest.mark.parametrize("site", SITES)
+@pytest.mark.parametrize("observed", [8192, 65536])
+def test_uncapped_request_retries_above_what_the_provider_allowed(site, observed):
+    # No configured max_tokens and none on the failed request: the provider's own default was
+    # the budget, so a retry below ``observed`` re-truncates by construction (DeepSeek defaults
+    # to 64K with thinking on, and the 4096 floor claimed only 8K).
+    budgets = site(_agent(None, None, observed=observed))
+    assert budgets[0] > observed
+    assert all(budget >= observed for budget in budgets)
