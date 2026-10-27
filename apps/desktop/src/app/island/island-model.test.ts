@@ -57,16 +57,24 @@ describe('islandRows', () => {
 
 describe('islandStage', () => {
   it('is hidden with nothing running — the zero-footprint idle state', () => {
-    expect(islandStage({ attentionCount: 0, expanded: false, workingCount: 0 })).toBe('hidden')
+    expect(islandStage({ attentionCount: 0, expanded: false, focused: false, workingCount: 0 })).toBe('hidden')
   })
 
   it('is a pill while work runs, and attention wins over it', () => {
-    expect(islandStage({ attentionCount: 0, expanded: false, workingCount: 2 })).toBe('pill')
-    expect(islandStage({ attentionCount: 1, expanded: false, workingCount: 2 })).toBe('attention')
+    expect(islandStage({ attentionCount: 0, expanded: false, focused: false, workingCount: 2 })).toBe('pill')
+    expect(islandStage({ attentionCount: 1, expanded: false, focused: false, workingCount: 2 })).toBe('attention')
   })
 
   it('stays expanded while the user has it open, even with nothing to show', () => {
-    expect(islandStage({ attentionCount: 0, expanded: true, workingCount: 0 })).toBe('expanded')
+    expect(islandStage({ attentionCount: 0, expanded: true, focused: false, workingCount: 0 })).toBe('expanded')
+  })
+
+  it('opens one session deeper than the list, and the list wins while it is open', () => {
+    const open = { attentionCount: 1, expanded: false, focused: true, workingCount: 0 }
+
+    expect(islandStage(open)).toBe('session')
+    // A list the user opened is a step BACK from a session, so it outranks it.
+    expect(islandStage({ ...open, expanded: true })).toBe('expanded')
   })
 })
 

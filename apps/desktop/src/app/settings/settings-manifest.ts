@@ -174,6 +174,33 @@ export const SETTINGS_MANIFEST = {
       keywords: ['quick entry', 'shortcut', 'hotkey', 'keybind', 'chord'],
       available: canUseQuickEntry,
       copy: t => ({ label: t.settings.quickEntry.shortcutTitle, description: t.settings.quickEntry.shortcutDesc })
+    },
+    island: {
+      subpage: 'desktop',
+      keywords: ['dynamic island', 'notch', 'pill', 'always on top', 'status', 'approve', 'overlay'],
+      available: () => Boolean(window.hermesDesktop?.island?.getSettings),
+      copy: t => ({ label: t.settings.island.enabledTitle, description: t.settings.island.enabledDesc })
+    },
+    islandDisplay: {
+      subpage: 'desktop',
+      keywords: ['dynamic island', 'display', 'monitor', 'screen', 'pointer', 'notch', 'second screen'],
+      available: () => Boolean(window.hermesDesktop?.island?.getSettings),
+      copy: t => ({ label: t.settings.island.displayTitle, description: t.settings.island.displayDesc })
+    },
+    islandNotifications: {
+      subpage: 'desktop',
+      keywords: ['dynamic island', 'notification', 'banner', 'approval', 'duplicate', 'prompt'],
+      available: () => Boolean(window.hermesDesktop?.island?.getSettings),
+      copy: t => ({
+        label: t.settings.island.notificationsTitle,
+        description: t.settings.island.notificationsDesc
+      })
+    },
+    islandShortcut: {
+      subpage: 'desktop',
+      keywords: ['dynamic island', 'shortcut', 'hotkey', 'chord', 'keybind', 'approve'],
+      available: () => Boolean(window.hermesDesktop?.island?.getSettings),
+      copy: t => ({ label: t.settings.island.shortcutTitle, description: t.settings.island.shortcutDesc })
     }
   },
   keybinds: {

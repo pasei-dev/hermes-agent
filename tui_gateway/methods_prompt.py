@@ -1332,11 +1332,16 @@ def _(rid, params: dict) -> dict:
         session = _approval_respond_session_fallback(params)
         if session is None:
             return err
+    # A deny may carry free text (`/deny <reason>`), which the agent relays into its
+    # BLOCKED message. Absent means the call stays exactly what it always was, so a
+    # client that sends no reason keeps the same kwargs down to the approval queue.
+    reason = str(params.get("reason") or "").strip() or None
     return _approval_reply(
         rid, "resolved",
         lambda a: a.resolve_gateway_approval(
             session["session_key"], params.get("choice", "deny"),
-            resolve_all=params.get("all", False), request_id=params.get("request_id")))
+            resolve_all=params.get("all", False), request_id=params.get("request_id"),
+            **({"reason": reason} if reason else {})))
 
 
 # ── attachments ─────────────────────────────────────────────────────────────

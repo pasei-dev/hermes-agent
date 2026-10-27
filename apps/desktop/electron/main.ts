@@ -321,6 +321,12 @@ import { buildHudWindowUrl } from './hud-url'
 import { linuxOzoneBackend, resolveHudWindowing } from './hud-windowing'
 import { INSTALL_STAMP, installShape } from './install-stamp'
 import type { InstallStamp } from './install-stamp'
+import {
+  type IslandSettings,
+  type IslandStatus,
+  sanitizeIslandSettings,
+  withIslandPatch
+} from './island-settings'
 import { createIslandWindowController, registerIslandIpc } from './island-window'
 import { createKeepAwakeController } from './keep-awake-controller'
 import { applyLaunchProfileOverride } from './launch-profile'
@@ -12653,13 +12659,98 @@ const wakeIndicatorController = createWakeIndicatorWindowController({
   wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('wakeIndicator'))
 })
 
+// The island's device-local preferences. Main is authoritative (it owns the
+// window, the anchor display and the approval chord), so the choice survives a
+// cold launch without the renderer ever visiting Settings — the same split as
+// Quick Entry.
+const ISLAND_CONFIG_PATH = path.join(app.getPath('userData'), 'island.json')
+
+let currentIslandSettings: IslandSettings = sanitizeIslandSettings(undefined)
+
+function readIslandSettings(): IslandSettings {
+  try {
+    return sanitizeIslandSettings(JSON.parse(fs.readFileSync(ISLAND_CONFIG_PATH, 'utf8')))
+  } catch {
+    // Missing / unreadable / malformed → the shipped defaults.
+    return sanitizeIslandSettings(undefined)
+  }
+}
+
+function writeIslandSettings(settings: IslandSettings): void {
+  try {
+    fs.mkdirSync(path.dirname(ISLAND_CONFIG_PATH), { recursive: true })
+    fs.writeFileSync(ISLAND_CONFIG_PATH, JSON.stringify(settings, null, 2), 'utf8')
+  } catch (error) {
+    rememberLog(`[island] write failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/** The display the pill parks on: the primary one, unless the user asked for the pointer's. */
+function islandAnchorDisplay(): Electron.Display {
+  return currentIslandSettings.followPointer
+    ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    : screen.getPrimaryDisplay()
+}
+
+// The approval chord: approve the card on top without touching the mouse. It
+// forwards to the island renderer rather than answering here, because the
+// renderer owns the one answer path (`approval.pending` / `approval.respond`)
+// and main speaks no gateway of its own.
+const islandShortcut = createQuickEntryShortcut(globalShortcut, () => {
+  const target = islandController?.getWindow()
+
+  if (target && !target.isDestroyed()) {
+    target.webContents.send('hermes:island:approve-top')
+  }
+})
+
+/** What Settings sees: the saved preferences plus what the OS actually holds. */
+function islandStatus(): IslandStatus {
+  const chord = islandShortcut.current()
+
+  return { ...currentIslandSettings, registeredShortcut: chord.registered ? chord.shortcut : '' }
+}
+
+function applyIslandSettings(settings: IslandSettings): IslandStatus {
+  const anchorMoved = settings.followPointer !== currentIslandSettings.followPointer
+  currentIslandSettings = settings
+
+  islandShortcut.apply({
+    enabled: settings.enabled && Boolean(settings.shortcut),
+    shortcut: settings.shortcut
+  })
+
+  if (!settings.enabled) {
+    // Off means the window is GONE, not hidden: a transparent always-on-top
+    // surface still holds a compositor layer, and its renderer is the only side
+    // that notices a turn finishing — so keeping it alive would keep the cost
+    // the switch exists to remove.
+    islandController?.dispose()
+  } else {
+    if (anchorMoved) {
+      islandController?.dispose()
+    }
+
+    islandController?.ensureSpawned()
+  }
+
+  return islandStatus()
+}
+
 // The Dynamic Island — see island-window.ts. A full app renderer with its own
-// gateway (the same thing the HUD is), painted as a transparent status strip at
-// the top of the screen. Main owns the window and the renderer owns the
-// decision: it reports what it is showing, and "nothing" hides the window
-// outright. It is spawned once at ready and stays hidden until then, because
-// an approval it has to answer can arrive at any moment.
+// gateway (the same thing the HUD is), painted as a black pill at the top of the
+// screen: in the camera housing itself on a notched Mac, a floating pill
+// elsewhere. Main owns the window (one fixed rectangle, click-through, focus);
+// the renderer owns the shape, and idle means the pill shrinks back to the notch
+// rather than the window going away — a window that is never hidden is a
+// renderer that is never frozen out of noticing a turn finish.
 const islandController = createIslandWindowController({
+  // The primary display is the one with the menu bar and the dock — on a laptop
+  // that is the built-in screen, where the camera housing is. That display
+  // decides the shape: a housing means the pill hides in the notch, and no
+  // housing means a floating pill the user can drag. Settings can move it to the
+  // display under the pointer instead.
+  anchorDisplay: islandAnchorDisplay,
   devServer: DEV_SERVER,
   isMac: IS_MAC,
   loadWindowUrl,
@@ -16934,6 +17025,25 @@ ipcMain.handle('hermes:quick-entry:settings:set', async (_event, patch) => {
   return applyQuickEntrySettings(next)
 })
 
+// Island settings: the renderer mirrors these (`store/island`) and writes changes
+// back here. Main owns the window, the anchor display and the approval chord, so
+// it answers with the state that actually resulted — a chord another app already
+// owns comes back as `registeredShortcut: ''` rather than a registration nobody
+// has.
+ipcMain.handle('hermes:island:settings:get', async () => {
+  currentIslandSettings = readIslandSettings()
+
+  return islandStatus()
+})
+
+ipcMain.handle('hermes:island:settings:set', async (_event, patch) => {
+  const next = withIslandPatch(currentIslandSettings, patch)
+
+  writeIslandSettings(next)
+
+  return applyIslandSettings(next)
+})
+
 // Quick window → main → PRIMARY renderer. We never submit here: the renderer
 // owns the one prompt-submit path, and forwarding keeps it that way. The
 // payload is `{ target, text }` — target routing (current chat / a picked
@@ -17987,10 +18097,10 @@ app.whenReady().then(() => {
   // here and surfaced in Settings via the IPC state (never silent).
   applyQuickEntrySettings(readQuickEntrySettings())
 
-  // The island exists from boot but stays hidden: the renderer is what notices
-  // a turn starting or an approval landing, and either can happen before the
-  // user ever brings the app forward.
-  islandController.ensureSpawned()
+  // The island belongs to the user's own screen, not to a turn: it is created at
+  // boot (unless Settings says off) so an approval that lands before the app is
+  // ever brought forward still has a surface to appear on.
+  applyIslandSettings(readIslandSettings())
   installCommandScreenshot({ rendererUrl: DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString() })
   installHudModifierTap({
     rendererUrl: DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString(),

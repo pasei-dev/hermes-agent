@@ -177,12 +177,17 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('hermes:hud:game-overlay', listener)
     }
   },
-  // Dynamic Island: a transparent status strip at the top of the screen. Main
-  // owns the window; the island renderer reports what it is showing and asks for
-  // the keyboard only when the user is typing. The app window is on the other
-  // end of `openSession` / `onOpenSession`.
+  // Dynamic Island: a black pill parked at the top of the screen (in the notch
+  // itself where there is a housing). Main owns the window — position,
+  // click-through, focus — and the renderer owns the shape. The app window is on
+  // the other end of `openSession` / `onOpenSession`.
   island: {
-    report: (report: { height?: number; visible: boolean }) => ipcRenderer.send('hermes:island:report', report),
+    drag: (delta: { dx: number; dy: number }) => ipcRenderer.send('hermes:island:drag', delta),
+    // The island is a full renderer, so it boots the whole app shell first and
+    // paints the app's own boot screen until this arrives. Main keeps the window
+    // hidden until then, or every launch would flash a dark panel at the top of
+    // the screen.
+    ready: () => ipcRenderer.send('hermes:island:ready'),
     setInteractive: (interactive: boolean) => ipcRenderer.send('hermes:island:interactive', interactive),
     setFocusable: (focusable: boolean) => ipcRenderer.send('hermes:island:focusable', focusable),
     openSession: (sessionId: string) => ipcRenderer.send('hermes:island:open-session', sessionId),
@@ -191,6 +196,17 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       ipcRenderer.on('hermes:island:open-session', listener)
 
       return () => ipcRenderer.removeListener('hermes:island:open-session', listener)
+    },
+    // Settings live in MAIN (it owns the window, the anchor display and the
+    // approval chord), so these both round-trip through it.
+    getSettings: () => ipcRenderer.invoke('hermes:island:settings:get'),
+    setSettings: (patch: Record<string, unknown>) => ipcRenderer.invoke('hermes:island:settings:set', patch),
+    // Main → island renderer: the global approval chord fired.
+    onApproveTop: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('hermes:island:approve-top', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:approve-top', listener)
     }
   },
   hudModifier: {

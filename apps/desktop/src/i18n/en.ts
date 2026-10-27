@@ -697,6 +697,16 @@ export const en: Translations = {
     open: 'Open in Hermes',
     approve: 'Approve',
     deny: 'Deny',
+    always: 'Always allow',
+    approveAll: 'Approve all',
+    denyPlaceholder: 'Reason (optional)',
+    stop: 'Stop',
+    stopped: 'Stopped',
+    steer: 'Steer',
+    queued: 'Queued',
+    queueSend: 'Queue',
+    cancelQueued: 'Cancel this queued message',
+    workers: (count: number) => (count === 1 ? '1 worker' : `${count} workers`),
     newSessionPlaceholder: 'Start a new session…',
     send: 'Send'
   },
@@ -1258,6 +1268,21 @@ export const en: Translations = {
       active: 'Shortcut is active.',
       takenBy: 'Another app already uses this shortcut — pick a different one.',
       invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.'
+    },
+    island: {
+      enabledTitle: 'Dynamic Island',
+      enabledDesc:
+        'A black pill at the top of the screen — in the notch where there is one — showing what is running and answering approvals without switching apps. Off closes its window completely.',
+      displayTitle: 'Show on the display under the pointer',
+      displayDesc:
+        'Off parks the island on the main display. On moves it to whichever screen the pointer is on when it appears.',
+      notificationsTitle: 'Approvals only in the island',
+      notificationsDesc:
+        'Skip the system notification for an approval the island can answer, so one question is never asked twice.',
+      shortcutTitle: 'Approve chord',
+      shortcutDesc: 'A global shortcut that approves the card on top from any app. Empty means no chord.',
+      shortcutTaken: 'Another app already uses this shortcut.',
+      shortcutInvalid: 'Not a valid shortcut. Include at least one modifier key.'
     },
     credentials: {
       pasteKey: 'Paste key',

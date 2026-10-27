@@ -12,7 +12,7 @@ import { $gatewaySwitching } from '@/store/gateway-switch'
 import { $decideExit, $introStartExit, $introView } from '@/store/onboarding-intro'
 import { $onboardingDecided } from '@/store/onboarding-presence'
 import { $gatewayState } from '@/store/session'
-import { isMainWindow } from '@/store/windows'
+import { isHudWindow, isIslandWindow, isMainWindow } from '@/store/windows'
 
 // Decode mechanics live in the shared <DecodeText> primitive
 // (components/ui/decode-text.tsx). "CONN" stays legible via prefix={4}.
@@ -217,6 +217,15 @@ export function GatewayConnectingOverlay() {
       return () => window.clearTimeout(id)
     }
   }, [phase, previewing])
+
+  // A floating surface has nothing to boot INTO: the island and the HUD are one
+  // small transparent panel each, and a full-bleed "CONNECTING" screen in one of
+  // them paints a dark rectangle over the top of the user's screen for as long as
+  // the gateway takes. They show their own content the moment they are connected
+  // and nothing before.
+  if (!previewing && (isIslandWindow() || isHudWindow())) {
+    return null
+  }
 
   // Boot failed — BootFailureOverlay owns the screen; don't linger behind it.
   if (boot.error && !previewing) {

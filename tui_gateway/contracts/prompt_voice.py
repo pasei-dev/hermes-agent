@@ -330,11 +330,13 @@ method("approval.received", params=ApprovalReceivedParams, result=ApprovalReceiv
 
 class ApprovalRespondParams(SessionParams):
     """``choice`` is one of the offered ``approval`` choices (once / session / always / deny); ``all``
-    resolves every pending approval, ``request_id`` a specific one, neither the oldest."""
+    resolves every pending approval, ``request_id`` a specific one, neither the oldest. ``reason`` is
+    the ``/deny <reason>`` free text, relayed to the agent in its BLOCKED message."""
 
     choice: str | None = None  # default "deny"
     all: bool | None = None
     request_id: str | None = None
+    reason: str | None = None
 
 
 class ApprovalRespondResult(Result):

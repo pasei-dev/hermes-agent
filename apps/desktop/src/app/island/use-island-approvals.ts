@@ -25,13 +25,25 @@ import type { IslandApproval } from './island-model'
  *  infrequent enough (only while a session waits) to be free. */
 const APPROVAL_RESYNC_MS = 2_000
 
-export type IslandApprovalChoice = 'deny' | 'once'
+export type IslandApprovalChoice = 'always' | 'deny' | 'once'
+
+export interface IslandApprovalOptions {
+  /** Resolve every parked approval in the session, not just this one. */
+  all?: boolean
+  /** Free text a deny carries back to the agent. */
+  reason?: string
+}
 
 export interface IslandApprovals {
   approvalsById: Record<string, IslandApproval[]>
   /** Answer one parked approval. Resolving removes it from the store, so the
    *  card goes away without the island inventing local "dismissed" state. */
-  answer: (sessionId: string, requestId: string, choice: IslandApprovalChoice) => Promise<void>
+  answer: (
+    sessionId: string,
+    requestId: string,
+    choice: IslandApprovalChoice,
+    options?: IslandApprovalOptions
+  ) => Promise<void>
 }
 
 export function useIslandApprovals(attentionIds: readonly string[]): IslandApprovals {
@@ -88,18 +100,20 @@ export function useIslandApprovals(attentionIds: readonly string[]): IslandAppro
 
   return {
     approvalsById,
-    answer: async (sessionId, requestId, choice) => {
+    answer: async (sessionId, requestId, choice, options) => {
       const gateway = $gateway.get()
       const request = parked[sessionId]
+      const all = options?.all ?? false
+      const reason = options?.reason
 
       if (request && request.requestId === requestId) {
-        await answerApproval(gateway, request, choice)
+        await answerApproval(gateway, request, choice, all, reason)
         clearApprovalRequest(sessionId, requestId)
       } else {
         // The store lost the prompt between the click and the call (another
         // window answered it) — still resolve the queue entry by id, which is
         // what the notification path does with a bare session id.
-        await answerApproval(gateway, { requestId, sessionId }, choice)
+        await answerApproval(gateway, { requestId, sessionId }, choice, all, reason)
       }
 
       void replayPendingApproval(gateway, sessionId).catch(() => undefined)

@@ -7,6 +7,7 @@ import { persistString, storedString } from '@/lib/storage'
 import { recordFeatureToggle } from './desktop-metrics'
 import { $gateway } from './gateway'
 import { $hapticsMuted } from './haptics'
+import { islandAnswersApprovals } from './island'
 import { withinNativeNotifyBaseline } from './notify-baseline'
 import {
   answerApproval,
@@ -227,6 +228,13 @@ export function dispatchNativeNotification(input: NativeNotificationInput): bool
   const prefs = $nativeNotifyPrefs.get()
 
   if (!prefs.enabled || !prefs.kinds[input.kind]) {
+    return false
+  }
+
+  // The island IS this question, in the notch, with the same two buttons. Two
+  // prompts for one approval is how a user learns to ignore both, so the banner
+  // stands down while the island can answer it (Settings can turn that off).
+  if (ATTENTION_KINDS.has(input.kind) && islandAnswersApprovals()) {
     return false
   }
 

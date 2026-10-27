@@ -847,6 +847,18 @@ export const zhHantSettings = {
       takenBy: '此快速鍵已被其他應用程式占用，請換一個。',
       invalidShortcut: '不是有效的快速鍵。請至少包含一個修飾鍵。'
     },
+    island: {
+      enabledTitle: '動態島',
+      enabledDesc: '螢幕頂端的黑色膠囊 —— 有瀏海時位於瀏海內 —— 顯示正在執行的內容，並可直接處理核准，無需切換應用程式。關閉會完全關閉其視窗。',
+      displayTitle: '跟隨指標所在螢幕顯示',
+      displayDesc: '關閉時動態島固定於主螢幕；開啟時出現於指標所在螢幕。',
+      notificationsTitle: '僅在動態島中處理核准',
+      notificationsDesc: '跳過動態島可處理的核准系統通知，同一個問題不會再問兩次。',
+      shortcutTitle: '核准快速鍵',
+      shortcutDesc: '從任何應用程式核准最上層卡片的全域快速鍵。留空表示不設快速鍵。',
+      shortcutTaken: '另一個應用程式已使用此快速鍵。',
+      shortcutInvalid: '快速鍵無效。請至少包含一個修飾鍵。',
+    },
     credentials: {
       pasteKey: '貼上金鑰',
       pasteLabelKey: label => `貼上 ${label} 金鑰`,

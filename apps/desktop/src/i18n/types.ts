@@ -608,6 +608,16 @@ catalog: CatalogTranslations
     open: string
     approve: string
     deny: string
+    always: string
+    approveAll: string
+    denyPlaceholder: string
+    stop: string
+    stopped: string
+    steer: string
+    queued: string
+    queueSend: string
+    cancelQueued: string
+    workers: (count: number) => string
     newSessionPlaceholder: string
     send: string
   }
@@ -1053,6 +1063,18 @@ catalog: CatalogTranslations
       active: string
       takenBy: string
       invalidShortcut: string
+    }
+    island: {
+      enabledTitle: string
+      enabledDesc: string
+      displayTitle: string
+      displayDesc: string
+      notificationsTitle: string
+      notificationsDesc: string
+      shortcutTitle: string
+      shortcutDesc: string
+      shortcutTaken: string
+      shortcutInvalid: string
     }
     credentials: {
       pasteKey: string
