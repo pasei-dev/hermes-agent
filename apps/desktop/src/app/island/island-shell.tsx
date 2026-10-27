@@ -306,6 +306,10 @@ export function IslandShell() {
                 className="min-w-0 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-(--ui-text-tertiary)"
                 onChange={event => setDraft(event.target.value)}
                 onFocus={event => focusIsland(event.currentTarget)}
+                // The window is non-activating, so a click may not focus the
+                // field by itself: ask for the keyboard on the press, which is
+                // the one gesture that means "I am about to type".
+                onPointerDown={event => focusIsland(event.currentTarget)}
                 placeholder={t.island.newSessionPlaceholder}
                 ref={inputRef}
                 value={draft}

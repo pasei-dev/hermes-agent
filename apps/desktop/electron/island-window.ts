@@ -73,11 +73,20 @@ export function createIslandWindowController(options: IslandWindowOptions & { pl
   const { devServer, isMac, loadWindowUrl, log, openSession, platform, profile, rendererIndex } = options
   let interactive = false
   let lastHeight = 0
+  let pinnedDisplayId: number | null = null
   let visible = false
   let window: BrowserWindow | null = null
 
-  const displayArea = (): IslandDisplayArea =>
-    screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  // The display the island was born on, and NOT the one under the cursor: a
+  // height change while the pointer happens to sit on another monitor must not
+  // teleport the pill there. A display that disappears falls back to the
+  // primary rather than leaving the island off-screen.
+  const displayArea = (): IslandDisplayArea => {
+    const displays = screen.getAllDisplays()
+    const pinned = pinnedDisplayId === null ? null : displays.find(display => display.id === pinnedDisplayId)
+
+    return (pinned ?? screen.getPrimaryDisplay()).workArea
+  }
 
   const applyBounds = (height: number) => {
     if (!window || window.isDestroyed()) {
@@ -113,6 +122,10 @@ export function createIslandWindowController(options: IslandWindowOptions & { pl
   const spawn = (): BrowserWindow => {
     if (window && !window.isDestroyed()) {
       return window
+    }
+
+    if (pinnedDisplayId === null) {
+      pinnedDisplayId = screen.getPrimaryDisplay().id
     }
 
     const bounds = islandWindowBounds(displayArea(), 0)
