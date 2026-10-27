@@ -458,11 +458,11 @@ discoverBundledPlugins()
 hydrateContributedPanes()
 
 // Session + route (page) tiles: persisted splits register panes docked beside
-// main. A popped-out Browser and the HUD have no layout tree — registering
-// tiles there would still run, and preview-tile watching would try to dock
-// into a tree this window never renders (and, in the HUD, paint a webview
-// into the transparent overlay).
-if (!isBrowserWindow() && !isHudWindow()) {
+// main. A popped-out Browser, the HUD and the Dynamic Island have no layout
+// tree — registering tiles there would still run, and preview-tile watching
+// would try to dock into a tree this window never renders (and, in the HUD,
+// paint a webview into the transparent overlay).
+if (!isBrowserWindow() && !isHudWindow() && !isIslandWindow()) {
   watchSessionTiles()
   startUnrestoredTileTitleBackfill()
   startTileBackendIdentityGuard()
