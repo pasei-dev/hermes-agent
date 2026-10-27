@@ -308,6 +308,7 @@ export const zhOverrides = {
   },
 
   titlebar: {
+    back: '返回',
     hideSidebar: '隐藏侧边栏',
     showSidebar: '显示侧边栏',
     search: '搜索',

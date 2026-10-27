@@ -8,21 +8,26 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, lazy, memo, type ReactNode, Suspense, useMemo } from 'react'
-import { Navigate, Route, Routes, useParams } from 'react-router'
+import { type ComponentProps, lazy, memo, type ReactNode, Suspense, useEffect, useMemo } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router'
 
+import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
+import { ESCAPE_PRIORITY, isTopEscapeLayer, pushEscapeLayer } from '@/lib/escape-layers'
+import { triggerHaptic } from '@/lib/haptics'
+import { isEditableTarget } from '@/lib/keybinds/combo'
 import { $activeConnectionId } from '@/store/connections'
 import { $gateway } from '@/store/gateway'
 import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $freshDraftReady, $gatewayState } from '@/store/session'
+import { goBackToPreviousView } from '@/store/view-history'
 
 import { ChatView } from '../chat'
 import { ChatSidebar } from '../chat/sidebar'
 import { TerminalPaneChrome } from '../right-sidebar/terminal/chrome'
-import { contributedRoutes, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
+import { appViewForPath, contributedRoutes, isOverlayView, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
 import { useStatusSnapshot } from '../shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from '../shell/hooks/use-statusbar-items'
 import { ModelMenuPanel } from '../shell/model-menu-panel'
@@ -44,6 +49,61 @@ export function LegacySessionRedirect() {
   const { sessionId } = useParams()
 
   return <Navigate replace to={sessionId ? sessionRoute(sessionId) : NEW_CHAT_ROUTE} />
+}
+
+/**
+ * Esc on a full page is the way back out of it — the same action, and the same
+ * route history, as the titlebar's back control (`shell/titlebar-controls`).
+ *
+ * It has to be registered HERE, on the page's own layer, because a page is a
+ * layer ABOVE the session view rather than a surface the chat was unmounted for:
+ * the chat stays mounted and live underneath, so Esc must not reach it. The
+ * composer stands down on a page (`$workspaceIsPage`, read by
+ * `composerFocusBlockedBySurface`), and this layer is what Esc does instead.
+ *
+ * Priority is the lowest in the table — every other Esc layer (an overlay, the
+ * zone editor, layout edit mode, a narrow-pane reveal, an in-flight drag) is
+ * closer to the user than the page it covers, and its Esc must win over leaving
+ * the page.
+ */
+function PageEscapeBack() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const release = pushEscapeLayer(ESCAPE_PRIORITY.page)
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A field on the page keeps its own Esc (clearing a search box, leaving an
+      // input) — `defaultPrevented` covers a Radix dialog or a control that
+      // already handled the key.
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        isEditableTarget(event.target) ||
+        !isTopEscapeLayer(ESCAPE_PRIORITY.page)
+      ) {
+        return
+      }
+
+      // Nothing behind (a cold start straight into a page): leave the key alone
+      // rather than swallowing it.
+      if (!goBackToPreviousView(navigate, revealTreePane)) {
+        return
+      }
+
+      event.preventDefault()
+      triggerHaptic('tap')
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      release()
+    }
+  }, [navigate])
+
+  return null
 }
 
 export const SidebarSurface = memo(function SidebarSurface({
@@ -122,6 +182,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
   actions: WiringActions
   maxVoiceRecordingSeconds?: number
 }) {
+  const location = useLocation()
   const activeConnectionId = useStore($activeConnectionId)
   const activeGatewayProfile = useStore($activeGatewayProfile)
   const gateway = useStore($gateway)
@@ -173,48 +234,71 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
     />
   )
 
-  // FULL-PAGE views (not chat): a page is not a tab-able surface, so the zone's
-  // tab strip stands down while one is showing. That is `paneChrome.headerVeto`
-  // on the contribution, not a DOM marker — the `data-zone-no-header` attribute
-  // that used to ride this wrapper gated a body double-click toggle that no
-  // longer exists, and nothing has read it since.
+  // A full page is an OVERLAY above the session view, never a replacement for
+  // it: the base layer is always the session view a chat route renders, so a
+  // page keeps the chat MOUNTED beneath it (navigating to a page must not
+  // unmount the chat) and a page can never outlive its route — any navigation
+  // back to a session route drops the layer and shows that session. The layer
+  // covers the same area the page used to fill, and paints the same surface, so
+  // the result is visually indistinguishable from the old replace-the-workspace
+  // behavior.
+  //
+  // `absolute inset-0` positions against the pane body (the zone's own
+  // `relative` box), so the layer covers exactly the pane the page used to own.
+  // The zone's tab strip still stands down while a page is showing — that is
+  // `paneChrome.headerVeto` on the contribution, driven by `$workspaceIsPage`.
+  //
+  // `data-glass-raised` is load-bearing, not decoration: in window glass the
+  // app thins `--ui-chat-surface-background` to `transparent` on purpose
+  // (styles.css, `:root[data-hermes-glass]`), so a layer wearing only that token
+  // paints NOTHING and the live session view underneath shows through the page.
+  // The marker re-resolves the token to the near-opaque chrome mix for this
+  // subtree — the same mechanism the overlay card uses for its raised surface.
   const page = (view: ReactNode) => (
-    <div className="contents">
+    <div className="absolute inset-0 z-10 bg-(--ui-chat-surface-background)" data-glass-raised="">
+      {/* Esc belongs to the page while it is the layer on top: it goes back out
+          of it, and never reaches the live chat mounted beneath. */}
+      <PageEscapeBack />
       <Suspense fallback={null}>{view}</Suspense>
     </div>
   )
 
+  // An overlay route (settings/…) owns the window as a card over the shell, so
+  // the workspace pane shows nothing under it — the session view stands only on
+  // chat and page routes.
+  const base = isOverlayView(appViewForPath(location.pathname)) ? null : chatView
+
   return (
-    <Routes>
-      <Route element={chatView} index />
-      <Route element={chatView} path=":sessionId" />
-      <Route element={page(<CapabilitiesView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="capabilities" />
-      <Route element={page(<MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="messaging" />
-      <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
-      <Route element={null} path="agents" />
-      <Route element={null} path="command-center" />
-      <Route element={null} path="cron" />
-      <Route element={null} path="profiles" />
-      <Route element={null} path="settings" />
-      <Route element={null} path="starmap" />
-      <Route element={null} path="webhooks" />
-      {/* Registry-contributed pages (core features + plugins) render in the
-          workspace pane like any built-in view — behind the same blast wall
-          as every other contribution mount. */}
-      {routeContributions.map(route => (
-        <Route
-          element={page(
-            <ContribBoundary id={route.key}>
-              <ContribRender render={route.render} />
-            </ContribBoundary>
-          )}
-          key={route.key}
-          path={route.path.slice(1)}
-        />
-      ))}
-      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
-      <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
-      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
-    </Routes>
+    <>
+      {base}
+      <Routes>
+        <Route element={page(<CapabilitiesView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="capabilities" />
+        <Route element={page(<MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="messaging" />
+        <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
+        {/* Registry-contributed pages (core features + plugins) render in the
+            workspace pane like any built-in view — behind the same blast wall
+            as every other contribution mount. */}
+        {routeContributions.map(route => (
+          <Route
+            element={page(
+              <ContribBoundary id={route.key}>
+                <ContribRender render={route.render} />
+              </ContribBoundary>
+            )}
+            key={route.key}
+            path={route.path.slice(1)}
+          />
+        ))}
+        {/* Session, index, and overlay paths render no layer: the base session
+            view already stands (or nothing, under an overlay card). Overlay
+            paths fall through the `:sessionId` rung — they are reserved, so the
+            session-id parser never mistakes them for a session. */}
+        <Route element={null} index />
+        <Route element={null} path=":sessionId" />
+        <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
+        <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
+        <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
+      </Routes>
+    </>
   )
 })

@@ -527,6 +527,7 @@ export const deOverrides = {
     }
   },
   titlebar: {
+    back: 'Zurück',
     hideSidebar: 'Sidebar ausblenden',
     showSidebar: 'Sidebar einblenden',
     search: 'Suchen',
