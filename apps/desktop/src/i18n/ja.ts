@@ -244,6 +244,21 @@ export const jaOverrides = {
     noResults: '言語が見つかりません'
   },
 
+  island: {
+    expand: 'Hermes の動作を表示',
+    collapse: 'タスク一覧を隠す',
+    running: (count: number) => (count === 1 ? '1 件のセッションが実行中' : `${count} 件のセッションが実行中`),
+    waiting: (count: number) => (count === 1 ? '1 件のセッションが応答待ち' : `${count} 件のセッションが応答待ち`),
+    needsInput: '回答をお待ちしています',
+    needsAnswer: '要回答',
+    working: '実行中',
+    empty: '実行中のものはありません',
+    open: 'Hermes で開く',
+    approve: '承認',
+    deny: '拒否',
+    newSessionPlaceholder: '新しいセッションを開始…',
+    send: '送信'
+  },
   settings: {
     // Window plans (Nous subscription with included usage). Other billing strings: overlay-gaps.json.
     billing: {

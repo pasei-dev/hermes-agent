@@ -332,6 +332,22 @@ export const ruOverrides = {
     searchPlaceholder: 'Поиск языка…',
     noResults: 'Языки не найдены'
   },
+
+  island: {
+    expand: 'Показать, что делает Hermes',
+    collapse: 'Скрыть список задач',
+    running: (count: number) => (count === 1 ? '1 сеанс выполняется' : `${count} сеансов выполняется`),
+    waiting: (count: number) => (count === 1 ? '1 сеанс ждёт вас' : `${count} сеансов ждут вас`),
+    needsInput: 'Ожидает вашего ответа',
+    needsAnswer: 'Нужен ответ',
+    working: 'Выполняется',
+    empty: 'Ничего не выполняется',
+    open: 'Открыть в Hermes',
+    approve: 'Разрешить',
+    deny: 'Отклонить',
+    newSessionPlaceholder: 'Начать новый сеанс…',
+    send: 'Отправить'
+  },
   settings: {
     // Window plans (Nous subscription with included usage). Other billing strings: overlay-gaps.json.
     billing: {

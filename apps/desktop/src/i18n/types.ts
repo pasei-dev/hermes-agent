@@ -596,6 +596,22 @@ catalog: CatalogTranslations
     noResults: string
   }
 
+  island: {
+    expand: string
+    collapse: string
+    running: (count: number) => string
+    waiting: (count: number) => string
+    needsInput: string
+    needsAnswer: string
+    working: string
+    empty: string
+    open: string
+    approve: string
+    deny: string
+    newSessionPlaceholder: string
+    send: string
+  }
+
   settings: RepoScanSettingsTranslations & {
     subpages: Record<string, string>
     closeSettings: string

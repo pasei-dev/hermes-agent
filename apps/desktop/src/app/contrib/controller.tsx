@@ -95,7 +95,7 @@ import { watchSessionPins } from '@/store/session-pin-sync'
 import { $botChatScopes } from '@/store/session-states'
 import { watchUnreadWriteGuard } from '@/store/session-unread-remote'
 import { $statusbarVisible } from '@/store/statusbar-prefs'
-import { isBrowserWindow, isHudWindow } from '@/store/windows'
+import { isBrowserWindow, isHudWindow, isIslandWindow } from '@/store/windows'
 
 import { BrowserPopoutShell } from '../chat/browser-popout-shell'
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
@@ -112,6 +112,7 @@ import {
 } from '../chat/session-tile'
 import { AppContextMenu } from '../context-menu/app-context-menu'
 import { HudShell } from '../hud/hud-shell'
+import { IslandShell } from '../island/island-shell'
 import { $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
 import { terminalPaletteToggle } from '../right-sidebar/terminal/reveal-focus'
 import { $workspaceIsPage, WORKSPACE_PAGE_HEADER_AREA } from '../routes'
@@ -792,6 +793,16 @@ export function ContribController() {
         <AppContextMenu />
         <HudShell />
         <PluginPreviewConsentDialog />
+      </ContribWiring>
+    )
+  }
+
+  // The Dynamic Island is the same app with no frame at all: wiring, sessions,
+  // streams and prompts mount identically, and only what is painted differs.
+  if (isIslandWindow()) {
+    return (
+      <ContribWiring>
+        <IslandShell />
       </ContribWiring>
     )
   }

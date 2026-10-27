@@ -454,6 +454,21 @@ export const zhOverrides = {
     noResults: '未找到语言'
   },
 
+  island: {
+    expand: '显示 Hermes 正在做什么',
+    collapse: '隐藏任务列表',
+    running: (count: number) => (count === 1 ? '1 个会话正在运行' : `${count} 个会话正在运行`),
+    waiting: (count: number) => (count === 1 ? '1 个会话在等你' : `${count} 个会话在等你`),
+    needsInput: '等待你的回答',
+    needsAnswer: '需要回答',
+    working: '运行中',
+    empty: '没有正在运行的任务',
+    open: '在 Hermes 中打开',
+    approve: '批准',
+    deny: '拒绝',
+    newSessionPlaceholder: '开始新会话…',
+    send: '发送'
+  },
   settings: {
     subpages: {
       appearanceTheme: '主题',

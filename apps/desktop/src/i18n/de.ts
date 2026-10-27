@@ -682,6 +682,22 @@ export const deOverrides = {
     searchPlaceholder: 'Sprachen suchen…',
     noResults: 'Keine Sprachen gefunden'
   },
+
+  island: {
+    expand: 'Zeigen, was Hermes tut',
+    collapse: 'Aufgabenliste ausblenden',
+    running: (count: number) => (count === 1 ? '1 Sitzung läuft' : `${count} Sitzungen laufen`),
+    waiting: (count: number) => (count === 1 ? '1 Sitzung wartet auf dich' : `${count} Sitzungen warten auf dich`),
+    needsInput: 'Wartet auf deine Antwort',
+    needsAnswer: 'Antwort nötig',
+    working: 'Läuft',
+    empty: 'Nichts läuft',
+    open: 'In Hermes öffnen',
+    approve: 'Genehmigen',
+    deny: 'Ablehnen',
+    newSessionPlaceholder: 'Neue Sitzung starten…',
+    send: 'Senden'
+  },
   settings: {
     subpages: {
       appearanceTheme: 'Design',

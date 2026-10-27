@@ -683,6 +683,24 @@ export const en: Translations = {
     noResults: 'No languages found'
   },
 
+  // Dynamic Island — the floating status strip. Its copy is chrome, not
+  // settings, so it sits with the other top-level surfaces.
+  island: {
+    expand: 'Show what Hermes is doing',
+    collapse: 'Hide the task list',
+    running: (count: number) => (count === 1 ? '1 session running' : `${count} sessions running`),
+    waiting: (count: number) => (count === 1 ? '1 session waiting on you' : `${count} sessions waiting on you`),
+    needsInput: 'Waiting on your answer',
+    needsAnswer: 'Needs answer',
+    working: 'Working',
+    empty: 'Nothing is running',
+    open: 'Open in Hermes',
+    approve: 'Approve',
+    deny: 'Deny',
+    newSessionPlaceholder: 'Start a new session…',
+    send: 'Send'
+  },
+
   settings: {
     subpages: {
       appearanceTheme: 'Theme',

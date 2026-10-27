@@ -685,6 +685,22 @@ export const esOverrides = {
     searchPlaceholder: 'Buscar idiomas…',
     noResults: 'No se encontraron idiomas'
   },
+
+  island: {
+    expand: 'Ver qué está haciendo Hermes',
+    collapse: 'Ocultar la lista de tareas',
+    running: (count: number) => (count === 1 ? '1 sesión en curso' : `${count} sesiones en curso`),
+    waiting: (count: number) => (count === 1 ? '1 sesión esperándote' : `${count} sesiones esperándote`),
+    needsInput: 'Esperando tu respuesta',
+    needsAnswer: 'Falta respuesta',
+    working: 'En curso',
+    empty: 'No hay nada en curso',
+    open: 'Abrir en Hermes',
+    approve: 'Aprobar',
+    deny: 'Rechazar',
+    newSessionPlaceholder: 'Iniciar una sesión nueva…',
+    send: 'Enviar'
+  },
   settings: {
     subpages: {
       appearanceTheme: 'Tema',

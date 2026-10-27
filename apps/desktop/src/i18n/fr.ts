@@ -682,6 +682,22 @@ export const frOverrides = {
     searchPlaceholder: 'Rechercher des langues…',
     noResults: 'Aucune langue trouvée'
   },
+
+  island: {
+    expand: 'Afficher ce que fait Hermes',
+    collapse: 'Masquer la liste des tâches',
+    running: (count: number) => (count === 1 ? '1 session en cours' : `${count} sessions en cours`),
+    waiting: (count: number) => (count === 1 ? '1 session vous attend' : `${count} sessions vous attendent`),
+    needsInput: 'En attente de votre réponse',
+    needsAnswer: 'Réponse requise',
+    working: 'En cours',
+    empty: 'Rien en cours',
+    open: 'Ouvrir dans Hermes',
+    approve: 'Approuver',
+    deny: 'Refuser',
+    newSessionPlaceholder: 'Démarrer une nouvelle session…',
+    send: 'Envoyer'
+  },
   settings: {
     subpages: {
       appearanceTheme: 'Thème',
