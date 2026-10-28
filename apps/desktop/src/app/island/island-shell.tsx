@@ -649,11 +649,56 @@ export function IslandShell() {
     requestAnimationFrame(() => element.focus())
   }, [])
 
-  const onSurfaceBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
-    const next = event.relatedTarget as Node | null
+  // Looking away is the same instruction as a click elsewhere: the island closes
+  // what it opened for you and gives the keyboard back.
+  const collapse = useCallback(() => {
+    setExpanded(false)
+    setFocused(null)
+    setTranscript([])
+  }, [])
 
-    if (!next || !event.currentTarget.contains(next)) {
-      window.hermesDesktop?.island?.setFocusable?.(false)
+  const onSurfaceBlur = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const next = event.relatedTarget as Node | null
+
+      if (!next || !event.currentTarget.contains(next)) {
+        window.hermesDesktop?.island?.setFocusable?.(false)
+        collapse()
+      }
+    },
+    [collapse]
+  )
+
+  // No focus to lose in the pidgin stages (the window is not focusable), so the
+  // pointer leaving is the equivalent signal. A grace period keeps a diagonal
+  // pass over the pill from closing it.
+  const leaveTimer = useRef<null | ReturnType<typeof setTimeout>>(null)
+
+  const onPointerLeaveSurface = useCallback(() => {
+    setHovered(false)
+
+    // The open session takes the keyboard, so it closes on blur instead: a
+    // pointer that wanders off while you read is not a request to close it.
+    if (focused) {
+      return
+    }
+
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current)
+    }
+
+    leaveTimer.current = setTimeout(() => {
+      leaveTimer.current = null
+      collapse()
+    }, 1200)
+  }, [collapse, focused])
+
+  const onPointerEnterSurface = useCallback(() => {
+    setHovered(true)
+
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current)
+      leaveTimer.current = null
     }
   }, [])
 
@@ -799,8 +844,8 @@ export function IslandShell() {
         data-island-surface=""
         onPointerCancel={cancelDrag}
         onPointerDown={onPointerDown}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
+        onPointerEnter={onPointerEnterSurface}
+        onPointerLeave={onPointerLeaveSurface}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         ref={surfaceRef}
@@ -1131,10 +1176,37 @@ export function IslandShell() {
                in the panel. */
             <>
               <style>{`
-                [data-island-chat] > * { background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }
-                [data-island-chat] [data-slot='composer-dock'] { opacity: 0; transition: opacity 140ms ease-out; }
+                /* The island IS the surface: the theme's pane paints a second
+                   card in another colour with its own radius. Every structural
+                   container is flattened; inputs and buttons keep their paint. */
+                [data-island-chat] > * { height: 100% !important; min-height: 0 !important; }
+                [data-island-chat] div,
+                [data-island-chat] section,
+                [data-island-chat] main,
+                [data-island-chat] aside,
+                [data-island-chat] header,
+                [data-island-chat] footer,
+                [data-island-chat] article {
+                  background: transparent !important;
+                  border-radius: 0 !important;
+                  box-shadow: none !important;
+                }
+                /* The composer is the one thing that must not be clipped: it
+                   sits at the bottom of the pane, hidden until the panel is
+                   looked at, and it takes no clicks while hidden — an invisible
+                   band that swallows a press is worse than a visible one. */
+                [data-island-chat] [data-slot='composer-dock'] {
+                  opacity: 0;
+                  pointer-events: none;
+                  transform: translateY(6px);
+                  transition: opacity 150ms ease-out, transform 150ms ease-out;
+                }
                 [data-island-chat]:hover [data-slot='composer-dock'],
-                [data-island-chat] [data-slot='composer-dock']:focus-within { opacity: 1; }
+                [data-island-chat] [data-slot='composer-dock']:focus-within {
+                  opacity: 1;
+                  pointer-events: auto;
+                  transform: none;
+                }
               `}</style>
               <div className="relative mt-1.5 min-h-0 flex-1 overflow-hidden" data-island-chat="">
                 <WiredPane part="chatRoutes" />
