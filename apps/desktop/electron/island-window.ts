@@ -49,7 +49,6 @@ export interface IslandWindowOptions {
   loadWindowUrl: (window: BrowserWindow, url: string, label: string) => void
   log: (message: string) => void
   /** Re-open the app window on a session the island points at. */
-  openSession: (sessionId: string) => void
   platform: string
   preloadPath: string
   profile?: null | string
@@ -68,7 +67,7 @@ function displayFor(win: BrowserWindow | null, anchor: () => IslandDisplay): Isl
 }
 
 export function createIslandWindowController(options: IslandWindowOptions) {
-  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, openSession, platform, profile, rendererIndex } = options
+  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, platform, profile, rendererIndex } = options
   let window: BrowserWindow | null = null
   /**
    * The painted pill, as the renderer measured it. Everything the drag clamps
@@ -296,8 +295,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       if (target && !target.isDestroyed()) {
         target.destroy()
       }
-    },
-    openSession
+    }
   }
 }
 
@@ -357,9 +355,4 @@ export function registerIslandIpc(getController: () => IslandWindowController | 
     }
   })
 
-  ipcMain.on('hermes:island:open-session', (_event, sessionId) => {
-    if (typeof sessionId === 'string' && sessionId.trim()) {
-      getController()?.openSession(sessionId.trim())
-    }
-  })
 }
