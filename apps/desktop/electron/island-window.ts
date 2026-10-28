@@ -263,6 +263,12 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       ...bounds,
       alwaysOnTop: true,
       backgroundColor: '#00000000',
+      // The click that answers a card must not bring Hermes to the front. On
+      // macOS only a non-activating panel does that, so the window is a panel and
+      // it takes the first click rather than the activation that would precede
+      // it — `focusable: false` alone still activates the app.
+      acceptFirstMouse: true,
+      type: isMac ? 'panel' : undefined,
       // Non-activating by default: the island appears and updates without taking
       // the keyboard from whatever the user is working in.
       focusable: false,
