@@ -147,7 +147,15 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
     const bounds = window.getBounds()
     const display = screen.getDisplayMatching(bounds)
-    const dock = islandDock({ anchor: islandWindowBounds(display, platform), bounds, display })
+
+    // The whole desktop decides the sides: the display under the window decides
+    // the top anchor and the work area's floor.
+    const dock = islandDock({
+      anchor: islandWindowBounds(display, platform),
+      bounds,
+      display,
+      displays: screen.getAllDisplays()
+    })
 
     window.webContents.send('hermes:island:dock', dock)
   }
@@ -189,11 +197,14 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       const display = screen.getDisplayMatching(bounds)
 
       // Attach on release: near an edge the island goes flush to it, so a
-      // dropped pill is docked rather than left a few pixels off a corner.
+      // dropped pill is docked rather than left a few pixels off a corner. The
+      // seams between displays are not edges, so a drop there stays put — the
+      // window moves only when an edge actually claimed it.
       const origin = islandSnapOrigin({
         anchor: islandWindowBounds(display, platform),
         bounds,
-        display
+        display,
+        displays: screen.getAllDisplays()
       })
 
       if (origin.x !== bounds.x || origin.y !== bounds.y) {
@@ -344,9 +355,13 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       const bounds = window.getBounds()
 
+      // The display mostly under the window holds the y ceiling; the rest of the
+      // desktop is the horizontal range, so a drag crosses a seam instead of
+      // stopping dead at it.
       const next = islandDragTarget({
         bounds,
         display: screen.getDisplayMatching(bounds),
+        displays: screen.getAllDisplays(),
         dx: delta.dx,
         dy: delta.dy
       })

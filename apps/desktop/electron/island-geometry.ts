@@ -74,23 +74,49 @@ export function islandWindowBounds(display: IslandDisplay, platform: string) {
 }
 
 /**
+ * The desktop's outer edges: every display's bounds folded per axis.
+ *
+ * Displays need not tile — a taller monitor beside a shorter one leaves a band
+ * with no screen in it, and a laptop below its desk display leaves a corner. The
+ * fold takes the outermost value on each axis and invents nothing about the
+ * space between them, so the only walls a drag can meet are the ones at the end
+ * of the desktop.
+ */
+function desktopEdges(displays: IslandDisplay[], fallback: IslandDisplay) {
+  const all = displays.length > 0 ? displays : [fallback]
+
+  return {
+    left: Math.min(...all.map((entry) => entry.bounds.x)),
+    right: Math.max(...all.map((entry) => entry.bounds.x + entry.bounds.width)),
+    top: Math.min(...all.map((entry) => entry.bounds.y))
+  }
+}
+
+/**
  * Where a drag may put the window.
  *
  * The island is the user's to move only where there is no housing, and that
- * freedom is bounded: it may hang over the menu bar (that is the point of a
- * floating pill) but never off the display, and never far enough down to become
- * a second HUD.
+ * freedom is bounded by the desktop rather than by one display: a window wider
+ * than the boundary between two monitors would otherwise be walled in there, and
+ * could not be dragged onto the second screen at all. Each axis is clamped on
+ * its own, so a crossing is a move and a gap between displays is simply reachable
+ * — the drag stops at the desktop's outer edge and at the bottom of the work area
+ * of the display the window is mostly on.
  */
 export function islandDragTarget(input: {
   bounds: { height: number; width: number; x: number; y: number }
+  /** The display under the window: its work area holds the y ceiling. */
   display: IslandDisplay
+  /** Every display on the desktop; their union is the drag's outer edge. */
+  displays: IslandDisplay[]
   dx: number
   dy: number
 }): { x: number; y: number } {
-  const { bounds, display, dx, dy } = input
-  const minX = display.bounds.x
-  const maxX = display.bounds.x + display.bounds.width - bounds.width
-  const minY = display.bounds.y
+  const { bounds, display, displays, dx, dy } = input
+  const { left, right, top } = desktopEdges(displays, display)
+  const minX = left
+  const maxX = right - bounds.width
+  const minY = top
   // The whole work area: the island is the user's to park, and a 200pt ceiling
   // read as a drag that fought the pointer a quarter of the way down.
   const maxY = Math.max(minY, display.workArea.y + display.workArea.height - bounds.height)
@@ -109,9 +135,12 @@ export function islandDock(input: {
   anchor: { x: number; y: number }
   bounds: { height: number; width: number; x: number; y: number }
   display: IslandDisplay
+  /** Every display on the desktop; the sides are the desktop's, not this one's. */
+  displays?: IslandDisplay[]
 }): IslandDock {
   const { anchor, bounds, display } = input
   const bottom = display.workArea.y + display.workArea.height - bounds.height
+  const { left, right } = desktopEdges(input.displays ?? [], display)
 
   if (Math.abs(bounds.y - anchor.y) <= 1) {
     return 'top'
@@ -121,11 +150,14 @@ export function islandDock(input: {
     return 'bottom'
   }
 
-  if (Math.abs(bounds.x - display.bounds.x) <= 1) {
+  // The boundary between two displays is not an edge: a window sitting on it is
+  // over the desk, not attached to a side of it, and the renderer must not
+  // square its corners against a seam.
+  if (Math.abs(bounds.x - left) <= 1) {
     return 'left'
   }
 
-  if (Math.abs(bounds.x - (display.bounds.x + display.bounds.width - bounds.width)) <= 1) {
+  if (Math.abs(bounds.x - (right - bounds.width)) <= 1) {
     return 'right'
   }
 
@@ -151,29 +183,34 @@ export const ISLAND_EDGE_SNAP = 30
  * Released near an edge, it attaches: flush to that edge, and flush-and-centred
  * on the top edge, which is the notch anchor — so "put it back" is a short drag
  * up rather than a hunt for the exact origin. Released anywhere else it stays
- * where the pointer left it. Each axis is judged on its own, which makes a
- * corner land in the corner instead of picking one edge and dropping the other.
+ * exactly where the pointer left it, which includes the seam between two
+ * displays: that is a place on the desk, not an edge of it. Each axis is judged
+ * on its own, which makes a corner land in the corner instead of picking one edge
+ * and dropping the other.
  */
 export function islandSnapOrigin(input: {
   anchor: { x: number; y: number }
   bounds: { height: number; width: number; x: number; y: number }
   display: IslandDisplay
+  /** Every display on the desktop; the sides are the desktop's, not this one's. */
+  displays?: IslandDisplay[]
 }): { x: number; y: number } {
   const { anchor, bounds, display } = input
-  const left = display.bounds.x
-  const right = display.bounds.x + display.bounds.width - bounds.width
+  const { left, right } = desktopEdges(input.displays ?? [], display)
+  const edgeRight = right - bounds.width
   const top = anchor.y
   const bottom = display.workArea.y + display.workArea.height - bounds.height
 
   const nearTop = Math.abs(bounds.y - top) <= ISLAND_EDGE_SNAP
   const nearBottom = !nearTop && Math.abs(bounds.y - bottom) <= ISLAND_EDGE_SNAP
   const nearLeft = Math.abs(bounds.x - left) <= ISLAND_EDGE_SNAP
-  const nearRight = !nearLeft && Math.abs(bounds.x - right) <= ISLAND_EDGE_SNAP
+  const nearRight = !nearLeft && Math.abs(bounds.x - edgeRight) <= ISLAND_EDGE_SNAP
 
   // The top edge owns the centre: a top dock that kept a side's x would sit off
   // the housing it is meant to be.
-  const x = nearTop ? anchor.x : nearLeft ? left : nearRight ? right : bounds.x
+  const x = nearTop ? anchor.x : nearLeft ? left : nearRight ? edgeRight : bounds.x
   const y = nearTop ? top : nearBottom ? bottom : bounds.y
 
   return { x: Math.round(x), y: Math.round(y) }
 }
+
