@@ -109,3 +109,39 @@ export function islandAnchor(notched: boolean) {
     width: notched ? ISLAND_NOTCH_WIDTH : 132
   }
 }
+
+/** How close to an edge a dropped island must be to attach to it, in px. */
+export const ISLAND_EDGE_SNAP = 30
+
+/**
+ * Where a dropped island lands.
+ *
+ * Released near an edge, it attaches: flush to that edge, and flush-and-centred
+ * on the top edge, which is the notch anchor — so "put it back" is a short drag
+ * up rather than a hunt for the exact origin. Released anywhere else it stays
+ * where the pointer left it. Each axis is judged on its own, which makes a
+ * corner land in the corner instead of picking one edge and dropping the other.
+ */
+export function islandSnapOrigin(input: {
+  anchor: { x: number; y: number }
+  bounds: { height: number; width: number; x: number; y: number }
+  display: IslandDisplay
+}): { x: number; y: number } {
+  const { anchor, bounds, display } = input
+  const left = display.bounds.x
+  const right = display.bounds.x + display.bounds.width - bounds.width
+  const top = anchor.y
+  const bottom = display.workArea.y + display.workArea.height - bounds.height
+
+  const nearTop = Math.abs(bounds.y - top) <= ISLAND_EDGE_SNAP
+  const nearBottom = !nearTop && Math.abs(bounds.y - bottom) <= ISLAND_EDGE_SNAP
+  const nearLeft = Math.abs(bounds.x - left) <= ISLAND_EDGE_SNAP
+  const nearRight = !nearLeft && Math.abs(bounds.x - right) <= ISLAND_EDGE_SNAP
+
+  // The top edge owns the centre: a top dock that kept a side's x would sit off
+  // the housing it is meant to be.
+  const x = nearTop ? anchor.x : nearLeft ? left : nearRight ? right : bounds.x
+  const y = nearTop ? top : nearBottom ? bottom : bounds.y
+
+  return { x: Math.round(x), y: Math.round(y) }
+}

@@ -9,6 +9,7 @@ import {
   islandAnchor,
   islandDragTarget,
   islandHasNotch,
+  islandSnapOrigin,
   islandWindowBounds
 } from './island-geometry'
 
@@ -110,6 +111,30 @@ describe('islandDragTarget', () => {
 
     expect(onSecond(0, 0)).toEqual({ x: 2696, y: -175 })
     expect(onSecond(0, -400)).toEqual({ x: 2696, y: -200 })
+  })
+})
+
+describe('islandSnapOrigin', () => {
+  const anchor = { height: 560, width: 480, x: 20, y: 31 }
+  const size = { height: 560, width: 480 }
+
+  const snap = (x: number, y: number) => islandSnapOrigin({ anchor, bounds: { ...size, x, y }, display: PLAIN })
+
+  it('docks to the top edge, centred, when released near it', () => {
+    expect(snap(900, 40)).toEqual({ x: 20, y: 31 })
+  })
+
+  it('docks flush to a side edge and keeps the height it was dropped at', () => {
+    expect(snap(12, 200)).toEqual({ x: 0, y: 200 })
+    expect(snap(2072, 200)).toEqual({ x: 2560 - 480, y: 200 })
+  })
+
+  it('docks to the bottom of the work area', () => {
+    expect(snap(900, 870)).toEqual({ x: 900, y: 1440 - 560 })
+  })
+
+  it('leaves a drop in open space exactly where it was let go', () => {
+    expect(snap(700, 400)).toEqual({ x: 700, y: 400 })
   })
 })
 

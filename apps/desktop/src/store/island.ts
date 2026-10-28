@@ -19,6 +19,7 @@ export interface IslandSettings {
   expandShortcut: string
   followPointer: boolean
   enabled: boolean
+  sessionSize: { height: number; width: number } | null
   shortcut: string
   suppressApprovalNotifications: boolean
 }
@@ -36,6 +37,7 @@ export const ISLAND_DEFAULT_SETTINGS: IslandSettings = {
   expandShortcut: '',
   followPointer: false,
   enabled: true,
+  sessionSize: null,
   shortcut: '',
   suppressApprovalNotifications: true
 }
@@ -77,6 +79,7 @@ function adopt(status: IslandStatus | undefined): void {
     registeredExpandShortcut:
       typeof status.registeredExpandShortcut === 'string' ? status.registeredExpandShortcut : '',
     registeredShortcut: typeof status.registeredShortcut === 'string' ? status.registeredShortcut : '',
+    sessionSize: status.sessionSize ?? null,
     shortcut: typeof status.shortcut === 'string' ? status.shortcut : '',
     suppressApprovalNotifications: status.suppressApprovalNotifications === true
   })

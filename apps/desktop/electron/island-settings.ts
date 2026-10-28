@@ -19,6 +19,12 @@ export interface IslandOrigin {
   y: number
 }
 
+/** The size the user dragged the open session panel to. */
+export interface IslandSize {
+  height: number
+  width: number
+}
+
 export interface IslandSettings {
   /** Put the island on the display under the pointer, not the primary one. */
   followPointer: boolean
@@ -34,6 +40,8 @@ export interface IslandSettings {
   origin: IslandOrigin | null
   /** Global chord that approves the card on top; '' means none. */
   shortcut: string
+  /** Size the user dragged the open session panel to; null keeps the default. */
+  sessionSize: IslandSize | null
   /** With the island answering, the OS notification is a second prompt for one approval. */
   suppressApprovalNotifications: boolean
 }
@@ -43,8 +51,34 @@ export const ISLAND_DEFAULTS: IslandSettings = {
   followPointer: false,
   enabled: true,
   origin: null,
+  sessionSize: null,
   shortcut: '',
   suppressApprovalNotifications: true
+}
+
+/**
+ * A remembered panel size inside the island window's own ceiling. A size beyond
+ * it would be clipped by the window, and a tiny one could not hold a header and
+ * a transcript.
+ */
+export function sanitizeSessionSize(raw: unknown): IslandSize | null {
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+
+  if (!record) {
+    return null
+  }
+
+  const width = Number(record.width)
+  const height = Number(record.height)
+
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null
+  }
+
+  return {
+    height: Math.round(Math.min(546, Math.max(260, height))),
+    width: Math.round(Math.min(478, Math.max(340, width)))
+  }
 }
 
 /** A parked position is two finite numbers or it is nothing. */
@@ -76,6 +110,7 @@ export function sanitizeIslandSettings(raw: unknown): IslandSettings {
     followPointer: record.followPointer === true,
     enabled: record.enabled === undefined ? ISLAND_DEFAULTS.enabled : record.enabled === true,
     origin: sanitizeOrigin(record.origin),
+    sessionSize: sanitizeSessionSize(record.sessionSize),
     shortcut: shortcut && parseQuickEntryShortcut(shortcut).ok ? shortcut : '',
     suppressApprovalNotifications:
       record.suppressApprovalNotifications === undefined
@@ -104,6 +139,7 @@ export function withIslandPatch(current: IslandSettings, patch: unknown): Island
     // never patches a coordinate pair, and a stale one from Settings would move
     // the pill for no reason.
     origin: current.origin,
+    sessionSize: next.sessionSize === undefined ? current.sessionSize : sanitizeSessionSize(next.sessionSize),
     shortcut: next.shortcut === undefined ? current.shortcut : next.shortcut,
     suppressApprovalNotifications:
       next.suppressApprovalNotifications === undefined

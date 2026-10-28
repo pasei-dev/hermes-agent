@@ -40,6 +40,7 @@ import { $busyInputConfig } from '@/store/busy-input-mode'
 import { $clarifyRequests, RECOMMENDED_LABEL } from '@/store/clarify'
 import { $queuedPromptsBySession } from '@/store/composer-queue'
 import { $gateway } from '@/store/gateway'
+import { $island, saveIslandSettings } from '@/store/island'
 import { sessionApprovalStackSize } from '@/store/prompts'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import { $attentionSessionIds, $sessionStates, $workingSessionIds } from '@/store/session-states'
@@ -59,6 +60,10 @@ import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprova
 
 /** macOS's own expansion curve — fast out, long settle. */
 const SPRING = 'cubic-bezier(0.32, 0.72, 0, 1)'
+
+/** A dragged size, kept inside the window's ceiling and above the size that
+ *  still holds a header and a line of transcript. */
+const limitSize = (value: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, value)))
 const MORPH = `width 380ms ${SPRING}, height 380ms ${SPRING}, border-radius 300ms ${SPRING}, opacity 200ms ease-out, transform 300ms ${SPRING}`
 const REVEAL = `opacity 220ms ease-out 60ms, transform 320ms ${SPRING} 40ms`
 
@@ -357,6 +362,14 @@ export function IslandShell() {
     workingCount: runningCount
   })
 
+  // The panel's size is the user's: a grip's live drag wins, then the size they
+  // last dragged it to, then the window's ceiling.
+  const islandPrefs = useStore($island)
+  const [liveSize, setLiveSize] = useState<{ height: number; width: number } | null>(null)
+  const gripRef = useRef<null | { height: number; startX: number; startY: number; width: number }>(null)
+  const gripPending = useRef<{ height: number; width: number } | null>(null)
+  const sessionSize = liveSize ?? islandPrefs.sessionSize ?? undefined
+
   const shape = islandShape({
     // A card that carries a question is taller: two lines of it, up to three
     // answers, and the field. Sized from the kind, so nothing is drawn past the
@@ -368,6 +381,7 @@ export function IslandShell() {
     // top of whatever the user is doing.
     rich: stage === 'pill' && activityParts.length > 0 && hovered,
     rows: stage === 'session' ? transcript.length : rows.length,
+    sessionSize,
     stage
   })
 
@@ -673,7 +687,8 @@ export function IslandShell() {
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
           height: shape.height,
           opacity: shape.opacity,
-          transform: shape.opacity === 0 ? 'scale(0.92)' : 'none',
+          transform: shape.opacity === 0 ? 'scale(0.92)' : dragging ? 'scale(1.015, 1.12)' : 'none',
+          transformOrigin: 'top center',
           transition: dragging ? 'none' : MORPH,
           width: shape.width
         }}
@@ -715,7 +730,9 @@ export function IslandShell() {
                 : waitingRows.length > 0
                   ? t.island.waiting(waitingRows.length)
                   : activityParts.length > 0
-                    ? activityParts.join(' · ')
+                    ? // The session's own name first: "shell · 3/7" says what tool a
+                      // session is in, not which session it is.
+                      [lead ? titles[lead.id] : '', ...activityParts].filter(Boolean).join(' · ')
                     : t.island.running(runningCount)}
             </span>
             <div className={cn('flex shrink-0 items-center gap-1', atRest && REST_CHROME)}>
@@ -791,25 +808,29 @@ export function IslandShell() {
                   </div>
                 </>
               ) : question ? (
-                /* The agent's own question, then its answers as rows: chips in a
-                   372px card wrapped into each other and pushed the field out of
-                   the surface. */
+                /* Every answer the agent offered, each with its own number, in a
+                   box that scrolls instead of growing past the surface. */
                 <>
                   <div className="mt-1 line-clamp-2 text-[0.72rem] leading-snug text-white/85">
                     {question.question}
                   </div>
                   {(question.choices ?? []).length > 0 ? (
-                    <div className="mt-1 flex flex-col gap-1">
-                      {(question.choices ?? []).slice(0, 3).map(choice => (
-                        <button
-                          className="w-full truncate rounded-md px-2 py-1 text-left text-[0.7rem] text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] hover:bg-white/10 hover:text-white"
-                          key={choice}
-                          onClick={() => void answerClarify(choice)}
-                          type="button"
-                        >
-                          {choice.replace(RECOMMENDED_LABEL, '').trim()}
-                        </button>
-                      ))}
+                    <div className="mt-1 max-h-[112px] overflow-y-auto">
+                      <div className="flex flex-col gap-1">
+                        {(question.choices ?? []).map((choice, index) => (
+                          <button
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[0.7rem] text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] hover:bg-white/10 hover:text-white"
+                            key={choice}
+                            onClick={() => void answerClarify(choice)}
+                            type="button"
+                          >
+                            <span className="w-3 shrink-0 text-[0.62rem] tabular-nums text-white/40">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{choice.replace(RECOMMENDED_LABEL, '').trim()}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                 </>
@@ -972,8 +993,52 @@ export function IslandShell() {
                 [data-island-chat]:hover [data-slot='composer-dock'],
                 [data-island-chat] [data-slot='composer-dock']:focus-within { opacity: 1; }
               `}</style>
-              <div className="mt-1.5 min-h-0 flex-1 overflow-hidden rounded-xl" data-island-chat="">
+              <div className="relative mt-1.5 min-h-0 flex-1 overflow-hidden" data-island-chat="">
                 <WiredPane part="chatRoutes" />
+                {/* Bottom-right grip. The size is written once, on release, so a
+                    drag repaints the surface and does not touch the settings file
+                    sixty times a second. */}
+                <div
+                  className="absolute bottom-0 right-0 size-4 cursor-nwse-resize"
+                  data-island-resize=""
+                  onPointerDown={event => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    gripRef.current = {
+                      height: shape.height,
+                      startX: event.screenX,
+                      startY: event.screenY,
+                      width: shape.width
+                    }
+                  }}
+                  onPointerMove={event => {
+                    const from = gripRef.current
+
+                    if (!from) {
+                      return
+                    }
+
+                    const size = {
+                      height: limitSize(from.height + event.screenY - from.startY, 260, 546),
+                      width: limitSize(from.width + event.screenX - from.startX, 340, 478)
+                    }
+
+                    gripPending.current = size
+                    setLiveSize(size)
+                  }}
+                  onPointerUp={() => {
+                    const size = gripPending.current
+                    gripRef.current = null
+                    gripPending.current = null
+
+                    if (size) {
+                      void saveIslandSettings({ sessionSize: size })
+                    }
+
+                    setLiveSize(null)
+                  }}
+                />
               </div>
             </>
           ) : null}

@@ -26,7 +26,13 @@
 // explicitly.
 import { BrowserWindow, ipcMain, screen } from 'electron'
 
-import { type IslandDisplay, islandDragTarget, islandHasNotch, islandWindowBounds } from './island-geometry'
+import {
+  type IslandDisplay,
+  islandDragTarget,
+  islandHasNotch,
+  islandSnapOrigin,
+  islandWindowBounds
+} from './island-geometry'
 import type { IslandOrigin } from './island-settings'
 import { buildIslandWindowUrl } from './island-url'
 import { attachRendererConsoleCapture } from './renderer-log'
@@ -69,6 +75,7 @@ export function parkedOriginOn(display: IslandDisplay, origin: IslandOrigin | nu
   }
 
   const under = screen.getDisplayMatching({ height: 200, width: 320, x: origin.x, y: origin.y })
+
   // `IslandDisplay` is the structural subset the geometry needs, so it carries no
   // id: two displays cannot share a work-area origin, which makes this the
   // comparison that survives both shapes.
@@ -107,9 +114,19 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       return bounds
     }
 
-    const parked = parkedOriginOn(display, options.readOrigin?.() ?? null)
+    const saved = options.readOrigin?.() ?? null
 
-    return parked ? { ...bounds, x: parked.x, y: parked.y } : bounds
+    if (!saved) {
+      return bounds
+    }
+
+    // The saved point may be on another display: where the island sits is the
+    // user's desk, not the app window's, so the drop's own display is restored
+    // rather than re-homing the pill on the anchor's.
+    const under = screen.getDisplayMatching({ height: 40, width: 320, x: saved.x, y: saved.y })
+    const parked = parkedOriginOn(under, saved)
+
+    return parked ? { ...islandWindowBounds(under, platform), x: parked.x, y: parked.y } : bounds
   }
 
   /**
@@ -132,8 +149,22 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         return
       }
 
-      const { x, y } = window.getBounds()
-      options.writeOrigin?.({ x, y })
+      const bounds = window.getBounds()
+      const display = screen.getDisplayMatching(bounds)
+
+      // Attach on release: near an edge the island goes flush to it, so a
+      // dropped pill is docked rather than left a few pixels off a corner.
+      const origin = islandSnapOrigin({
+        anchor: islandWindowBounds(display, platform),
+        bounds,
+        display
+      })
+
+      if (origin.x !== bounds.x || origin.y !== bounds.y) {
+        window.setPosition(origin.x, origin.y)
+      }
+
+      options.writeOrigin?.(origin)
     }, 400)
   }
 
