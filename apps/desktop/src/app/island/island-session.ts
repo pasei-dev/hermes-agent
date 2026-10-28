@@ -18,10 +18,17 @@ import { getSessionMessages } from '@/api/sessions'
 export const ISLAND_TRANSCRIPT_ROWS = 4
 /** Longest line the island keeps — the surface clamps to two lines anyway. */
 const MAX_LINE = 320
+/**
+ * A tool row is a label, not a paragraph: the name carries the meaning and the
+ * payload is only interesting in its first few words.
+ */
+const MAX_TOOL_LINE = 140
 
 export interface IslandTranscriptRow {
-  role: 'assistant' | 'user'
+  role: 'assistant' | 'tool' | 'user'
   text: string
+  /** The tool this row came from; only tool rows carry it. */
+  tool?: string
 }
 
 export type IslandGatewayRequest = <T>(method: string, params?: Record<string, unknown>) => Promise<T>
@@ -52,18 +59,19 @@ function flatten(content: unknown): string {
   return parts.join(' ')
 }
 
-function oneLine(text: string): string {
+function oneLine(text: string, limit = MAX_LINE): string {
   const collapsed = text.replace(/\s+/g, ' ').trim()
 
-  return collapsed.length > MAX_LINE ? `${collapsed.slice(0, MAX_LINE - 1)}…` : collapsed
+  return collapsed.length > limit ? `${collapsed.slice(0, limit - 1)}…` : collapsed
 }
 
 /**
  * The tail of a transcript, as the island shows it.
  *
- * Tool rows, hidden widget rows and anything that is not a user/assistant turn are dropped
- * rather than summarised: a peek that shows half a tool call is worse than one that shows
- * the conversation. Empty lines fall away too, so four rows of real text is what fits.
+ * A turn's tool rows are the half of the conversation that says what is
+ * happening — a peek that shows only the prose shows the past. They come
+ * through as one line each, name first, so four rows read as a running log.
+ * Hidden widget rows fall away like empty lines do.
  */
 export function islandTranscriptRows(messages: unknown, limit = ISLAND_TRANSCRIPT_ROWS): IslandTranscriptRow[] {
   if (!Array.isArray(messages)) {
@@ -73,14 +81,28 @@ export function islandTranscriptRows(messages: unknown, limit = ISLAND_TRANSCRIP
   const rows: IslandTranscriptRow[] = []
 
   for (const message of messages) {
-    const row = message as { content?: unknown; display_kind?: unknown; role?: unknown }
-    const role = row?.role
+    const row = message as { content?: unknown; display_kind?: unknown; role?: unknown; tool_name?: unknown }
 
-    if (role !== 'user' && role !== 'assistant') {
+    if (row?.display_kind === 'hidden') {
       continue
     }
 
-    if (row?.display_kind === 'hidden') {
+    const role = row?.role
+
+    if (role === 'tool') {
+      const text = oneLine(flatten(row?.content), MAX_TOOL_LINE)
+
+      if (!text) {
+        continue
+      }
+
+      const tool = typeof row.tool_name === 'string' ? row.tool_name.trim() : ''
+      rows.push(tool ? { role: 'tool', text, tool } : { role: 'tool', text })
+
+      continue
+    }
+
+    if (role !== 'user' && role !== 'assistant') {
       continue
     }
 

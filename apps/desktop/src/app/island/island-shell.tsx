@@ -50,7 +50,6 @@ import {
   submitToIslandSession
 } from './island-session'
 import { islandShape } from './island-view'
-import { startIslandSession } from './start-session'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
 /** macOS's own expansion curve — fast out, long settle. */
@@ -61,6 +60,8 @@ const REVEAL = `opacity 220ms ease-out 60ms, transform 320ms ${SPRING} 40ms`
 const DOT = 'size-1.5 shrink-0 rounded-full'
 const ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-white/10'
 const GLYPH = 'text-white/55 hover:text-white'
+/** A press that travels less than this is a click, not a drag. */
+const DRAG_THRESHOLD = 3
 /**
  * At rest the pill is a status strip, not a toolbar: its buttons are there when
  * the pointer is, and take no colour from the surface otherwise. Expanded, the
@@ -86,8 +87,6 @@ export function IslandShell() {
   const workingIds = useStore($workingSessionIds)
 
   const [expanded, setExpanded] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
   const [error, setError] = useState<null | string>(null)
 
   // Deny is a two-tap verb on purpose: the first tap opens the reason field, the
@@ -107,7 +106,7 @@ export function IslandShell() {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<null | { x: number; y: number }>(null)
+  const dragRef = useRef<null | { moved: boolean; x: number; y: number }>(null)
 
   const { approvalsById, answer } = useIslandApprovals(attentionIds)
 
@@ -433,58 +432,75 @@ export function IslandShell() {
     }
   }, [])
 
-  const send = useCallback(async () => {
-    if (!draft.trim() || sending) {
-      return
-    }
-
-    setSending(true)
-    setError(null)
-
-    try {
-      await startIslandSession(draft)
-      setDraft('')
-      setExpanded(false)
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure))
-    } finally {
-      setSending(false)
-    }
-  }, [draft, sending])
-
   // Dragging belongs to the displays without a housing: there the island is the
   // user's to park, and the window follows the pointer's own travel because the
-  // renderer is the only side that sees the press.
+  // renderer is the only side that sees the press. A press that never travels is
+  // a click, and a click opens the list — that is the one gesture the surface
+  // owes a user who has no chevron in sight.
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (notched || event.button !== 0) {
+      if (event.button !== 0) {
         return
       }
 
-      if ((event.target as HTMLElement).closest('button, input, a')) {
+      if ((event.target as HTMLElement).closest('button, input, a, [data-island-attention]')) {
         return
       }
 
-      dragRef.current = { x: event.clientX, y: event.clientY }
-      event.currentTarget.setPointerCapture(event.pointerId)
+      dragRef.current = { moved: false, x: event.clientX, y: event.clientY }
+
+      if (!notched) {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }
     },
     [notched]
   )
 
-  const onPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const from = dragRef.current
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const from = dragRef.current
 
-    if (!from) {
+      if (!from || notched) {
+        return
+      }
+
+      // A press is a click until it travels: three pixels of hand tremor must not
+      // nudge the window, and the drag measures from where it became one.
+      if (!from.moved) {
+        if (Math.abs(event.clientX - from.x) + Math.abs(event.clientY - from.y) < DRAG_THRESHOLD) {
+          return
+        }
+
+        from.moved = true
+        from.x = event.clientX
+        from.y = event.clientY
+
+        return
+      }
+
+      window.hermesDesktop?.island?.drag?.({ dx: event.clientX - from.x, dy: event.clientY - from.y })
+      from.x = event.clientX
+      from.y = event.clientY
+    },
+    [notched]
+  )
+
+  const cancelDrag = useCallback(() => {
+    dragRef.current = null
+  }, [])
+
+  // The surface is the expand control: a press that stayed put was a click.
+  const endDrag = useCallback(() => {
+    const from = dragRef.current
+    dragRef.current = null
+
+    if (!from || from.moved || focused) {
       return
     }
 
-    window.hermesDesktop?.island?.drag?.({ dx: event.clientX - from.x, dy: event.clientY - from.y })
-    dragRef.current = { x: event.clientX, y: event.clientY }
-  }, [])
-
-  const endDrag = useCallback(() => {
-    dragRef.current = null
-  }, [])
+    setError(null)
+    setExpanded(next => !next)
+  }, [focused])
 
   // Esc leaves: collapse the list first, and give the keyboard back when there
   // is nothing left to collapse.
@@ -540,13 +556,13 @@ export function IslandShell() {
         data-island-mode={shape.mode}
         data-island-stage={stage}
         data-island-surface=""
-        onPointerCancel={endDrag}
+        onPointerCancel={cancelDrag}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         style={{
           borderRadius: shape.radius,
-          cursor: notched ? undefined : 'grab',
+          cursor: focused ? undefined : notched ? 'pointer' : 'grab',
           height: shape.height,
           opacity: shape.opacity,
           transform: shape.opacity === 0 ? 'scale(0.92)' : 'none',
@@ -655,9 +671,24 @@ export function IslandShell() {
               data-island-attention=""
               role="status"
             >
-              <div className="truncate text-[0.7rem] text-white/55">{top.title || t.island.needsInput}</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="min-w-0 flex-1 truncate text-[0.7rem] text-white/55">
+                  {top.title || t.island.needsInput}
+                </span>
+                {/* How deep the queue goes. Answering one advances the card, but a
+                    single card on screen said nothing about the four behind it. */}
+                {approvalDepth > 1 ? (
+                  <span className="shrink-0 text-[0.65rem] tabular-nums text-amber-300/80">1 / {approvalDepth}</span>
+                ) : null}
+              </div>
               {top.approval ? (
-                <div className="mt-1 line-clamp-2 font-mono text-[0.7rem] text-white/90">{top.approval.command}</div>
+                <>
+                  {/* The sentence that says why, before the command that says what. */}
+                  {top.approval.description ? (
+                    <div className="mt-1 line-clamp-1 text-[0.7rem] text-white/70">{top.approval.description}</div>
+                  ) : null}
+                  <div className="mt-0.5 line-clamp-2 font-mono text-[0.68rem] text-white/90">{top.approval.command}</div>
+                </>
               ) : (
                 <div className="mt-1 text-[0.7rem]">{t.island.needsInput}</div>
               )}
@@ -707,16 +738,6 @@ export function IslandShell() {
                       >
                         {t.island.always}
                       </Button>
-                      {approvalDepth > 1 ? (
-                        <Button
-                          className="text-white/70 hover:bg-white/10 hover:text-white"
-                          onClick={() => respond(top, 'once', { all: true })}
-                          size="xs"
-                          variant="ghost"
-                        >
-                          {t.island.approveAll}
-                        </Button>
-                      ) : null}
                     </>
                   )
                 ) : (
@@ -749,39 +770,6 @@ export function IslandShell() {
                   ))
                 )}
               </div>
-
-              <form
-                className="mt-1 flex shrink-0 items-center gap-1.5 border-t border-white/10 pt-1.5"
-                onSubmit={event => {
-                  event.preventDefault()
-
-                  if (!draft.trim()) {
-                    focusIsland(inputRef.current)
-
-                    return
-                  }
-
-                  void send()
-                }}
-              >
-                <input
-                  className="min-w-0 flex-1 bg-transparent px-1 text-xs text-white/90 outline-none placeholder:text-white/35"
-                  onChange={event => setDraft(event.target.value)}
-                  onFocus={event => focusIsland(event.currentTarget)}
-                  // The window is non-activating, so a click may not focus the
-                  // field by itself: ask for the keyboard on the press, which is
-                  // the one gesture that means "I am about to type".
-                  onPointerDown={event => focusIsland(event.currentTarget)}
-                  placeholder={t.island.newSessionPlaceholder}
-                  ref={inputRef}
-                  value={draft}
-                />
-                {draft.trim() ? (
-                  <Button disabled={sending} size="xs" type="submit" variant="secondary">
-                    {t.island.send}
-                  </Button>
-                ) : null}
-              </form>
             </div>
           ) : null}
 
@@ -805,13 +793,18 @@ export function IslandShell() {
                   transcript.map((line, index) => (
                     <div
                       className={cn(
-                        'mb-1 line-clamp-2 rounded-lg px-2 py-1 text-[0.72rem] leading-snug',
-                        line.role === 'user' ? 'bg-white/6 text-white/85' : 'text-white/60'
+                        'mb-1 rounded-lg leading-snug',
+                        line.role === 'tool'
+                          ? 'flex items-baseline gap-1.5 px-2 py-0.5 font-mono text-[0.66rem] text-white/45'
+                          : 'line-clamp-2 px-2 py-1 text-[0.72rem]',
+                        line.role === 'user' ? 'bg-white/6 text-white/85' : null,
+                        line.role === 'assistant' ? 'text-white/60' : null
                       )}
                       data-island-line={line.role}
                       key={`${index}-${line.role}`}
                     >
-                      {line.text}
+                      {line.tool ? <span className="shrink-0 text-white/70">{line.tool}</span> : null}
+                      <span className="min-w-0 truncate">{line.text}</span>
                     </div>
                   ))
                 )}

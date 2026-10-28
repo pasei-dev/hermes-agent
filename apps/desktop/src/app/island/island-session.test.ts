@@ -16,19 +16,27 @@ describe('islandTranscriptRows', () => {
     expect(islandTranscriptRows(messages).map(row => row.text)).toEqual(['line 4', 'line 5', 'line 6', 'line 7'])
   })
 
-  it('drops tool rows, hidden widget rows and empty lines', () => {
+  it('keeps tool rows as one line each, named, so a turn reads as a log', () => {
     const rows = islandTranscriptRows([
       { content: 'real question', role: 'user' },
       { content: '', role: 'assistant' },
-      { content: '{"shell":"ls"}', role: 'tool' },
+      { content: '{"shell":"ls -la"}', role: 'tool', tool_name: 'shell' },
       { content: 'hidden intent', display_kind: 'hidden', role: 'user' },
       { content: 'real answer', role: 'assistant' }
     ])
 
     expect(rows).toEqual([
       { role: 'user', text: 'real question' },
+      { role: 'tool', text: '{"shell":"ls -la"}', tool: 'shell' },
       { role: 'assistant', text: 'real answer' }
     ])
+  })
+
+  it('clips a tool payload far shorter than a prose line', () => {
+    const [row] = islandTranscriptRows([{ content: 'y'.repeat(500), role: 'tool', tool_name: 'read' }])
+
+    expect(row.text.length).toBe(140)
+    expect(row.tool).toBe('read')
   })
 
   it('flattens a multi-part content array and collapses its whitespace', () => {
