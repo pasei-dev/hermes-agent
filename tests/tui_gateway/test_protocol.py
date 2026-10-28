@@ -647,6 +647,37 @@ def test_approval_response_correlates_request_id(server, monkeypatch):
     assert calls == [("agent-1", "once", {"resolve_all": False, "request_id": "req-1"})]
 
 
+def test_approval_response_carries_a_deny_reason(server, monkeypatch):
+    """`/deny <reason>` free text reaches the queue, which relays it to the agent."""
+    from tools import approval
+
+    server._sessions["ui-1"] = {"session_key": "agent-1", "history": []}
+    calls = []
+    monkeypatch.setattr(
+        approval,
+        "resolve_gateway_approval",
+        lambda key, choice, **kwargs: calls.append((key, choice, kwargs)) or 1,
+    )
+
+    response = server.handle_request(
+        {
+            "id": "r3-reason",
+            "method": "approval.respond",
+            "params": {
+                "session_id": "ui-1",
+                "request_id": "req-1",
+                "choice": "deny",
+                "reason": "  wrong branch, use main  ",
+            },
+        }
+    )
+
+    assert response["result"] == {"resolved": 1}
+    assert calls == [
+        ("agent-1", "deny", {"resolve_all": False, "request_id": "req-1", "reason": "wrong branch, use main"})
+    ]
+
+
 def test_approval_respond_falls_back_to_request_id_lookup(server, monkeypatch):
     """A stale live sid must not 4001 an approval answer when the request_id
     resolves to a live session (durable-identity fallback, #91684)."""

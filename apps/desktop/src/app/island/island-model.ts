@@ -8,8 +8,9 @@
 // only paints it.
 
 /** `hidden` = nothing to say, `pill` = work running, `attention` = a prompt is
- *  waiting, `expanded` = the user opened it. */
-export type IslandStage = 'attention' | 'expanded' | 'hidden' | 'pill'
+ *  waiting, `expanded` = the user opened the list, `session` = the user opened
+ *  ONE session and is reading/running it in place. */
+export type IslandStage = 'attention' | 'expanded' | 'hidden' | 'pill' | 'session'
 
 export interface IslandApproval {
   command: string
@@ -68,10 +69,18 @@ export function islandRows({ approvalsById, attentionIds, titles, workingIds }: 
 export function islandStage(input: {
   attentionCount: number
   expanded: boolean
+  /** A single session is open in the island's own reading view. */
+  focused: boolean
   workingCount: number
 }): IslandStage {
   if (input.expanded) {
     return 'expanded'
+  }
+
+  // Deeper than the list, shallower than the app: one session's tail and a
+  // composer. It outranks attention because the user asked for THIS session.
+  if (input.focused) {
+    return 'session'
   }
 
   if (input.attentionCount > 0) {
@@ -87,7 +96,7 @@ export function islandCountLabel(stage: IslandStage, count: number): { kind: 'at
     return { count, kind: 'attention' }
   }
 
-  if (stage === 'pill' || stage === 'expanded') {
+  if (stage === 'pill' || stage === 'expanded' || stage === 'session') {
     return { count, kind: 'running' }
   }
 

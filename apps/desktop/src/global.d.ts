@@ -14,6 +14,7 @@ import type { WindowSizeMode } from '../electron/window-size-types'
 
 import type { UiPreferencesBridge } from './lib/ui-preferences/sync'
 import type { WakeIndicatorState } from './lib/wake-indicator'
+import type { IslandSettingsPatch, IslandStatus } from './store/island'
 import type {
   PetOverlayBounds,
   PetOverlayControl,
@@ -182,19 +183,29 @@ declare global {
         onCursor: (callback: (point: { x: number; y: number } | null) => void) => () => void
         onGameOverlay: (callback: (state: { active: boolean; app: string }) => void) => () => void
       }
-      // Dynamic Island: a transparent status strip at the top of the screen
-      // showing what is running and taking an approval answer without the user
-      // leaving their app. Main owns the window (position, click-through,
-      // focus); the island renderer reports what it is showing, and asks for the
-      // keyboard only when the user is actually typing.
+      // Dynamic Island: a black pill parked at the top of the screen — in the
+      // notch itself where there is a housing — showing what is running and
+      // taking an approval answer without the user leaving their app. Main owns
+      // the window (position, click-through, focus); the renderer owns the shape
+      // and asks for the keyboard only when the user is actually typing.
       island?: {
-        report: (report: { height?: number; visible: boolean }) => void
+        // Renderer → main: the pointer is dragging the pill, move the window.
+        drag: (delta: { dx: number; dy: number }) => void
+        // Renderer → main: the island shell is mounted and painted, show it.
+        ready: () => void
         setInteractive: (interactive: boolean) => void
         setFocusable: (focusable: boolean) => void
         // Island → main: bring the app window up on this session.
         openSession: (sessionId: string) => void
         // App window side: main hands it the session the island pointed at.
         onOpenSession: (callback: (sessionId: string) => void) => () => void
+        // Settings live in main — it owns the window, the anchor display and the
+        // approval chord — so both directions round-trip through it and the reply
+        // is the state that actually resulted.
+        getSettings: () => Promise<IslandStatus>
+        setSettings: (patch: IslandSettingsPatch) => Promise<IslandStatus>
+        // Main → island renderer: the global approval chord fired.
+        onApproveTop: (callback: () => void) => () => void
       }
       // macOS native screenshot gesture; absent on other platforms.
       screenshot?: ScreenshotApi

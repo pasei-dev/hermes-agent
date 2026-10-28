@@ -364,9 +364,19 @@ export async function answerApproval(
   gateway: ApprovalGateway | null,
   request: Pick<ApprovalRequest, 'requestId' | 'serverRequestId' | 'sessionId'>,
   choice: string,
-  all = false
+  all = false,
+  /** Free text a deny carries to the agent (`/deny <reason>`); ignored by an allow. */
+  reason?: string
 ): Promise<void> {
-  if (respondToServerRequest(request.serverRequestId, { choice, ...(all ? { all: true } : {}) })) {
+  const note = reason?.trim() || undefined
+
+  if (
+    respondToServerRequest(request.serverRequestId, {
+      choice,
+      ...(all ? { all: true } : {}),
+      ...(note ? { reason: note } : {})
+    })
+  ) {
     return
   }
 
@@ -378,6 +388,7 @@ export async function answerApproval(
     all,
     choice,
     ...(request.requestId ? { request_id: request.requestId } : {}),
+    ...(note ? { reason: note } : {}),
     session_id: request.sessionId ?? undefined
   }
 

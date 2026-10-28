@@ -61,6 +61,7 @@ import { ModelSettings, ModelSettingsSkeleton } from './model-settings'
 import { OnboardingSettings } from './onboarding-settings'
 import { EmptyState, ListRow, SettingsContent, SettingsSkeleton, ToggleRow } from './primitives'
 import { SettingsProfileScope } from './profile-scope'
+import { IslandSettings } from './island-settings'
 import { QuickEntrySettings } from './quick-entry-settings'
 import { RepoScanSetting } from './repo-scan-setting'
 import { SETTING_IDS, settingElementId } from './settings-manifest'
@@ -522,6 +523,7 @@ function ConfigSettingsInner({
             onChange={setAlwaysExternalLinks}
           />
           <QuickEntrySettings />
+          <IslandSettings />
           <OnboardingSettings />
         </>
       )}
