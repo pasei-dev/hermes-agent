@@ -198,6 +198,21 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // the other end of `revealSession`.
   island: {
     drag: (delta: { dx: number; dy: number }) => ipcRenderer.send('hermes:island:drag', delta),
+    // Where the painted pill sits inside the window and how big it is. Main
+    // clamps and snaps THAT rectangle, because the window is deliberately much
+    // larger than the island and its edges are not the visible ones.
+    surface: (rect: { height: number; offsetX: number; offsetY: number; width: number }) =>
+      ipcRenderer.send('hermes:island:surface', rect),
+    // Main → island renderer: the drag was corrected by this much, so the pill
+    // can spring from where the pointer asked for into where it settled.
+    onSettle: (callback: (correction: { dx: number; dy: number }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, correction: { dx: number; dy: number }) =>
+        callback(correction)
+
+      ipcRenderer.on('hermes:island:settle', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:settle', listener)
+    },
     // The island is a full renderer, so it boots the whole app shell first and
     // paints the app's own boot screen until this arrives. Main keeps the window
     // hidden until then, or every launch would flash a dark panel at the top of

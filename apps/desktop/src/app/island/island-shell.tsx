@@ -33,6 +33,7 @@ import { useNavigate } from 'react-router'
 import { WiredPane } from '@/app/contrib/wiring'
 import { sessionRoute } from '@/app/routes'
 import { Button } from '@/components/ui/button'
+import { prefersReducedMotion } from '@/hooks/use-media-query'
 import { isRtlLocale, useI18n } from '@/i18n'
 import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -141,6 +142,7 @@ export function IslandShell() {
   }, [])
 
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<null | { moved: boolean; startX: number; startY: number; x: number; y: number }>(null)
@@ -442,6 +444,49 @@ export function IslandShell() {
 
   useIslandClickThrough(rootRef)
 
+  // Where the pill sits inside the window, measured rather than derived: the
+  // shape changes per stage and mid-animation, so a number calculated here would
+  // drift from the CSS the user is looking at. Main clamps and snaps this rect.
+  const reportSurface = useCallback(() => {
+    const surfaceEl = surfaceRef.current
+    const rootEl = rootRef.current
+
+    if (!surfaceEl || !rootEl) {
+      return
+    }
+
+    const rect = surfaceEl.getBoundingClientRect()
+    const origin = rootEl.getBoundingClientRect()
+
+    window.hermesDesktop?.island?.surface?.({
+      height: rect.height,
+      offsetX: rect.left - origin.left,
+      offsetY: rect.top - origin.top,
+      width: rect.width
+    })
+  }, [])
+
+  useEffect(() => {
+    reportSurface()
+  }, [reportSurface, shape.height, shape.width])
+
+  // The window is snapped by main in one jump; the pill springs from where the
+  // pointer asked for into where it settled, so the jump reads as a settle.
+  useEffect(() => {
+    return window.hermesDesktop?.island?.onSettle?.(correction => {
+      const surfaceEl = surfaceRef.current
+
+      if (!surfaceEl || (correction.dx === 0 && correction.dy === 0) || prefersReducedMotion()) {
+        return
+      }
+
+      surfaceEl.animate(
+        [{ transform: `translate(${-correction.dx}px, ${-correction.dy}px)` }, { transform: 'none' }],
+        { duration: 300, easing: SPRING }
+      )
+    })
+  }, [])
+
   // Main holds the window hidden until this lands: the island is a full renderer,
   // so its first paint is the app's boot screen.
   useEffect(() => {
@@ -633,8 +678,11 @@ export function IslandShell() {
       event.preventDefault()
       dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, x: event.screenX, y: event.screenY }
       event.currentTarget.setPointerCapture(event.pointerId)
+      // Main clamps the pill, not the window: it needs the pill's rect before
+      // the first delta, not after it.
+      reportSurface()
     },
-    []
+    [reportSurface]
   )
 
   const onPointerMove = useCallback(
@@ -755,6 +803,7 @@ export function IslandShell() {
         onPointerLeave={() => setHovered(false)}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
+        ref={surfaceRef}
         style={{
           // A docked island squares the corners against its edge: a capsule
           // floating 30px from the screen edge is not attached to it.

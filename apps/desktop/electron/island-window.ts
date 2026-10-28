@@ -27,27 +27,19 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 
 import {
+  ISLAND_WINDOW_WIDTH,
   type IslandDisplay,
-  type IslandDock,
-  islandDock,
   islandDragTarget,
   islandHasNotch,
-  islandSnapOrigin,
+  type IslandRect,
+  type IslandSurfaceRect,
   islandWindowBounds
 } from './island-geometry'
-import type { IslandOrigin } from './island-settings'
 import { buildIslandWindowUrl } from './island-url'
 import { attachRendererConsoleCapture } from './renderer-log'
 import { installWindowRendererLifecycle } from './window-renderer-lifecycle'
 
-/** The edge the island is currently attached to, and the way it says so. */
-export interface IslandDockReport {
-  dock: IslandDock
-}
-
 export interface IslandWindowOptions {
-  /** Whether the app's own window has the keyboard right now. */
-  isMainFocused?: () => boolean
   /** The display the island belongs on: the one the app window is on, else the
    *  primary. Not the cursor — a pointer resting on a second monitor at boot
    *  must not park the island there for the life of the session. */
@@ -57,39 +49,13 @@ export interface IslandWindowOptions {
   loadWindowUrl: (window: BrowserWindow, url: string, label: string) => void
   log: (message: string) => void
   /** Re-open the app window on a session the island points at. */
+  openSession: (sessionId: string) => void
   platform: string
   preloadPath: string
   profile?: null | string
-  /** Where the floating pill was last parked (null: never moved). */
-  readOrigin?: () => IslandOrigin | null
   rendererIndex: () => string
   webPreferences: (preloadPath: string) => Electron.WebPreferences
-  /** Remember a parked position after the drag settles. */
-  writeOrigin?: (origin: IslandOrigin) => void
   wireWindow: (window: BrowserWindow) => void
-}
-
-/**
- * A saved position, but only when it still lands on the display the island is
- * anchored to. A point remembered on the monitor that has since been unplugged
- * would otherwise park the pill off-screen, where it cannot be dragged back.
- */
-export function parkedOriginOn(display: IslandDisplay, origin: IslandOrigin | null): IslandOrigin | null {
-  if (!origin) {
-    return null
-  }
-
-  const under = screen.getDisplayMatching({ height: 200, width: 320, x: origin.x, y: origin.y })
-
-  // `IslandDisplay` is the structural subset the geometry needs, so it carries no
-  // id: two displays cannot share a work-area origin, which makes this the
-  // comparison that survives both shapes.
-  const same =
-    under.workArea.x === display.workArea.x &&
-    under.workArea.y === display.workArea.y &&
-    under.workArea.width === display.workArea.width
-
-  return same ? origin : null
 }
 
 /** Mouse passthrough `forward` is macOS/Windows only (see the pet overlay). */
@@ -97,157 +63,39 @@ function forwardable(platform: string): boolean {
   return platform === 'darwin' || platform === 'win32'
 }
 
-const displayUnder = (bounds: Electron.Rectangle): IslandDisplay => {
-  // Largest overlap wins. Electron's own matcher answers the primary display
-  // when a window overlaps none of them — a seam wider than the island would
-  // then teleport it across the desk mid-drag.
-  let best: Electron.Display | null = null
-  let bestArea = 0
-
-  for (const candidate of screen.getAllDisplays()) {
-    const overlapX =
-      Math.min(bounds.x + bounds.width, candidate.bounds.x + candidate.bounds.width) -
-      Math.max(bounds.x, candidate.bounds.x)
-
-    const overlapY =
-      Math.min(bounds.y + bounds.height, candidate.bounds.y + candidate.bounds.height) -
-      Math.max(bounds.y, candidate.bounds.y)
-
-    const area = Math.max(0, overlapX) * Math.max(0, overlapY)
-
-    if (area > bestArea) {
-      best = candidate
-      bestArea = area
-    }
-  }
-
-  // Nothing overlaps: the nearest display to the window's centre is the one the
-  // user is dragging toward.
-  return (
-    best ??
-    screen.getDisplayNearestPoint({
-      x: Math.round(bounds.x + bounds.width / 2),
-      y: Math.round(bounds.y + bounds.height / 2)
-    })
-  )
-}
-
 function displayFor(win: BrowserWindow | null, anchor: () => IslandDisplay): IslandDisplay {
-  return win && !win.isDestroyed() ? displayUnder(win.getBounds()) : anchor()
+  return win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()) : anchor()
 }
 
 export function createIslandWindowController(options: IslandWindowOptions) {
-  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, platform, profile, rendererIndex } = options
+  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, openSession, platform, profile, rendererIndex } = options
   let window: BrowserWindow | null = null
-  let originTimer: null | ReturnType<typeof setTimeout> = null
-
   /**
-   * The window's frame: the anchor's, unless the user parked the pill somewhere
-   * and that somewhere is still on this display. A notch is never restored — the
-   * housing holds the surface and `movable` is false, so a saved point would
-   * fight the anchor on every launch.
+   * The painted pill, as the renderer measured it. Everything the drag clamps
+   * and snaps is this rectangle: the window is bigger than the island by
+   * design, so clamping its edges would stop the pill more than a hundred
+   * points short of the screen edge it was dragged at.
    */
-  const boundsFor = (display: IslandDisplay) => {
-    const bounds = islandWindowBounds(display, platform)
+  let surface: IslandSurfaceRect | null = null
 
-    if (islandHasNotch(display, platform)) {
-      return bounds
+  /** The surface's rectangle in screen coordinates. Before the renderer has
+   *  measured itself the window IS the surface, which is the safe default. */
+  const surfaceRect = (bounds: IslandRect): IslandRect => {
+    if (!surface || !(surface.width > 0) || !(surface.height > 0)) {
+      return { ...bounds }
     }
 
-    const saved = options.readOrigin?.() ?? null
+    // The renderer is the only side that measures the surface, so a stale or
+    // nonsense offset must not park the window a screen away from the pointer.
+    const offsetX = Math.max(-ISLAND_WINDOW_WIDTH, Math.min(ISLAND_WINDOW_WIDTH, surface.offsetX))
+    const offsetY = Math.max(-ISLAND_WINDOW_WIDTH, Math.min(ISLAND_WINDOW_WIDTH, surface.offsetY))
 
-    if (!saved) {
-      return bounds
+    return {
+      height: surface.height,
+      width: surface.width,
+      x: bounds.x + offsetX,
+      y: bounds.y + offsetY
     }
-
-    // The saved point may be on another display: where the island sits is the
-    // user's desk, not the app window's, so the drop's own display is restored
-    // rather than re-homing the pill on the anchor's.
-    const under = screen.getDisplayMatching({ height: 40, width: 320, x: saved.x, y: saved.y })
-    const parked = parkedOriginOn(under, saved)
-
-    return parked ? { ...islandWindowBounds(under, platform), x: parked.x, y: parked.y } : bounds
-  }
-
-  /**
-   * Tell the renderer which edge it is attached to: the surface squares the
-   * corners against that edge and hugs it, so a docked island reads as part of
-   * the screen rather than as a pill that happens to be near it.
-   */
-  const announceDock = () => {
-    if (!window || window.isDestroyed()) {
-      return
-    }
-
-    const bounds = window.getBounds()
-    const display = screen.getDisplayMatching(bounds)
-
-    // The whole desktop decides the sides: the display under the window decides
-    // the top anchor and the work area's floor.
-    const dock = islandDock({
-      anchor: islandWindowBounds(display, platform),
-      bounds,
-      display,
-      displays: screen.getAllDisplays()
-    })
-
-    window.webContents.send('hermes:island:dock', dock)
-  }
-
-  /**
-   * Whether the app window has the keyboard. The island is a notification, not a
-   * HUD: when the user is reading Hermes itself there is nothing to notify them
-   * of, so it collapses into the notch instead of sitting over the app.
-   */
-  const announceMainFocus = () => {
-    if (!window || window.isDestroyed()) {
-      return
-    }
-
-    window.webContents.send('hermes:island:main-focus', options.isMainFocused?.() === true)
-  }
-
-  /**
-   * Write the parked position once the drag settles. `dragBy` fires per pointer
-   * move, and a file write per move is hundreds of them for one gesture.
-   */
-  const rememberOrigin = () => {
-    if (!options.writeOrigin) {
-      return
-    }
-
-    if (originTimer) {
-      clearTimeout(originTimer)
-    }
-
-    originTimer = setTimeout(() => {
-      originTimer = null
-
-      if (!window || window.isDestroyed()) {
-        return
-      }
-
-      const bounds = window.getBounds()
-      const display = displayUnder(bounds)
-
-      // Attach on release: near an edge the island goes flush to it, so a
-      // dropped pill is docked rather than left a few pixels off a corner. The
-      // seams between displays are not edges, so a drop there stays put — the
-      // window moves only when an edge actually claimed it.
-      const origin = islandSnapOrigin({
-        anchor: islandWindowBounds(display, platform),
-        bounds,
-        display,
-        displays: screen.getAllDisplays()
-      })
-
-      if (origin.x !== bounds.x || origin.y !== bounds.y) {
-        window.setPosition(origin.x, origin.y)
-      }
-
-      announceDock()
-      options.writeOrigin?.(origin)
-    }, 400)
   }
 
   const spawn = (): BrowserWindow => {
@@ -257,7 +105,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
     const display = anchorDisplay()
     const notched = islandHasNotch(display, platform)
-    const bounds = boundsFor(display)
+    const bounds = islandWindowBounds(display, platform)
 
     const next = new BrowserWindow({
       ...bounds,
@@ -385,6 +233,10 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         window.focus()
       }
     },
+    /** The renderer's measurement of the painted pill: what the drag moves. */
+    setSurface(rect: IslandSurfaceRect) {
+      surface = rect
+    },
     /** Move the panel by the pointer's own travel. The renderer is the only side
      *  that sees the press, so the window has to follow it exactly or the
      *  surface drifts away from the cursor holding it. */
@@ -394,20 +246,33 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       }
 
       const bounds = window.getBounds()
+      const current = surfaceRect(bounds)
 
-      // The display mostly under the window holds the y ceiling; the rest of the
-      // desktop is the horizontal range, so a drag crosses a seam instead of
-      // stopping dead at it.
-      const next = islandDragTarget({
-        bounds,
-        display: displayUnder(window.getBounds()),
-        displays: screen.getAllDisplays(),
+      // What the surface would occupy if nothing were in its way, and where it
+      // is allowed to settle: clamped to the displays, then snapped to an edge.
+      const settled = islandDragTarget({
         dx: delta.dx,
-        dy: delta.dy
+        dy: delta.dy,
+        displays: screen.getAllDisplays(),
+        platform,
+        surface: current
       })
 
-      window.setPosition(next.x, next.y)
-      rememberOrigin()
+      window.setPosition(
+        Math.round(settled.x - (current.x - bounds.x)),
+        Math.round(settled.y - (current.y - bounds.y))
+      )
+
+      // The window jumps; the surface is told how far it was corrected so it can
+      // spring from where the pointer asked for into the place it settled.
+      const correction = {
+        dx: Math.round(settled.x - (current.x + delta.dx)),
+        dy: Math.round(settled.y - (current.y + delta.dy))
+      }
+
+      if ((correction.dx !== 0 || correction.dy !== 0) && !window.webContents.isDestroyed()) {
+        window.webContents.send('hermes:island:settle', correction)
+      }
     },
     /** Follow a display topology change — the island is pinned to one display. */
     reposition() {
@@ -417,35 +282,62 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       const display = displayFor(window, anchorDisplay)
 
-      window.setBounds(boundsFor(display))
+      window.setBounds(islandWindowBounds(display, platform))
       window.setAlwaysOnTop(
         true,
         islandHasNotch(display, platform) ? 'status' : isMac ? 'floating' : 'screen-saver'
       )
-      announceDock()
     },
-    announceDock,
-    announceMainFocus,
     dispose() {
       const target = window
       window = null
+      surface = null
 
       if (target && !target.isDestroyed()) {
         target.destroy()
       }
-    }
+    },
+    openSession
   }
 }
 
 export type IslandWindowController = ReturnType<typeof createIslandWindowController>
 
+/**
+ * The renderer's surface measurement, or nothing.
+ *
+ * It arrives over IPC from the one side that can measure the pill, so a missing
+ * or non-numeric field means the message is not a measurement: drop it and keep
+ * the last good one rather than moving the window to `NaN`.
+ */
+function readSurfaceRect(raw: unknown): IslandSurfaceRect | null {
+  const value = raw as Partial<Record<keyof IslandSurfaceRect, unknown>> | null
+
+  const rect = {
+    height: Number(value?.height),
+    offsetX: Number(value?.offsetX),
+    offsetY: Number(value?.offsetY),
+    width: Number(value?.width)
+  }
+
+  if (!Object.values(rect).every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) {
+    return null
+  }
+
+  return rect
+}
+
 export function registerIslandIpc(getController: () => IslandWindowController | null) {
   ipcMain.on('hermes:island:ready', () => {
     getController()?.markReady()
-    // The renderer boots with no idea where the window was restored, so the dock
-    // is announced with the first paint or a docked island loses its squared edge.
-    getController()?.announceDock()
-    getController()?.announceMainFocus()
+  })
+
+  ipcMain.on('hermes:island:surface', (_event, raw) => {
+    const surface = readSurfaceRect(raw)
+
+    if (surface) {
+      getController()?.setSurface(surface)
+    }
   })
 
   ipcMain.on('hermes:island:interactive', (_event, interactive) => {
@@ -465,4 +357,9 @@ export function registerIslandIpc(getController: () => IslandWindowController | 
     }
   })
 
+  ipcMain.on('hermes:island:open-session', (_event, sessionId) => {
+    if (typeof sessionId === 'string' && sessionId.trim()) {
+      getController()?.openSession(sessionId.trim())
+    }
+  })
 }

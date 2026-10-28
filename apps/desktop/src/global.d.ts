@@ -191,6 +191,12 @@ declare global {
       island?: {
         // Renderer → main: the pointer is dragging the pill, move the window.
         drag: (delta: { dx: number; dy: number }) => void
+        // Renderer → main: where the painted pill sits in the window and how
+        // big it is, so main clamps the shape the user actually sees.
+        surface: (rect: { height: number; offsetX: number; offsetY: number; width: number }) => void
+        // Main → island renderer: the drag was corrected by this much — the
+        // pill springs from the pointer's position into the settled one.
+        onSettle: (callback: (correction: { dx: number; dy: number }) => void) => () => void
         // Renderer → main: the island shell is mounted and painted, show it.
         ready: () => void
         setInteractive: (interactive: boolean) => void
