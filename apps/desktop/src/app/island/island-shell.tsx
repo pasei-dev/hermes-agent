@@ -49,7 +49,7 @@ import { $unreadFinishedMarkers, ackStoredSessionId } from '@/store/session-unre
 import { islandQueueView } from './island-actions'
 import { $islandActivityBySession, type IslandActivity } from './island-activity'
 import { useIslandClickThrough } from './island-click-through'
-import { type IslandRow, islandRows, type IslandStage, islandStage } from './island-model'
+import { islandAnsweredNotice, type IslandRow, islandRows, type IslandStage, islandStage } from './island-model'
 import {
   type IslandTranscriptRow,
   readIslandTranscript,
@@ -194,10 +194,23 @@ export function IslandShell() {
   const clarifies = useStore($clarifyRequests)
   const unread = useStore($unreadFinishedMarkers)
 
+  // The finished-turn card closes on its own, and this is the half of that the
+  // store cannot do: `ackStoredSessionId` no-ops while the session's row is not
+  // loaded, so a marker it could not clear held the island open forever.
+  const [dismissedAnswerId, setDismissedAnswerId] = useState<null | string>(null)
+
+  // The store is keyed by profile, and its values are the finished session ids:
+  // reading the KEYS handed this card a profile name, which no row matches and
+  // no acknowledge can clear — the island stayed open on a marker that was never
+  // a session.
   const answeredId =
     top || waitingRows.length > 0
       ? null
-      : (Object.keys(unread).find(id => !rows.some(row => row.id === id)) ?? null)
+      : islandAnsweredNotice({
+          dismissed: dismissedAnswerId,
+          markerIds: Object.values(unread).flat(),
+          rowIds: rows.map(row => row.id)
+        })
 
   // A finished session is rarely in `titles` (that map covers only the waiting
   // and the working), so its card fell back to "Waiting on your answer" — a
@@ -253,7 +266,10 @@ export function IslandShell() {
     // Six seconds: long enough to read one line, short enough that the island is
     // gone before the user looks up. Focused, there is nothing to tell them —
     // they are reading the app itself — so it clears at once.
-    const timer = setTimeout(() => ackStoredSessionId(answeredId), mainFocused ? 0 : 6_000)
+    const timer = setTimeout(() => {
+      setDismissedAnswerId(answeredId)
+      ackStoredSessionId(answeredId)
+    }, mainFocused ? 0 : 6_000)
 
     return () => clearTimeout(timer)
   }, [answeredId, mainFocused])
@@ -421,11 +437,26 @@ export function IslandShell() {
     window.hermesDesktop?.island?.ready?.()
   }, [])
 
-  const openSession = useCallback((id: string) => {
-    window.hermesDesktop?.island?.openSession?.(id)
-    setExpanded(false)
-    setFocused(null)
-  }, [])
+  // Point the app at a session, never at a second pane or a new one: main fronts
+  // the Hermes window and the app selects a pane it already has. This is the
+  // island's only way to bring the app forward, so nothing else here calls it.
+  const revealSession = useCallback(
+    (id: string) => {
+      if (!id) {
+        return
+      }
+
+      // Asking for it is the acknowledgement: the notice has been read.
+      if (id === answeredId) {
+        setDismissedAnswerId(id)
+      }
+
+      window.hermesDesktop?.island?.revealSession?.(id)
+      setExpanded(false)
+      setFocused(null)
+    },
+    [answeredId]
+  )
 
   const refreshTranscript = useCallback(async (id: string) => {
     try {
@@ -585,6 +616,10 @@ export function IslandShell() {
         return
       }
 
+      // A press on the pill is a drag or a toggle, never a request for the
+      // keyboard: without this the click activates Hermes and the app window
+      // comes forward over whatever the user was doing.
+      event.preventDefault()
       dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, x: event.screenX, y: event.screenY }
       event.currentTarget.setPointerCapture(event.pointerId)
     },
@@ -783,7 +818,7 @@ export function IslandShell() {
                 <Button
                   aria-label={t.island.open}
                   className={GLYPH}
-                  onClick={() => openSession(focused?.id ?? top?.id ?? '')}
+                  onClick={() => revealSession(focused?.id ?? top?.id ?? '')}
                   size="icon-xs"
                   title={t.island.open}
                   variant="ghost"
@@ -948,8 +983,18 @@ export function IslandShell() {
                     </Button>
                   </>
                 ) : (
-                  <Button onClick={() => openSession(cardRow.id)} size="xs" variant="secondary">
-                    {t.island.open}
+                  /* The one thing on the island allowed to bring Hermes forward,
+                     and it opens nothing: main fronts the window and the app
+                     selects a pane it already has. */
+                  <Button
+                    aria-label={t.island.open}
+                    className={GLYPH}
+                    onClick={() => revealSession(cardRow.id)}
+                    size="icon-xs"
+                    title={t.island.open}
+                    variant="ghost"
+                  >
+                    <ArrowUpRight />
                   </Button>
                 )}
               </div>

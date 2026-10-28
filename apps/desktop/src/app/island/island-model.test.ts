@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { islandCountLabel, islandRows, islandStage } from './island-model'
+import { islandAnsweredNotice, islandCountLabel, islandRows, islandStage } from './island-model'
 
 const TITLES = { 's-a': 'Refactor the decoder', 's-b': 'Buchla notes', 's-c': 'Mix review' }
 
@@ -83,5 +83,25 @@ describe('islandCountLabel', () => {
     expect(islandCountLabel('attention', 2)).toEqual({ count: 2, kind: 'attention' })
     expect(islandCountLabel('pill', 3)).toEqual({ count: 3, kind: 'running' })
     expect(islandCountLabel('hidden', 0)).toBeNull()
+  })
+})
+
+describe('islandAnsweredNotice', () => {
+  it('shows a finished marker that is not already a row', () => {
+    expect(islandAnsweredNotice({ dismissed: null, markerIds: ['s-a'], rowIds: [] })).toBe('s-a')
+  })
+
+  it('skips a marker whose session the list already shows', () => {
+    expect(islandAnsweredNotice({ dismissed: null, markerIds: ['s-a'], rowIds: ['s-a'] })).toBeNull()
+  })
+
+  // The store acknowledge no-ops while the session row is not loaded, so the
+  // marker outlives the card. The dismissal is what closes it, and it must hold
+  // for that marker alone.
+  it('holds a dismissed marker down and re-arms for the next one', () => {
+    const down = { dismissed: 's-a', markerIds: ['s-a'], rowIds: [] }
+
+    expect(islandAnsweredNotice(down)).toBeNull()
+    expect(islandAnsweredNotice({ ...down, markerIds: ['s-b', 's-a'] })).toBe('s-b')
   })
 })

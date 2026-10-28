@@ -12710,6 +12710,22 @@ function applyIslandSettings(settings: IslandSettings): IslandStatus {
   return islandStatus()
 }
 
+/**
+ * The island's one way to bring Hermes forward: front the app window, then hand
+ * it the session it named. The app selects a pane it already has and does
+ * nothing when it has none, so a reveal never spends a second pane or session.
+ */
+function revealIslandSession(sessionId: string): void {
+  const target = mainWindow as BrowserWindow | null
+
+  if (!target || target.isDestroyed()) {
+    return
+  }
+
+  focusWindow(target)
+  target.webContents.send('hermes:island:reveal-session', sessionId)
+}
+
 // The Dynamic Island — see island-window.ts. A full app renderer with its own
 // gateway (the same thing the HUD is), painted as a black pill at the top of the
 // screen: in the camera housing itself on a notched Mac, a floating pill
@@ -12735,18 +12751,10 @@ const islandController = createIslandWindowController({
   },
   loadWindowUrl,
   log: rememberLog,
-  openSession: sessionId => {
-    const target = mainWindow as BrowserWindow | null
-
-    if (!target || target.isDestroyed()) {
-      return
-    }
-
-    // Bring the app forward on that session: the island's row click is the
-    // user asking for the full surface, the opposite of answering in place.
-    focusWindow(target)
-    target.webContents.send('hermes:island:open-session', sessionId)
-  },
+  // Kept as the one entrance `island-window.ts` registers; it reveals rather
+  // than opens, so the only path out of the island is the reveal below. A press
+  // on the pill itself must never reach it.
+  openSession: revealIslandSession,
   platform: process.platform,
   preloadPath: PRELOAD_PATH,
   profile: primaryProfileKey(),
@@ -12761,6 +12769,12 @@ const islandController = createIslandWindowController({
 })
 
 registerIslandIpc(() => islandController)
+
+ipcMain.on('hermes:island:reveal-session', (_event, sessionId) => {
+  if (typeof sessionId === 'string' && sessionId.trim()) {
+    revealIslandSession(sessionId.trim())
+  }
+})
 
 // Focus is the island's quiet signal. Announced on every window change rather
 // than on the app window alone: the island's own window takes the keyboard when

@@ -205,7 +205,9 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     ready: () => ipcRenderer.send('hermes:island:ready'),
     setInteractive: (interactive: boolean) => ipcRenderer.send('hermes:island:interactive', interactive),
     setFocusable: (focusable: boolean) => ipcRenderer.send('hermes:island:focusable', focusable),
-    openSession: (sessionId: string) => ipcRenderer.send('hermes:island:open-session', sessionId),
+    // The island's one request to bring Hermes forward. It names a session; the
+    // app decides whether that session already has a pane to select.
+    revealSession: (sessionId: string) => ipcRenderer.send('hermes:island:reveal-session', sessionId),
     // Which edge the window is attached to, as main sees it: the surface squares
     // the corners on that side and hugs it.
     onDock: (callback: (dock: string) => void) => {
@@ -222,11 +224,13 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
 
       return () => ipcRenderer.removeListener('hermes:island:main-focus', listener)
     },
-    onOpenSession: (callback: (sessionId: string) => void) => {
+    // App window side of the island's reveal: front the window (main does that)
+    // and select the session's pane if it already has one.
+    onRevealSession: (callback: (sessionId: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
-      ipcRenderer.on('hermes:island:open-session', listener)
+      ipcRenderer.on('hermes:island:reveal-session', listener)
 
-      return () => ipcRenderer.removeListener('hermes:island:open-session', listener)
+      return () => ipcRenderer.removeListener('hermes:island:reveal-session', listener)
     },
     // Settings live in MAIN (it owns the window, the anchor display and the
     // approval chord), so these both round-trip through it.

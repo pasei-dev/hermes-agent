@@ -195,10 +195,12 @@ declare global {
         ready: () => void
         setInteractive: (interactive: boolean) => void
         setFocusable: (focusable: boolean) => void
-        // Island → main: bring the app window up on this session.
-        openSession: (sessionId: string) => void
-        // App window side: main hands it the session the island pointed at.
-        onOpenSession: (callback: (sessionId: string) => void) => () => void
+        // Island → main: front the Hermes window and let the app select the pane
+        // it already has for this session. Never opens a second one.
+        revealSession: (sessionId: string) => void
+        // App window side: the window is already forward; select the session's
+        // pane if it has one, and do nothing else.
+        onRevealSession: (callback: (sessionId: string) => void) => () => void
         // Settings live in main — it owns the window, the anchor display and the
         // approval chord — so both directions round-trip through it and the reply
         // is the state that actually resulted.

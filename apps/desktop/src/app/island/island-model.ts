@@ -90,6 +90,27 @@ export function islandStage(input: {
   return input.workingCount > 0 ? 'pill' : 'hidden'
 }
 
+export interface IslandNoticeInput {
+  /** The marker the user already dismissed in this island window. */
+  dismissed: null | string
+  /** Finished-turn markers, in the order the store reports them. */
+  markerIds: readonly string[]
+  /** Sessions the island already lists as waiting or working. */
+  rowIds: readonly string[]
+}
+
+/**
+ * The finished-turn notice: the first marker that is not already a row, unless
+ * the user has dismissed it. A dismissal is keyed by marker id, so the next
+ * finished turn re-arms the card while this one stays gone — the island cannot
+ * rely on the store to clear a marker whose session row is not loaded.
+ */
+export function islandAnsweredNotice(input: IslandNoticeInput): null | string {
+  const fresh = input.markerIds.find(id => !input.rowIds.includes(id))
+
+  return fresh && fresh !== input.dismissed ? fresh : null
+}
+
 /** The one line the pill shows: what needs the user, else what is running. */
 export function islandCountLabel(stage: IslandStage, count: number): { kind: 'attention' | 'running'; count: number } | null {
   if (stage === 'attention') {

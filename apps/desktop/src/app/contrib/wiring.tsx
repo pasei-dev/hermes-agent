@@ -108,7 +108,7 @@ import { useGatewayRequest } from '../gateway/hooks/use-gateway-request'
 import { useHermesConfigRecord } from '../hooks/use-config-record'
 import { useKeybinds } from '../hooks/use-keybinds'
 import { useHudHandoff } from '../hud/handoff'
-import { useIslandOpenRequest } from '../island/use-island-open-request'
+import { useIslandRevealSession } from '../island/use-island-reveal-session'
 import { ModelPickerOverlay } from '../model-picker-overlay'
 import { ModelVisibilityOverlay } from '../model-visibility-overlay'
 import { mainChatOccupied, openSession, openSessionFromPicker } from '../open-session'
@@ -771,8 +771,9 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // Leaving HUD mode hands this window the session back (see hud/handoff).
   useHudHandoff({ navigate, resumeSession })
 
-  // A row clicked in the Dynamic Island points at a chat that belongs here.
-  useIslandOpenRequest(navigate)
+  // The island's card points at a chat that belongs here. It selects a pane the
+  // app already has; it never opens one.
+  useIslandRevealSession(navigate)
 
   // Clear a failed turn's red error banner. Errors are renderer-local (never
   // persisted): a bare error placeholder is dropped entirely; a partial-output
