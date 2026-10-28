@@ -31,7 +31,7 @@ const SESSION_HEIGHT = 546
 const MAX_EXPANDED_HEIGHT = 420
 const ROW_HEIGHT = 26
 /** The list's search field, its divider and its breathing room. */
-const SEARCH_FIELD_HEIGHT = 44
+// The search field is an overlay now, not a band: it takes no height of its own.
 const ATTENTION_CARD_HEIGHT = 104
 const HEADER_HEIGHT = 34
 const SURFACE_PADDING = 12
@@ -133,7 +133,7 @@ export function islandShape(input: {
 
   const height = Math.min(
     MAX_EXPANDED_HEIGHT,
-    HEADER_HEIGHT + listHeight + SEARCH_FIELD_HEIGHT + SURFACE_PADDING * 2
+    HEADER_HEIGHT + listHeight + SURFACE_PADDING * 2
   )
 
   return {

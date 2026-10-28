@@ -164,10 +164,12 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       if (dx !== 0 || dy !== 0) {
         window.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
+      }
 
-        if (!window.webContents.isDestroyed()) {
-          window.webContents.send('hermes:island:settle', { dx, dy })
-        }
+      // Sent even at zero: a release that landed where it was dropped still gets
+      // the dip, which is what makes letting go feel like something happened.
+      if (!window.webContents.isDestroyed()) {
+        window.webContents.send('hermes:island:settle', { dx, dy })
       }
 
       announceDock()

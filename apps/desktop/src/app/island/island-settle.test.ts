@@ -23,7 +23,9 @@ describe('islandSettleOffset', () => {
 
 describe('islandSettleTransform', () => {
   it('paints the correction with the dip while the snap is in flight', () => {
-    expect(islandSettleTransform({ dx: 6, dy: -2 })).toBe(`translate(6px, -2px) scale(${SETTLE_SCALE})`)
+    // Minus the correction: main already moved the window by it, so the surface
+    // starts where the pointer let go.
+    expect(islandSettleTransform({ dx: 6, dy: -2 })).toBe(`translate(-6px, 2px) scale(${SETTLE_SCALE})`)
   })
 
   it('is at rest with no correction', () => {

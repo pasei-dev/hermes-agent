@@ -51,7 +51,10 @@ export function islandSettleTransform(settle: IslandSettle | null, reducedMotion
     return 'none'
   }
 
-  return `translate(${settle.dx}px, ${settle.dy}px) scale(${SETTLE_SCALE})`
+  // Counter the jump, not repeat it: main has already moved the window by
+  // (+dx, +dy), the surface rides that move, and it starts from where the pointer
+  // let go — so the first painted frame is at minus the correction.
+  return `translate(${-settle.dx}px, ${-settle.dy}px) scale(${SETTLE_SCALE})`
 }
 
 /** Whether the viewer asked for less motion. Guarded: a renderer without a

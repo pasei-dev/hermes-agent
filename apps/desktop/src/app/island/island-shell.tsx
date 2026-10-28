@@ -622,6 +622,7 @@ export function IslandShell() {
       runtimeRef.current = null
       setFocused({ id: row.id, title: row.title })
       setExpanded(false)
+      setQuery('')
       // The chat routes read the routed session, so opening one in place is a
       // navigation: the same view the app shows, pointed at this session.
       navigate(sessionRoute(row.id))
@@ -747,6 +748,9 @@ export function IslandShell() {
     setFocused(null)
     setTranscript([])
     setAnswerOpen(false)
+    // An invisible filter that survives the close swallows the next Escape and
+    // makes the next list look empty for no visible reason.
+    setQuery('')
   }, [])
 
   const onSurfaceBlur = useCallback(
@@ -1302,7 +1306,10 @@ export function IslandShell() {
                   </div>
                 ) : null}
 
-                <div className="h-full overflow-y-auto">
+                {/* The field floats over the list, so the list starts below it
+                    while it is up: otherwise the first match is behind it and
+                    unclickable. */}
+                <div className="h-full overflow-y-auto" style={{ paddingTop: searching ? 30 : 0 }}>
                   {shownRows.length === 0 && recents.length === 0 ? (
                     <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
                   ) : null}

@@ -60,7 +60,9 @@ describe('islandShape', () => {
   it('grows out of the notch as the stage rises, and never shrinks back', () => {
     const pill = islandShape({ notched: true, rows: 2, stage: 'pill' })
     const attention = islandShape({ notched: true, rows: 2, stage: 'attention' })
-    const expanded = islandShape({ notched: true, rows: 2, stage: 'expanded' })
+    // A two-row list is shorter than a card, and that is allowed: the list earns
+    // its height from rows, the card from content.
+    const expanded = islandShape({ notched: true, rows: 8, stage: 'expanded' })
 
     expect(pill.width).toBeGreaterThan(NOTCH_WIDTH)
     expect(attention.height).toBeGreaterThan(pill.height)
