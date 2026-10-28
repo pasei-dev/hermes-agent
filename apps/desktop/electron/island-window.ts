@@ -149,7 +149,10 @@ export function createIslandWindowController(options: IslandWindowOptions) {
     // A notched display's pill is drawn OVER the menu bar band, because that is
     // where the housing is: `floating` sits below it, and the pill would be
     // clipped to the work area — a black bar under the notch instead of in it.
-    next.setAlwaysOnTop(true, notched ? 'status' : isMac ? 'floating' : 'screen-saver')
+    // 'screen-saver' is above the menu bar and the status items: at 'floating' or
+    // 'status' the island paints behind the macOS menu bar, which reads as the
+    // pill being cut in half at the top of the screen.
+    next.setAlwaysOnTop(true, 'screen-saver')
     next.setHiddenInMissionControl?.(true)
 
     // Start click-through from MAIN: a transparent window that is slow to load,
@@ -282,10 +285,9 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       const display = displayFor(window, anchorDisplay)
 
       window.setBounds(islandWindowBounds(display, platform))
-      window.setAlwaysOnTop(
-        true,
-        islandHasNotch(display, platform) ? 'status' : isMac ? 'floating' : 'screen-saver'
-      )
+      // Same level as at creation, or a display change drops it back behind the
+      // menu bar.
+      window.setAlwaysOnTop(true, 'screen-saver')
     },
     dispose() {
       const target = window

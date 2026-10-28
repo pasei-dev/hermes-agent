@@ -32,6 +32,7 @@ import { useNavigate } from 'react-router'
 
 import { WiredPane } from '@/app/contrib/wiring'
 import { sessionRoute } from '@/app/routes'
+import { MessageTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
 import { prefersReducedMotion } from '@/hooks/use-media-query'
 import { isRtlLocale, useI18n } from '@/i18n'
@@ -244,6 +245,9 @@ export function IslandShell() {
   const answered = Boolean(cardRow && !top && !clarify)
   const [clarifyDraft, setClarifyDraft] = useState('')
   const [answerPreview, setAnswerPreview] = useState<null | string>(null)
+  // The notice opens its own answer in place: the island already fetched the
+  // text, and "open Hermes to read it" is a journey for three paragraphs.
+  const [answerOpen, setAnswerOpen] = useState(false)
 
   // The answer itself: the tail of the transcript, read once per finished
   // session rather than polled — nothing here needs to be live.
@@ -276,16 +280,30 @@ export function IslandShell() {
       return
     }
 
+    // Reading it is the opposite of dismissing it: an expanded answer holds the
+    // card open until it is clicked away or the island loses focus.
+    if (answerOpen) {
+      return
+    }
+
     // Six seconds: long enough to read one line, short enough that the island is
     // gone before the user looks up. Focused, there is nothing to tell them —
     // they are reading the app itself — so it clears at once.
-    const timer = setTimeout(() => {
-      setDismissedAnswerId(answeredId)
-      ackStoredSessionId(answeredId)
-    }, mainFocused ? 0 : 6_000)
+    const timer = setTimeout(
+      () => {
+        setDismissedAnswerId(answeredId)
+        ackStoredSessionId(answeredId)
+      },
+      mainFocused ? 0 : 6_000
+    )
 
     return () => clearTimeout(timer)
-  }, [answeredId, mainFocused])
+  }, [answeredId, answerOpen, mainFocused])
+
+  // A new notice always starts folded.
+  useEffect(() => {
+    setAnswerOpen(false)
+  }, [answeredId])
 
   // A clarify is answered by talking: the same submit the composer uses.
   const answerClarify = useCallback(
@@ -427,7 +445,7 @@ export function IslandShell() {
     // A card that carries a question is taller: two lines of it, up to three
     // answers, and the field. Sized from the kind, so nothing is drawn past the
     // surface's own bottom edge.
-    cardHeight: question ? 184 : answered ? 120 : 104,
+    cardHeight: question ? 184 : answered ? (answerOpen ? 300 : 120) : 104,
     notched,
     // Nothing running, nothing waiting: the pill is a dot in the notch. The richer
     // width is a hover affordance, so the island stops being a strip of text on
@@ -655,6 +673,7 @@ export function IslandShell() {
     setExpanded(false)
     setFocused(null)
     setTranscript([])
+    setAnswerOpen(false)
   }, [])
 
   const onSurfaceBlur = useCallback(
@@ -677,6 +696,11 @@ export function IslandShell() {
   const onPointerLeaveSurface = useCallback(() => {
     setHovered(false)
 
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
+    }
+
     // The open session takes the keyboard, so it closes on blur instead: a
     // pointer that wanders off while you read is not a request to close it.
     if (focused) {
@@ -693,6 +717,12 @@ export function IslandShell() {
     }, 1200)
   }, [collapse, focused])
 
+  // Hovering is asking what is going on: the pill opens the list on its own
+  // after a beat, without a click and without taking the keyboard.
+  const hoverTimer = useRef<null | ReturnType<typeof setTimeout>>(null)
+  const attentionRef = useRef(false)
+  attentionRef.current = Boolean(top)
+
   const onPointerEnterSurface = useCallback(() => {
     setHovered(true)
 
@@ -700,6 +730,20 @@ export function IslandShell() {
       clearTimeout(leaveTimer.current)
       leaveTimer.current = null
     }
+
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current)
+    }
+
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null
+
+      // Never over a card that asks for an answer: expanding the list would put
+      // the approval or the question behind it.
+      if (!attentionRef.current) {
+        setExpanded(true)
+      }
+    }, 260)
   }, [])
 
   // Dragging belongs to the displays without a housing: there the island is the
@@ -1014,10 +1058,30 @@ export function IslandShell() {
                 </>
               ) : (
                 /* A finished turn: its own last words, so the island answers
-                   "what did it say" without opening anything. */
-                <div className="mt-1 line-clamp-3 text-[0.72rem] text-white/80">
-                  {answerPreview || t.island.finished}
-                </div>
+                   "what did it say" without opening anything. A click expands
+                   it to the whole answer, rendered by the same pipeline the
+                   transcript uses — headings, lists and code survive. */
+                answerOpen ? (
+                  <div
+                    className="mt-1 min-h-0 flex-1 overflow-y-auto pr-1 text-[0.72rem] text-white/85"
+                    data-island-answer=""
+                  >
+                    {answerPreview ? (
+                      <MessageTextContent text={answerPreview} />
+                    ) : (
+                      <span className="text-white/60">{t.island.finished}</span>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    className="mt-1 line-clamp-3 w-full text-left text-[0.72rem] text-white/80 hover:text-white"
+                    onClick={() => setAnswerOpen(true)}
+                    title={t.island.open}
+                    type="button"
+                  >
+                    {answerPreview || t.island.finished}
+                  </button>
+                )
               )}
 
               <div className="mt-1.5 flex items-center gap-1.5">
