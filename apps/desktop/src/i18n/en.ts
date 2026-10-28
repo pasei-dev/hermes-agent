@@ -709,6 +709,10 @@ export const en: Translations = {
     cancelQueued: 'Cancel this queued message',
     workers: (count: number) => (count === 1 ? '1 worker' : `${count} workers`),
     newSessionPlaceholder: 'Start a new session…',
+    recent: 'Recent',
+    searchSessions: 'Search sessions…',
+    finished: 'Finished — open it to read the answer',
+    answerPlaceholder: 'Your answer…',
     send: 'Send'
   },
 

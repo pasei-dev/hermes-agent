@@ -50,16 +50,20 @@ describe('islandShape', () => {
     expect(many.height).toBe(420)
   })
 
-  it('gives one open session its own height, one band per line of transcript', () => {
-    const one = islandShape({ notched: true, rows: 1, stage: 'session' })
-    const four = islandShape({ notched: true, rows: 4, stage: 'session' })
-    const many = islandShape({ notched: true, rows: 40, stage: 'session' })
+  it('gives one open session the panel the chat view needs, and the largest one', () => {
+    const session = islandShape({ notched: true, rows: 0, stage: 'session' })
+    const expanded = islandShape({ notched: true, rows: 8, stage: 'expanded' })
+    const attention = islandShape({ notched: true, rows: 0, stage: 'attention' })
 
-    expect(four.height).toBeGreaterThan(one.height)
-    // Never taller than the four lines it shows: a peek that runs to the bottom of the
-    // screen is the window it exists to avoid.
-    expect(many.height).toBe(four.height)
-    expect(four.width).toBeLessThan(islandShape({ notched: true, rows: 4, stage: 'expanded' }).width)
+    // The session stage mounts the app's own chat surface: a panel of a fixed
+    // size, not a band that grows per transcript line.
+    expect(session.height).toBe(546)
+    expect(session.width).toBe(478)
+    expect(session.height).toBeGreaterThan(expanded.height)
+    expect(session.height).toBeGreaterThan(attention.height)
+    // Still inside the island window, or the surface would be clipped by it.
+    expect(session.width).toBeLessThanOrEqual(480)
+    expect(session.height).toBeLessThanOrEqual(560)
   })
 
   it('keeps an empty expanded list short enough to still look like a control', () => {

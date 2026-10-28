@@ -28,20 +28,25 @@ import {
   useRef,
   useState
 } from 'react'
+import { useNavigate } from 'react-router'
 
+import { WiredPane } from '@/app/contrib/wiring'
+import { sessionRoute } from '@/app/routes'
 import { Button } from '@/components/ui/button'
 import { isRtlLocale, useI18n } from '@/i18n'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Square, X } from '@/lib/icons'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $busyInputConfig } from '@/store/busy-input-mode'
+import { $clarifyRequests, RECOMMENDED_LABEL } from '@/store/clarify'
 import { $queuedPromptsBySession } from '@/store/composer-queue'
 import { $gateway } from '@/store/gateway'
 import { sessionApprovalStackSize } from '@/store/prompts'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import { $attentionSessionIds, $sessionStates, $workingSessionIds } from '@/store/session-states'
+import { $unreadFinishedMarkers } from '@/store/session-unread'
 
-import { cancelIslandQueuedPrompt, islandQueueView, stopIslandSession } from './island-actions'
-import { $islandActivityBySession, formatIslandElapsed, type IslandActivity } from './island-activity'
+import { islandQueueView } from './island-actions'
+import { $islandActivityBySession, type IslandActivity } from './island-activity'
 import { useIslandClickThrough } from './island-click-through'
 import { type IslandRow, islandRows, islandStage } from './island-model'
 import {
@@ -62,6 +67,7 @@ const ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover
 const GLYPH = 'text-white/55 hover:text-white'
 /** A press that travels less than this is a click, not a drag. */
 const DRAG_THRESHOLD = 3
+
 /**
  * At rest the pill is a status strip, not a toolbar: its buttons are there when
  * the pointer is, and take no colour from the surface otherwise. Expanded, the
@@ -80,6 +86,7 @@ function islandNotched(): boolean {
 
 export function IslandShell() {
   const { locale, t } = useI18n()
+  const navigate = useNavigate()
   const rtl = isRtlLocale(locale)
   const notched = useMemo(islandNotched, [])
   const sessions = useStore($sessions)
@@ -88,6 +95,8 @@ export function IslandShell() {
 
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState<null | string>(null)
+  /** The list's own search: the island is also the quickest way back in. */
+  const [query, setQuery] = useState('')
 
   // Deny is a two-tap verb on purpose: the first tap opens the reason field, the
   // second denies with whatever is in it. A plain deny stays one tap away for the
@@ -131,11 +140,94 @@ export function IslandShell() {
     [approvalsById, attentionIds, titles, workingIds]
   )
 
+  // Recent sessions, not only the running ones: the island is also the quickest
+  // way back into something you left an hour ago. The field above the list
+  // narrows the same rows, so search costs one filter and no second list.
+  const recents = useMemo(() => {
+    const listed = new Set(rows.map(row => row.id))
+    const needle = query.trim().toLowerCase()
+
+    return sessions
+      .filter(session => !session.archived && !listed.has(session.id))
+      .filter(session => !needle || (session.title ?? '').toLowerCase().includes(needle))
+      .slice(0, 8)
+  }, [query, rows, sessions])
+
   const waitingRows = rows.filter(row => row.state === 'needs-input')
   // An actionable row wins the card: a session waiting on a clarify has nothing
   // to click but "Open", and letting it outrank the approval below it meant the
   // one card on screen could not be answered at all.
   const top = waitingRows.find(row => row.approval) ?? waitingRows[0]
+
+  // Everything else the island should open for, not just approvals: a clarify
+  // question the agent is blocked on, and a turn that finished while the user
+  // was elsewhere. Both already live in the app's stores — the island only had
+  // one of the three wired.
+  const clarifies = useStore($clarifyRequests)
+  const unread = useStore($unreadFinishedMarkers)
+
+  const answeredId =
+    top || waitingRows.length > 0
+      ? null
+      : (Object.keys(unread).find(id => !rows.some(row => row.id === id)) ?? null)
+
+  const cardRow: IslandRow | null =
+    top ?? (answeredId ? { id: answeredId, state: 'working', title: titles[answeredId] ?? '' } : null)
+
+  const clarify = cardRow ? clarifies[cardRow.id] : undefined
+  const question = clarify?.questions[0]
+  const answered = Boolean(cardRow && !top && !clarify)
+  const [clarifyDraft, setClarifyDraft] = useState('')
+  const [answerPreview, setAnswerPreview] = useState<null | string>(null)
+
+  // The answer itself: the tail of the transcript, read once per finished
+  // session rather than polled — nothing here needs to be live.
+  useEffect(() => {
+    if (!answeredId) {
+      setAnswerPreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    void readIslandTranscript(answeredId)
+      .then(lines => {
+        if (!cancelled) {
+          setAnswerPreview(lines.filter(line => line.role === 'assistant').at(-1)?.text ?? null)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [answeredId])
+
+  // A clarify is answered by talking: the same submit the composer uses.
+  const answerClarify = useCallback(
+    async (text: string) => {
+      const gateway = $gateway.get()
+      const target = cardRow?.id
+
+      if (!gateway || !target || !text.trim()) {
+        return
+      }
+
+      setError(null)
+
+      try {
+        await submitToIslandSession(
+          (method, params) => gateway.request(method, params ?? {}) as Promise<never>,
+          target,
+          text.trim()
+        )
+        setClarifyDraft('')
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : String(failure))
+      }
+    },
+    [cardRow?.id]
+  )
 
   // How many approvals this session has parked, so "Approve all" is only offered
   // when there is a second one behind the card to actually resolve.
@@ -158,28 +250,12 @@ export function IslandShell() {
   const busyMode = useStore($busyInputConfig)?.mode ?? null
   const activity = lead ? activities[lead.id] : undefined
 
-  // A clock the pill can trust: `startedAt` anchors the number, and a local tick
-  // is what turns it into text. Only while a turn is live — an idle island with a
-  // timer running is a wakeup per second for nothing.
-  const [clock, setClock] = useState(() => Date.now())
+  // No clock on the island: a timer ticking once a second to say how long
+  // something has been running is a wakeup and a glyph that never changed a
+  // decision. The activity line carries what it is doing instead.
 
-  // Any live turn keeps the clock running, not just the lead's: the expanded list
-  // shows a per-row elapsed, and a frozen timer there would be a lie.
-  const ticking = useMemo(() => Object.values(activities).some(entry => entry.startedAt), [activities])
-
-  useEffect(() => {
-    if (!ticking) {
-      return
-    }
-
-    setClock(Date.now())
-    const timer = setInterval(() => setClock(Date.now()), 1000)
-
-    return () => clearInterval(timer)
-  }, [ticking])
-
-  // Tool, elapsed, plan progress, workers — that reading order, and nothing at
-  // all for a session that has none of them, so callers can fall back to a count.
+  // Tool, plan progress, workers — that reading order, and nothing at all for a
+  // session that has none of them, so callers can fall back to a count.
   const describe = useCallback(
     (own: IslandActivity | undefined): string[] => {
       if (!own) {
@@ -192,10 +268,6 @@ export function IslandShell() {
         parts.push(own.tool)
       }
 
-      if (own.startedAt) {
-        parts.push(formatIslandElapsed(clock - own.startedAt))
-      }
-
       if (own.todoTotal > 0) {
         parts.push(`${own.todoDone}/${own.todoTotal}`)
       }
@@ -206,7 +278,7 @@ export function IslandShell() {
 
       return parts
     },
-    [clock, t]
+    [t]
   )
 
   const activityParts = describe(activity)
@@ -249,27 +321,8 @@ export function IslandShell() {
     return null
   }, [focused?.id, lead?.id, queues, runtimeId])
 
-  const stopTurn = useCallback(async () => {
-    const gateway = $gateway.get()
-
-    if (!gateway || !runtimeId) {
-      return
-    }
-
-    setError(null)
-
-    try {
-      await stopIslandSession(
-        (method, params) => gateway.request(method, params ?? {}) as Promise<never>,
-        runtimeId
-      )
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure))
-    }
-  }, [runtimeId])
-
   const stage = islandStage({
-    attentionCount: waitingRows.length,
+    attentionCount: waitingRows.length + (answeredId ? 1 : 0),
     expanded,
     focused: focused !== null,
     workingCount: runningCount
@@ -317,12 +370,11 @@ export function IslandShell() {
       runtimeRef.current = null
       setFocused({ id: row.id, title: row.title })
       setExpanded(false)
-      setSessionDraft('')
-      setTranscript([])
-      setTranscriptError(null)
-      void refreshTranscript(row.id)
+      // The chat routes read the routed session, so opening one in place is a
+      // navigation: the same view the app shows, pointed at this session.
+      navigate(sessionRoute(row.id))
     },
-    [refreshTranscript]
+    [navigate]
   )
 
   useEffect(() => {
@@ -611,18 +663,6 @@ export function IslandShell() {
                     : t.island.running(runningCount)}
             </span>
             <div className={cn('flex shrink-0 items-center gap-1', atRest && REST_CHROME)}>
-              {liveTurn ? (
-                <Button
-                  aria-label={t.island.stop}
-                  className={GLYPH}
-                  onClick={() => void stopTurn()}
-                  size="icon-xs"
-                  title={t.island.stop}
-                  variant="ghost"
-                >
-                  <Square />
-                </Button>
-              ) : null}
               {queued && !focused ? (
                 <span className="shrink-0 text-[0.65rem] text-white/35" title={queued.next}>
                   {queued.count} {t.island.queued}
@@ -664,7 +704,7 @@ export function IslandShell() {
             </div>
           </div>
 
-          {top ? (
+          {cardRow ? (
             <div
               aria-live="polite"
               className="mt-1.5 shrink-0 rounded-xl bg-white/8 px-2 py-1.5 shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.08)]"
@@ -673,7 +713,7 @@ export function IslandShell() {
             >
               <div className="flex items-baseline gap-1.5">
                 <span className="min-w-0 flex-1 truncate text-[0.7rem] text-white/55">
-                  {top.title || t.island.needsInput}
+                  {cardRow.title || t.island.needsInput}
                 </span>
                 {/* How deep the queue goes. Answering one advances the card, but a
                     single card on screen said nothing about the four behind it. */}
@@ -681,20 +721,48 @@ export function IslandShell() {
                   <span className="shrink-0 text-[0.65rem] tabular-nums text-amber-300/80">1 / {approvalDepth}</span>
                 ) : null}
               </div>
-              {top.approval ? (
+
+              {cardRow.approval ? (
                 <>
                   {/* The sentence that says why, before the command that says what. */}
-                  {top.approval.description ? (
-                    <div className="mt-1 line-clamp-1 text-[0.7rem] text-white/70">{top.approval.description}</div>
+                  {cardRow.approval.description ? (
+                    <div className="mt-1 line-clamp-1 text-[0.7rem] text-white/70">
+                      {cardRow.approval.description}
+                    </div>
                   ) : null}
-                  <div className="mt-0.5 line-clamp-2 font-mono text-[0.68rem] text-white/90">{top.approval.command}</div>
+                  <div className="mt-0.5 line-clamp-2 font-mono text-[0.68rem] text-white/90">
+                    {cardRow.approval.command}
+                  </div>
+                </>
+              ) : question ? (
+                /* The agent's own question, and the ways it offered to answer it. */
+                <>
+                  <div className="mt-1 line-clamp-3 text-[0.72rem] text-white/85">{question.question}</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(question.choices ?? []).slice(0, 3).map(choice => (
+                      <Button
+                        className="max-w-full truncate text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] hover:bg-white/10 hover:text-white"
+                        key={choice}
+                        onClick={() => void answerClarify(choice)}
+                        size="xs"
+                        variant="outline"
+                      >
+                        {choice.replace(RECOMMENDED_LABEL, '').trim()}
+                      </Button>
+                    ))}
+                  </div>
                 </>
               ) : (
-                <div className="mt-1 text-[0.7rem]">{t.island.needsInput}</div>
+                /* A finished turn: its own last words, so the island answers
+                   "what did it say" without opening anything. */
+                <div className="mt-1 line-clamp-3 text-[0.72rem] text-white/80">
+                  {answerPreview || t.island.finished}
+                </div>
               )}
+
               <div className="mt-1.5 flex items-center gap-1.5">
-                {top.approval ? (
-                  denyFor === top.approval.requestId ? (
+                {cardRow.approval ? (
+                  denyFor === cardRow.approval.requestId ? (
                     <>
                       <input
                         autoFocus
@@ -707,7 +775,7 @@ export function IslandShell() {
                       />
                       <Button
                         className="text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] hover:bg-white/10 hover:text-white"
-                        onClick={() => respond(top, 'deny', { reason: denyReason })}
+                        onClick={() => respond(cardRow, 'deny', { reason: denyReason })}
                         size="xs"
                         variant="outline"
                       >
@@ -720,19 +788,19 @@ export function IslandShell() {
                         className="text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] hover:bg-white/10 hover:text-white"
                         onClick={() => {
                           setDenyReason('')
-                          setDenyFor(top.approval?.requestId ?? null)
+                          setDenyFor(cardRow.approval?.requestId ?? null)
                         }}
                         size="xs"
                         variant="outline"
                       >
                         {t.island.deny}
                       </Button>
-                      <Button onClick={() => respond(top, 'once')} size="xs" variant="secondary">
+                      <Button onClick={() => respond(cardRow, 'once')} size="xs" variant="secondary">
                         {t.island.approve}
                       </Button>
                       <Button
                         className="text-white/70 hover:bg-white/10 hover:text-white"
-                        onClick={() => respond(top, 'always')}
+                        onClick={() => respond(cardRow, 'always')}
                         size="xs"
                         variant="ghost"
                       >
@@ -740,8 +808,27 @@ export function IslandShell() {
                       </Button>
                     </>
                   )
+                ) : question ? (
+                  <>
+                    <input
+                      className="min-w-0 flex-1 bg-transparent px-1 text-[0.7rem] text-white/90 outline-none placeholder:text-white/35"
+                      onChange={event => setClarifyDraft(event.target.value)}
+                      onFocus={event => focusIsland(event.currentTarget)}
+                      onPointerDown={event => focusIsland(event.currentTarget)}
+                      placeholder={t.island.answerPlaceholder}
+                      value={clarifyDraft}
+                    />
+                    <Button
+                      disabled={!clarifyDraft.trim()}
+                      onClick={() => void answerClarify(clarifyDraft)}
+                      size="xs"
+                      variant="secondary"
+                    >
+                      {t.island.send}
+                    </Button>
+                  </>
                 ) : (
-                  <Button onClick={() => openSession(top.id)} size="xs" variant="secondary">
+                  <Button onClick={() => openSession(cardRow.id)} size="xs" variant="secondary">
                     {t.island.open}
                   </Button>
                 )}
@@ -754,117 +841,65 @@ export function IslandShell() {
           {stage === 'expanded' ? (
             <div className="mt-1.5 flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {rows.length === 0 ? (
+                {rows.length === 0 && recents.length === 0 ? (
                   <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
-                ) : (
-                  rows.map(row => (
-                    <button className={ROW} key={row.id} onClick={() => focusSession(row)} type="button">
-                      <span className={cn(DOT, row.state === 'needs-input' ? 'bg-amber-400' : 'bg-white')} />
-                      <span className="min-w-0 flex-1 truncate text-xs">{row.title || t.island.needsInput}</span>
-                      <span className="shrink-0 text-[0.65rem] text-white/35">
-                        {row.state === 'needs-input'
-                          ? t.island.needsAnswer
-                          : describe(activities[row.id]).join(' · ') || t.island.working}
-                      </span>
-                    </button>
-                  ))
-                )}
+                ) : null}
+                {rows.map(row => (
+                  <button className={ROW} key={row.id} onClick={() => focusSession(row)} type="button">
+                    <span className={cn(DOT, row.state === 'needs-input' ? 'bg-amber-400' : 'bg-white')} />
+                    <span className="min-w-0 flex-1 truncate text-xs">{row.title || t.island.needsInput}</span>
+                    <span className="shrink-0 text-[0.65rem] text-white/35">
+                      {row.state === 'needs-input'
+                        ? t.island.needsAnswer
+                        : describe(activities[row.id]).join(' · ') || t.island.working}
+                    </span>
+                  </button>
+                ))}
+                {recents.length > 0 ? (
+                  <div className="mt-1.5 px-2 text-[0.6rem] uppercase tracking-[0.08em] text-white/25">
+                    {t.island.recent}
+                  </div>
+                ) : null}
+                {recents.map(session => (
+                  <button
+                    className={ROW}
+                    key={session.id}
+                    onClick={() => focusSession({ id: session.id, state: 'working', title: session.title ?? '' })}
+                    type="button"
+                  >
+                    <span className={cn(DOT, 'bg-white/25')} />
+                    <span className="min-w-0 flex-1 truncate text-xs text-white/75">
+                      {session.title || t.island.needsInput}
+                    </span>
+                  </button>
+                ))}
               </div>
+
+              {/* One field, both jobs: type to narrow the list, or paste a title
+                  you half remember. Empty means "show me what is recent". */}
+              <form
+                className="mt-1 flex shrink-0 items-center gap-1.5 border-t border-white/10 pt-1.5"
+                onSubmit={event => event.preventDefault()}
+              >
+                <input
+                  className="min-w-0 flex-1 bg-transparent px-1 text-xs text-white/90 outline-none placeholder:text-white/30"
+                  onChange={event => setQuery(event.target.value)}
+                  onFocus={event => focusIsland(event.currentTarget)}
+                  onPointerDown={event => focusIsland(event.currentTarget)}
+                  placeholder={t.island.searchSessions}
+                  value={query}
+                />
+              </form>
             </div>
           ) : null}
 
           {stage === 'session' ? (
-            <div className="mt-1.5 flex min-h-0 flex-1 flex-col">
-              {/* The state, then the history. Nothing here when the session is
-                  simply idle, so the transcript is not pushed down for a blank. */}
-              {nowLine ? (
-                <div className="mb-1 shrink-0 truncate px-2 text-[0.68rem] text-white/45" data-island-now="">
-                  {nowLine}
-                </div>
-              ) : null}
-              {transcriptError ? (
-                <div className="shrink-0 px-1 pb-1 text-[0.7rem] text-red-400">{transcriptError}</div>
-              ) : null}
-
-              <div className="min-h-0 flex-1 overflow-y-auto" data-island-transcript="" ref={tailRef}>
-                {transcript.length === 0 ? (
-                  <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
-                ) : (
-                  transcript.map((line, index) => (
-                    <div
-                      className={cn(
-                        'mb-1 rounded-lg leading-snug',
-                        line.role === 'tool'
-                          ? 'flex items-baseline gap-1.5 px-2 py-0.5 font-mono text-[0.66rem] text-white/45'
-                          : 'line-clamp-2 px-2 py-1 text-[0.72rem]',
-                        line.role === 'user' ? 'bg-white/6 text-white/85' : null,
-                        line.role === 'assistant' ? 'text-white/60' : null
-                      )}
-                      data-island-line={line.role}
-                      key={`${index}-${line.role}`}
-                    >
-                      {line.tool ? <span className="shrink-0 text-white/70">{line.tool}</span> : null}
-                      <span className="min-w-0 truncate">{line.text}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {queued ? (
-                <div
-                  className="mt-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-white/6 px-2 py-1"
-                  data-island-queue=""
-                >
-                  <span className="min-w-0 flex-1 truncate text-[0.68rem] text-white/55">
-                    {queued.count} · {queued.next}
-                  </span>
-                  {queued.cancellable ? (
-                    <Button
-                      aria-label={t.island.cancelQueued}
-                      className={GLYPH}
-                      onClick={() => cancelIslandQueuedPrompt([runtimeId, focused?.id])}
-                      size="icon-xs"
-                      title={t.island.cancelQueued}
-                      variant="ghost"
-                    >
-                      <X />
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <form
-                className="mt-1 flex shrink-0 items-center gap-1.5 border-t border-white/10 pt-1.5"
-                onSubmit={event => {
-                  event.preventDefault()
-
-                  if (!sessionDraft.trim()) {
-                    focusIsland(inputRef.current)
-
-                    return
-                  }
-
-                  void sendToSession()
-                }}
-              >
-                <input
-                  className="min-w-0 flex-1 bg-transparent px-1 text-xs text-white/90 outline-none"
-                  onChange={event => setSessionDraft(event.target.value)}
-                  onFocus={event => focusIsland(event.currentTarget)}
-                  onPointerDown={event => focusIsland(event.currentTarget)}
-                  ref={inputRef}
-                  value={sessionDraft}
-                />
-                {sessionDraft.trim() ? (
-                  <Button disabled={sessionBusy} size="xs" type="submit" variant="secondary">
-                    {liveTurn && busyMode === 'queue'
-                      ? t.island.queueSend
-                      : liveTurn && busyMode === 'steer'
-                        ? t.island.steer
-                        : t.island.send}
-                  </Button>
-                ) : null}
-              </form>
+            /* The main session view, mounted rather than imitated: same
+               transcript, same thinking blocks, same tool grouping and
+               auto-collapse, same running-tool decoration. A second renderer is
+               what this used to be — and a second renderer drifts. */
+            <div className="mt-1.5 min-h-0 flex-1 overflow-hidden rounded-xl" data-island-chat="">
+              <WiredPane part="chatRoutes" />
             </div>
           ) : null}
         </div>

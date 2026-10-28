@@ -20,13 +20,14 @@ export const NOTCH_WIDTH = 208
 export const NOTCH_HEIGHT = 32
 
 const EXPANDED_WIDTH = 452
-/** One open session: narrower than the list, taller per row (text wraps). */
-const SESSION_WIDTH = 420
-const SESSION_ROW_HEIGHT = 34
-const SESSION_MAX_ROWS = 4
+/** One open session: the app's chat view, so it is a panel — the island window's
+ *  own ceiling is 480 × 560, and the surface takes all of it bar the padding. */
+const SESSION_WIDTH = 478
+const SESSION_HEIGHT = 546
 const MAX_EXPANDED_HEIGHT = 420
 const ROW_HEIGHT = 26
-const COMPOSER_HEIGHT = 44
+/** The list's search field, its divider and its breathing room. */
+const SEARCH_FIELD_HEIGHT = 44
 const ATTENTION_CARD_HEIGHT = 104
 const HEADER_HEIGHT = 34
 const SURFACE_PADDING = 12
@@ -73,10 +74,10 @@ export function islandShape(input: { notched: boolean; rich?: boolean; rows: num
   }
 
   if (stage === 'session') {
-    const lines = Math.min(SESSION_MAX_ROWS, Math.max(1, rows))
-
+    // The session stage mounts the app's own chat view, which brings its own
+    // composer and scrolling: it needs a panel, not one band per transcript line.
     return {
-      height: HEADER_HEIGHT + lines * SESSION_ROW_HEIGHT + COMPOSER_HEIGHT + SURFACE_PADDING * 2,
+      height: SESSION_HEIGHT,
       mode: 'expanded',
       opacity: 1,
       radius: 22,
@@ -88,7 +89,7 @@ export function islandShape(input: { notched: boolean; rich?: boolean; rows: num
 
   const height = Math.min(
     MAX_EXPANDED_HEIGHT,
-    HEADER_HEIGHT + listHeight + COMPOSER_HEIGHT + SURFACE_PADDING * 2
+    HEADER_HEIGHT + listHeight + SEARCH_FIELD_HEIGHT + SURFACE_PADDING * 2
   )
 
   return { height, mode: 'expanded', opacity: 1, radius: 24, width: EXPANDED_WIDTH }

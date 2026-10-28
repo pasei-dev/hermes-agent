@@ -620,6 +620,10 @@ catalog: CatalogTranslations
     cancelQueued: string
     workers: (count: number) => string
     newSessionPlaceholder: string
+    recent: string
+    searchSessions: string
+    finished: string
+    answerPlaceholder: string
     send: string
   }
 
