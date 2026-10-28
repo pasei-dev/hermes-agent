@@ -14,11 +14,22 @@
 
 import { parseQuickEntryShortcut } from './quick-entry'
 
+export interface IslandOrigin {
+  x: number
+  y: number
+}
+
 export interface IslandSettings {
   /** Put the island on the display under the pointer, not the primary one. */
   followPointer: boolean
   /** Off means the window is never created at all — no renderer, no surface. */
   enabled: boolean
+  /**
+   * Where the user last parked the floating pill, in screen coordinates. Null
+   * means "at the anchor". A notch belongs to the housing and never moves, so
+   * this is only ever read on a display without one.
+   */
+  origin: IslandOrigin | null
   /** Global chord that approves the card on top; '' means none. */
   shortcut: string
   /** With the island answering, the OS notification is a second prompt for one approval. */
@@ -28,8 +39,23 @@ export interface IslandSettings {
 export const ISLAND_DEFAULTS: IslandSettings = {
   followPointer: false,
   enabled: true,
+  origin: null,
   shortcut: '',
   suppressApprovalNotifications: true
+}
+
+/** A parked position is two finite numbers or it is nothing. */
+function sanitizeOrigin(raw: unknown): IslandOrigin | null {
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+
+  if (!record) {
+    return null
+  }
+
+  const x = Number(record.x)
+  const y = Number(record.y)
+
+  return Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : null
 }
 
 /**
@@ -44,6 +70,7 @@ export function sanitizeIslandSettings(raw: unknown): IslandSettings {
   return {
     followPointer: record.followPointer === true,
     enabled: record.enabled === undefined ? ISLAND_DEFAULTS.enabled : record.enabled === true,
+    origin: sanitizeOrigin(record.origin),
     shortcut: shortcut && parseQuickEntryShortcut(shortcut).ok ? shortcut : '',
     suppressApprovalNotifications:
       record.suppressApprovalNotifications === undefined
@@ -65,6 +92,10 @@ export function withIslandPatch(current: IslandSettings, patch: unknown): Island
   return sanitizeIslandSettings({
     followPointer: next.followPointer === undefined ? current.followPointer : next.followPointer,
     enabled: next.enabled === undefined ? current.enabled : next.enabled,
+    // The parked position is main's own state: the renderer drags the window, it
+    // never patches a coordinate pair, and a stale one from Settings would move
+    // the pill for no reason.
+    origin: current.origin,
     shortcut: next.shortcut === undefined ? current.shortcut : next.shortcut,
     suppressApprovalNotifications:
       next.suppressApprovalNotifications === undefined

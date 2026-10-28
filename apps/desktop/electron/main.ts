@@ -324,6 +324,7 @@ import { linuxOzoneBackend, resolveHudWindowing } from './hud-windowing'
 import { INSTALL_STAMP, installShape } from './install-stamp'
 import type { InstallStamp } from './install-stamp'
 import {
+  type IslandOrigin,
   type IslandSettings,
   type IslandStatus,
   sanitizeIslandSettings,
@@ -12626,6 +12627,20 @@ function writeIslandSettings(settings: IslandSettings): void {
   }
 }
 
+/**
+ * Remember where the user parked the floating pill. Called at drag end rather
+ * than per pointer move, and an unchanged position writes nothing — the file is
+ * a preference, not a log.
+ */
+function parkIslandAt(origin: IslandOrigin): void {
+  if (currentIslandSettings.origin?.x === origin.x && currentIslandSettings.origin?.y === origin.y) {
+    return
+  }
+
+  currentIslandSettings = { ...currentIslandSettings, origin }
+  writeIslandSettings(currentIslandSettings)
+}
+
 /** The display the pill parks on: the primary one, unless the user asked for the pointer's. */
 function islandAnchorDisplay(): Electron.Display {
   return currentIslandSettings.followPointer
@@ -12711,8 +12726,13 @@ const islandController = createIslandWindowController({
   platform: process.platform,
   preloadPath: PRELOAD_PATH,
   profile: primaryProfileKey(),
+  // The parked position rides in the same device-local file as the rest of the
+  // island's preferences, and it is written by main only: the renderer drags the
+  // window, main is the side that knows where it landed.
+  readOrigin: () => currentIslandSettings.origin,
   rendererIndex: resolveRendererIndex,
   webPreferences: chatWindowWebPreferences,
+  writeOrigin: origin => parkIslandAt(origin),
   wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('chat'))
 })
 

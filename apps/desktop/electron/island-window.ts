@@ -27,6 +27,7 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 
 import { type IslandDisplay, islandDragTarget, islandHasNotch, islandWindowBounds } from './island-geometry'
+import type { IslandOrigin } from './island-settings'
 import { buildIslandWindowUrl } from './island-url'
 import { attachRendererConsoleCapture } from './renderer-log'
 import { installWindowRendererLifecycle } from './window-renderer-lifecycle'
@@ -48,9 +49,35 @@ export interface IslandWindowOptions {
   platform: string
   preloadPath: string
   profile?: null | string
+  /** Where the floating pill was last parked (null: never moved). */
+  readOrigin?: () => IslandOrigin | null
   rendererIndex: () => string
   webPreferences: (preloadPath: string) => Electron.WebPreferences
+  /** Remember a parked position after the drag settles. */
+  writeOrigin?: (origin: IslandOrigin) => void
   wireWindow: (window: BrowserWindow) => void
+}
+
+/**
+ * A saved position, but only when it still lands on the display the island is
+ * anchored to. A point remembered on the monitor that has since been unplugged
+ * would otherwise park the pill off-screen, where it cannot be dragged back.
+ */
+export function parkedOriginOn(display: IslandDisplay, origin: IslandOrigin | null): IslandOrigin | null {
+  if (!origin) {
+    return null
+  }
+
+  const under = screen.getDisplayMatching({ height: 200, width: 320, x: origin.x, y: origin.y })
+  // `IslandDisplay` is the structural subset the geometry needs, so it carries no
+  // id: two displays cannot share a work-area origin, which makes this the
+  // comparison that survives both shapes.
+  const same =
+    under.workArea.x === display.workArea.x &&
+    under.workArea.y === display.workArea.y &&
+    under.workArea.width === display.workArea.width
+
+  return same ? origin : null
 }
 
 /** Mouse passthrough `forward` is macOS/Windows only (see the pet overlay). */
@@ -65,6 +92,50 @@ function displayFor(win: BrowserWindow | null, anchor: () => IslandDisplay): Isl
 export function createIslandWindowController(options: IslandWindowOptions) {
   const { anchorDisplay, devServer, isMac, loadWindowUrl, log, openSession, platform, profile, rendererIndex } = options
   let window: BrowserWindow | null = null
+  let originTimer: null | ReturnType<typeof setTimeout> = null
+
+  /**
+   * The window's frame: the anchor's, unless the user parked the pill somewhere
+   * and that somewhere is still on this display. A notch is never restored — the
+   * housing holds the surface and `movable` is false, so a saved point would
+   * fight the anchor on every launch.
+   */
+  const boundsFor = (display: IslandDisplay) => {
+    const bounds = islandWindowBounds(display, platform)
+
+    if (islandHasNotch(display, platform)) {
+      return bounds
+    }
+
+    const parked = parkedOriginOn(display, options.readOrigin?.() ?? null)
+
+    return parked ? { ...bounds, x: parked.x, y: parked.y } : bounds
+  }
+
+  /**
+   * Write the parked position once the drag settles. `dragBy` fires per pointer
+   * move, and a file write per move is hundreds of them for one gesture.
+   */
+  const rememberOrigin = () => {
+    if (!options.writeOrigin) {
+      return
+    }
+
+    if (originTimer) {
+      clearTimeout(originTimer)
+    }
+
+    originTimer = setTimeout(() => {
+      originTimer = null
+
+      if (!window || window.isDestroyed()) {
+        return
+      }
+
+      const { x, y } = window.getBounds()
+      options.writeOrigin?.({ x, y })
+    }, 400)
+  }
 
   const spawn = (): BrowserWindow => {
     if (window && !window.isDestroyed()) {
@@ -73,7 +144,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
     const display = anchorDisplay()
     const notched = islandHasNotch(display, platform)
-    const bounds = islandWindowBounds(display, platform)
+    const bounds = boundsFor(display)
 
     const next = new BrowserWindow({
       ...bounds,
@@ -214,6 +285,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       })
 
       window.setPosition(next.x, next.y)
+      rememberOrigin()
     },
     /** Follow a display topology change — the island is pinned to one display. */
     reposition() {
@@ -223,7 +295,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       const display = displayFor(window, anchorDisplay)
 
-      window.setBounds(islandWindowBounds(display, platform))
+      window.setBounds(boundsFor(display))
       window.setAlwaysOnTop(
         true,
         islandHasNotch(display, platform) ? 'status' : isMac ? 'floating' : 'screen-saver'

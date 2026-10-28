@@ -30,7 +30,7 @@ import {
 } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { useI18n } from '@/i18n'
+import { isRtlLocale, useI18n } from '@/i18n'
 import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Square, X } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $busyInputConfig } from '@/store/busy-input-mode'
@@ -61,6 +61,13 @@ const REVEAL = `opacity 220ms ease-out 60ms, transform 320ms ${SPRING} 40ms`
 const DOT = 'size-1.5 shrink-0 rounded-full'
 const ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-white/10'
 const GLYPH = 'text-white/55 hover:text-white'
+/**
+ * At rest the pill is a status strip, not a toolbar: its buttons are there when
+ * the pointer is, and take no colour from the surface otherwise. Expanded, the
+ * list is open and every glyph stays visible.
+ */
+const REST_CHROME =
+  'pointer-events-none opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:opacity-100'
 
 function islandNotched(): boolean {
   try {
@@ -71,7 +78,8 @@ function islandNotched(): boolean {
 }
 
 export function IslandShell() {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
+  const rtl = isRtlLocale(locale)
   const notched = useMemo(islandNotched, [])
   const sessions = useStore($sessions)
   const attentionIds = useStore($attentionSessionIds)
@@ -98,6 +106,7 @@ export function IslandShell() {
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const tailRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<null | { x: number; y: number }>(null)
 
   const { approvalsById, answer } = useIslandApprovals(attentionIds)
@@ -203,6 +212,12 @@ export function IslandShell() {
 
   const activityParts = describe(activity)
 
+  // The session view's first line: what that session is doing right now. The
+  // transcript under it is history, and history is why the old view was useless
+  // the moment a turn started — it showed four finished bubbles and no state.
+  const focusedActivity = focused ? activities[focused.id] : undefined
+  const nowLine = describe(focusedActivity).join(' · ')
+
   // Stored id → runtime id: `session.interrupt` and the live-turn flag both speak the
   // runtime id, and every row the island lists is a stored id.
   const runtimeId = useMemo(() => {
@@ -268,6 +283,10 @@ export function IslandShell() {
     stage
   })
 
+  // Collapsed with something running and nothing waiting: the pill's only job is
+  // the dot and the line, so its buttons wait for the pointer.
+  const atRest = stage === 'pill'
+
   useIslandClickThrough(rootRef)
 
   // Main holds the window hidden until this lands: the island is a full renderer,
@@ -317,6 +336,16 @@ export function IslandShell() {
 
     return () => clearInterval(timer)
   }, [focused, refreshTranscript, stage])
+
+  // A tail reads from the bottom: the newest line is the one worth opening it for,
+  // and a scroll box that keeps its scrollTop at 0 shows only the oldest.
+  useEffect(() => {
+    const box = tailRef.current
+
+    if (box) {
+      box.scrollTop = box.scrollHeight
+    }
+  }, [transcript])
 
   // Run the focused session from the island. Sending into a session another window has open
   // is supported by design (resume attaches this island as an extra viewer), so this never
@@ -494,13 +523,14 @@ export function IslandShell() {
   return (
     <div
       className="flex h-screen w-screen items-start justify-center overflow-hidden"
+      dir={rtl ? 'rtl' : 'ltr'}
       onBlur={onSurfaceBlur}
       ref={rootRef}
       style={{ paddingTop: notched ? 0 : 8 }}
     >
       <div
         className={cn(
-          'pointer-events-auto select-none overflow-hidden bg-black text-white/90',
+          'group pointer-events-auto select-none overflow-hidden bg-black text-white/90',
           // A housing has no shadow: the pill sits in the notch, and a halo there
           // paints a grey smear across the menu bar either side of it.
           notched
@@ -564,73 +594,66 @@ export function IslandShell() {
                     ? activityParts.join(' · ')
                     : t.island.running(runningCount)}
             </span>
-            {liveTurn ? (
-              <Button
-                aria-label={t.island.stop}
-                className={GLYPH}
-                onClick={() => void stopTurn()}
-                size="icon-xs"
-                title={t.island.stop}
-                variant="ghost"
-              >
-                <Square />
-              </Button>
-            ) : null}
-            {queued && !focused ? (
-              <span className="shrink-0 text-[0.65rem] text-white/35" title={queued.next}>
-                {queued.count} {t.island.queued}
-              </span>
-            ) : null}
-            {focused ? (
-              <Button
-                aria-label={t.island.open}
-                className={GLYPH}
-                onClick={() => openSession(focused.id)}
-                size="icon-xs"
-                title={t.island.open}
-                variant="ghost"
-              >
-                <ArrowUpRight />
-              </Button>
-            ) : null}
-            {top && !focused ? (
-              <Button
-                aria-label={t.island.open}
-                className={GLYPH}
-                onClick={() => openSession(top.id)}
-                size="icon-xs"
-                title={t.island.open}
-                variant="ghost"
-              >
-                <ArrowUpRight />
-              </Button>
-            ) : null}
-            {focused ? null : (
-              <Button
-                aria-expanded={expanded}
-                aria-label={expanded ? t.island.collapse : t.island.expand}
-                className={GLYPH}
-                onClick={() => {
-                  setExpanded(next => {
-                    if (!next) {
-                      setError(null)
-                    }
+            <div className={cn('flex shrink-0 items-center gap-1', atRest && REST_CHROME)}>
+              {liveTurn ? (
+                <Button
+                  aria-label={t.island.stop}
+                  className={GLYPH}
+                  onClick={() => void stopTurn()}
+                  size="icon-xs"
+                  title={t.island.stop}
+                  variant="ghost"
+                >
+                  <Square />
+                </Button>
+              ) : null}
+              {queued && !focused ? (
+                <span className="shrink-0 text-[0.65rem] text-white/35" title={queued.next}>
+                  {queued.count} {t.island.queued}
+                </span>
+              ) : null}
+              {focused || top ? (
+                <Button
+                  aria-label={t.island.open}
+                  className={GLYPH}
+                  onClick={() => openSession(focused?.id ?? top?.id ?? '')}
+                  size="icon-xs"
+                  title={t.island.open}
+                  variant="ghost"
+                >
+                  <ArrowUpRight />
+                </Button>
+              ) : null}
+              {/* A chevron with nothing behind it invites a click that does nothing. */}
+              {focused || rows.length === 0 ? null : (
+                <Button
+                  aria-expanded={expanded}
+                  aria-label={expanded ? t.island.collapse : t.island.expand}
+                  className={GLYPH}
+                  onClick={() => {
+                    setExpanded(next => {
+                      if (!next) {
+                        setError(null)
+                      }
 
-                    return !next
-                  })
-                }}
-                size="icon-xs"
-                variant="ghost"
-              >
-                {expanded ? <ChevronDown /> : <ChevronRight />}
-              </Button>
-            )}
+                      return !next
+                    })
+                  }}
+                  size="icon-xs"
+                  variant="ghost"
+                >
+                  {expanded ? <ChevronDown /> : <ChevronRight />}
+                </Button>
+              )}
+            </div>
           </div>
 
           {top ? (
             <div
+              aria-live="polite"
               className="mt-1.5 shrink-0 rounded-xl bg-white/8 px-2 py-1.5 shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.08)]"
               data-island-attention=""
+              role="status"
             >
               <div className="truncate text-[0.7rem] text-white/55">{top.title || t.island.needsInput}</div>
               {top.approval ? (
@@ -753,20 +776,29 @@ export function IslandShell() {
                   ref={inputRef}
                   value={draft}
                 />
-                <Button disabled={!draft.trim() || sending} size="xs" type="submit" variant="secondary">
-                  {t.island.send}
-                </Button>
+                {draft.trim() ? (
+                  <Button disabled={sending} size="xs" type="submit" variant="secondary">
+                    {t.island.send}
+                  </Button>
+                ) : null}
               </form>
             </div>
           ) : null}
 
           {stage === 'session' ? (
             <div className="mt-1.5 flex min-h-0 flex-1 flex-col">
+              {/* The state, then the history. Nothing here when the session is
+                  simply idle, so the transcript is not pushed down for a blank. */}
+              {nowLine ? (
+                <div className="mb-1 shrink-0 truncate px-2 text-[0.68rem] text-white/45" data-island-now="">
+                  {nowLine}
+                </div>
+              ) : null}
               {transcriptError ? (
                 <div className="shrink-0 px-1 pb-1 text-[0.7rem] text-red-400">{transcriptError}</div>
               ) : null}
 
-              <div className="min-h-0 flex-1 overflow-y-auto" data-island-transcript="">
+              <div className="min-h-0 flex-1 overflow-y-auto" data-island-transcript="" ref={tailRef}>
                 {transcript.length === 0 ? (
                   <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
                 ) : (
@@ -830,13 +862,15 @@ export function IslandShell() {
                   ref={inputRef}
                   value={sessionDraft}
                 />
-                <Button disabled={!sessionDraft.trim() || sessionBusy} size="xs" type="submit" variant="secondary">
-                  {liveTurn && busyMode === 'queue'
-                    ? t.island.queueSend
-                    : liveTurn && busyMode === 'steer'
-                      ? t.island.steer
-                      : t.island.send}
-                </Button>
+                {sessionDraft.trim() ? (
+                  <Button disabled={sessionBusy} size="xs" type="submit" variant="secondary">
+                    {liveTurn && busyMode === 'queue'
+                      ? t.island.queueSend
+                      : liveTurn && busyMode === 'steer'
+                        ? t.island.steer
+                        : t.island.send}
+                  </Button>
+                ) : null}
               </form>
             </div>
           ) : null}

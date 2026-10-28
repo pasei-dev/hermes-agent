@@ -30,6 +30,15 @@ describe('sanitizeIslandSettings', () => {
     expect(ISLAND_DEFAULTS.suppressApprovalNotifications).toBe(true)
     expect(sanitizeIslandSettings({ suppressApprovalNotifications: false }).suppressApprovalNotifications).toBe(false)
   })
+
+  it('reads a parked position, and a broken one as "never moved"', () => {
+    expect(sanitizeIslandSettings({ origin: { x: 640.4, y: 12.6 } }).origin).toEqual({ x: 640, y: 13 })
+    // Half a coordinate is not a position: restoring one of them parks the pill
+    // on a display edge it cannot be dragged back from.
+    expect(sanitizeIslandSettings({ origin: { x: 640 } }).origin).toBeNull()
+    expect(sanitizeIslandSettings({ origin: { x: 'left', y: 0 } }).origin).toBeNull()
+    expect(sanitizeIslandSettings({ origin: null }).origin).toBeNull()
+  })
 })
 
 describe('withIslandPatch', () => {
@@ -45,5 +54,11 @@ describe('withIslandPatch', () => {
 
   it('does clear a chord the user deliberately emptied', () => {
     expect(withIslandPatch(current, { shortcut: '' }).shortcut).toBe('')
+  })
+
+  it('leaves the parked position alone: the renderer never patches a coordinate', () => {
+    const parked = sanitizeIslandSettings({ origin: { x: 10, y: 20 } })
+
+    expect(withIslandPatch(parked, { followPointer: true, origin: { x: 0, y: 0 } }).origin).toEqual({ x: 10, y: 20 })
   })
 })
