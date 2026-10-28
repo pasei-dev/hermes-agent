@@ -358,6 +358,10 @@ export function IslandShell() {
   })
 
   const shape = islandShape({
+    // A card that carries a question is taller: two lines of it, up to three
+    // answers, and the field. Sized from the kind, so nothing is drawn past the
+    // surface's own bottom edge.
+    cardHeight: question ? 184 : answered ? 120 : 104,
     notched,
     // Nothing running, nothing waiting: the pill is a dot in the notch. The richer
     // width is a hover affordance, so the island stops being a strip of text on
@@ -787,22 +791,27 @@ export function IslandShell() {
                   </div>
                 </>
               ) : question ? (
-                /* The agent's own question, and the ways it offered to answer it. */
+                /* The agent's own question, then its answers as rows: chips in a
+                   372px card wrapped into each other and pushed the field out of
+                   the surface. */
                 <>
-                  <div className="mt-1 line-clamp-3 text-[0.72rem] text-white/85">{question.question}</div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {(question.choices ?? []).slice(0, 3).map(choice => (
-                      <Button
-                        className="max-w-full truncate text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] hover:bg-white/10 hover:text-white"
-                        key={choice}
-                        onClick={() => void answerClarify(choice)}
-                        size="xs"
-                        variant="outline"
-                      >
-                        {choice.replace(RECOMMENDED_LABEL, '').trim()}
-                      </Button>
-                    ))}
+                  <div className="mt-1 line-clamp-2 text-[0.72rem] leading-snug text-white/85">
+                    {question.question}
                   </div>
+                  {(question.choices ?? []).length > 0 ? (
+                    <div className="mt-1 flex flex-col gap-1">
+                      {(question.choices ?? []).slice(0, 3).map(choice => (
+                        <button
+                          className="w-full truncate rounded-md px-2 py-1 text-left text-[0.7rem] text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] hover:bg-white/10 hover:text-white"
+                          key={choice}
+                          onClick={() => void answerClarify(choice)}
+                          type="button"
+                        >
+                          {choice.replace(RECOMMENDED_LABEL, '').trim()}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 /* A finished turn: its own last words, so the island answers
@@ -949,10 +958,24 @@ export function IslandShell() {
             /* The main session view, mounted rather than imitated: same
                transcript, same thinking blocks, same tool grouping and
                auto-collapse, same running-tool decoration. A second renderer is
-               what this used to be — and a second renderer drifts. */
-            <div className="mt-1.5 min-h-0 flex-1 overflow-hidden rounded-xl" data-island-chat="">
-              <WiredPane part="chatRoutes" />
-            </div>
+               what this used to be — and a second renderer drifts.
+
+               Two things are taken away, and only these two: the pane's own
+               rounded background (the island IS the surface, and a second card
+               inside it reads as a widget someone forgot to finish) and the
+               composer, which stays hidden until the pointer or the keyboard is
+               in the panel. */
+            <>
+              <style>{`
+                [data-island-chat] > * { background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }
+                [data-island-chat] [data-slot='composer-dock'] { opacity: 0; transition: opacity 140ms ease-out; }
+                [data-island-chat]:hover [data-slot='composer-dock'],
+                [data-island-chat] [data-slot='composer-dock']:focus-within { opacity: 1; }
+              `}</style>
+              <div className="mt-1.5 min-h-0 flex-1 overflow-hidden rounded-xl" data-island-chat="">
+                <WiredPane part="chatRoutes" />
+              </div>
+            </>
           ) : null}
         </div>
       </div>

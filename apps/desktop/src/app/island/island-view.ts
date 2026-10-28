@@ -41,8 +41,17 @@ export interface IslandShape {
   width: number
 }
 
-export function islandShape(input: { notched: boolean; rich?: boolean; rows: number; stage: IslandStage }): IslandShape {
-  const { notched, rich = false, rows, stage } = input
+export function islandShape(input: {
+  /** Height the attention card needs for its content, in px. */
+  cardHeight?: number
+  notched: boolean
+  rich?: boolean
+  rows: number
+  /** Remembered size of the open session panel. */
+  sessionSize?: { height: number; width: number }
+  stage: IslandStage
+}): IslandShape {
+  const { cardHeight = ATTENTION_CARD_HEIGHT, notched, rich = false, rows, sessionSize, stage } = input
 
   if (stage === 'hidden') {
     return notched
@@ -65,7 +74,7 @@ export function islandShape(input: { notched: boolean; rich?: boolean; rows: num
 
   if (stage === 'attention') {
     return {
-      height: HEADER_HEIGHT + ATTENTION_CARD_HEIGHT + SURFACE_PADDING,
+      height: HEADER_HEIGHT + cardHeight + SURFACE_PADDING,
       mode: 'floating',
       opacity: 1,
       radius: 22,
@@ -77,11 +86,11 @@ export function islandShape(input: { notched: boolean; rich?: boolean; rows: num
     // The session stage mounts the app's own chat view, which brings its own
     // composer and scrolling: it needs a panel, not one band per transcript line.
     return {
-      height: SESSION_HEIGHT,
+      height: sessionSize?.height ?? SESSION_HEIGHT,
       mode: 'expanded',
       opacity: 1,
       radius: 22,
-      width: SESSION_WIDTH
+      width: sessionSize?.width ?? SESSION_WIDTH
     }
   }
 
