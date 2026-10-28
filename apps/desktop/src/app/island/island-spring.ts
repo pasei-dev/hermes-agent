@@ -144,3 +144,50 @@ export function springShapePaint(shape: SpringShape): { height: number; radius: 
     width: Math.round(shape.width.value)
   }
 }
+
+/**
+ * The whole trajectory of a change, sampled once.
+ *
+ * The host paints by animating the element itself rather than by re-rendering
+ * React sixty times a second: the spring is integrated here, at a fixed 120Hz
+ * step, and the result is handed to one WAAPI animation. `from` is what is on
+ * screen right now, so a change that interrupts another starts where the eye is
+ * instead of jumping back to the last target.
+ */
+export function springShapeKeyframes(
+  from: SpringShape,
+  target: SpringTarget,
+  params: SpringParams = SPRING
+): { duration: number; frames: { borderRadius: string; height: string; offset: number; width: string }[] } {
+  const step = 1 / 120
+  const samples: { borderRadius: string; height: string; width: string }[] = []
+  let shape = from
+  let elapsed = 0
+
+  do {
+    const paint = springShapePaint(shape)
+    samples.push({
+      borderRadius: `${paint.radius}px`,
+      height: `${paint.height}px`,
+      width: `${paint.width}px`
+    })
+    shape = springShapeStep(shape, target, step, params)
+    elapsed += step
+  } while (!springShapeSettled(shape, target) && elapsed < 2)
+
+  // The last frame IS the target: an animation that stops a pixel short leaves
+  // the surface to be corrected on the next layout, which reads as a blink.
+  const settled = springShapePaint(springShapeRest(target))
+  samples.push({
+    borderRadius: `${settled.radius}px`,
+    height: `${settled.height}px`,
+    width: `${settled.width}px`
+  })
+
+  const frames = samples.map((sample, index) => ({
+    ...sample,
+    offset: samples.length === 1 ? 1 : index / (samples.length - 1)
+  }))
+
+  return { duration: Math.max(120, Math.round(elapsed * 1000)), frames }
+}

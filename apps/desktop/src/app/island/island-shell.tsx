@@ -62,7 +62,8 @@ import {
   readIslandTranscript,
   submitToIslandSession
 } from './island-session'
-import { islandSettleTransform, useIslandSettle } from './island-settle'
+import { islandPrefersReducedMotion, islandSettleTransform, useIslandSettle } from './island-settle'
+import { springShapeKeyframes, springShapeRest } from './island-spring'
 import {
   islandClipPath,
   islandCorners,
@@ -76,6 +77,10 @@ import {
   NOTCH_HEIGHT
 } from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
+
+/** The animation currently painting each surface's box, so a retarget can read
+ *  what is on screen before it replaces it. */
+const springRail = new WeakMap<Element, Animation>()
 
 /** macOS's own expansion curve — fast out, long settle. */
 const SPRING = 'cubic-bezier(0.32, 0.72, 0, 1)'
@@ -519,8 +524,35 @@ export function IslandShell() {
 
   // The shape follows its target directly: `island-spring.ts` carries the
   // velocity a retarget needs, and its host has to survive a render per frame.
-  const target = { height: shape.height, radius: shape.radius, width: shape.width }
+  const target = useMemo(
+    () => ({ height: shape.height, radius: shape.radius, width: shape.width }),
+    [shape.height, shape.radius, shape.width]
+  )
+
   const box = target
+
+  // The box moves on a spring, not a curve: the whole trajectory is integrated
+  // once (island-spring.ts) and painted by one element animation, so a stage
+  // change overshoots and settles the way the reference notch apps do — and a
+  // change that interrupts another starts from what is on screen.
+  useEffect(() => {
+    const surfaceEl = surfaceRef.current
+
+    if (!surfaceEl || islandPrefersReducedMotion()) {
+      return
+    }
+
+    // Read BEFORE cancelling: the running animation is what the eye sees, and it
+    // is the only honest starting point for a change that interrupts another.
+    const painted = surfaceEl.getBoundingClientRect()
+    springRail.get(surfaceEl)?.cancel()
+
+    const from = springShapeRest({ height: painted.height, radius: box.radius, width: painted.width })
+    const { duration, frames } = springShapeKeyframes(from, target)
+    const animation = surfaceEl.animate(frames, { duration, easing: 'linear', fill: 'none' })
+
+    springRail.set(surfaceEl, animation)
+  }, [box.radius, target])
 
   // Collapsed with something running and nothing waiting: the pill's only job is
   // the dot and the line, so its buttons wait for the pointer.
@@ -1040,7 +1072,8 @@ export function IslandShell() {
             visible: shape.opacity !== 0
           }),
           transformOrigin: 'top center',
-          transition: settleOffset || dragging ? 'none' : MORPH,
+          // Size is the spring's; only colour and opacity keep a CSS transition.
+          transition: settleOffset || dragging ? 'none' : REVEAL,
           width: box.width
         }}
       >
