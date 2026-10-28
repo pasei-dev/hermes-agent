@@ -197,6 +197,8 @@ declare global {
         // Main → island renderer: the drag was corrected by this much — the
         // pill springs from the pointer's position into the settled one.
         onSettle: (callback: (correction: { dx: number; dy: number }) => void) => () => void
+        // Main → island renderer: the window changed size, measure the pill again.
+        onRemeasure: (callback: () => void) => () => void
         // Renderer → main: the island shell is mounted and painted, show it.
         ready: () => void
         setInteractive: (interactive: boolean) => void

@@ -213,6 +213,14 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
 
       return () => ipcRenderer.removeListener('hermes:island:settle', listener)
     },
+    // Main changed the window's own size (a display change), so the pill's offset
+    // inside it is stale: measure again.
+    onRemeasure: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('hermes:island:remeasure', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:remeasure', listener)
+    },
     // The island is a full renderer, so it boots the whole app shell first and
     // paints the app's own boot screen until this arrives. Main keeps the window
     // hidden until then, or every launch would flash a dark panel at the top of

@@ -29,12 +29,14 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 import {
   ISLAND_WINDOW_WIDTH,
   type IslandDisplay,
+  islandDock,
   islandDragTarget,
   islandHasNotch,
   type IslandRect,
   type IslandSurfaceRect,
   islandWindowBounds
 } from './island-geometry'
+import type { IslandOrigin } from './island-settings'
 import { buildIslandWindowUrl } from './island-url'
 import { attachRendererConsoleCapture } from './renderer-log'
 import { installWindowRendererLifecycle } from './window-renderer-lifecycle'
@@ -46,14 +48,19 @@ export interface IslandWindowOptions {
   anchorDisplay: () => IslandDisplay
   devServer?: string
   isMac: boolean
+  /** Whether the app's own window has the keyboard: the island steps aside. */
+  isMainFocused?: () => boolean
   loadWindowUrl: (window: BrowserWindow, url: string, label: string) => void
   log: (message: string) => void
   /** Re-open the app window on a session the island points at. */
   platform: string
+  /** Where the pill was parked last time, and how a new place is remembered. */
+  readOrigin?: () => IslandOrigin | null
   preloadPath: string
   profile?: null | string
   rendererIndex: () => string
   webPreferences: (preloadPath: string) => Electron.WebPreferences
+  writeOrigin?: (origin: IslandOrigin) => void
   wireWindow: (window: BrowserWindow) => void
 }
 
@@ -97,6 +104,77 @@ export function createIslandWindowController(options: IslandWindowOptions) {
     }
   }
 
+  /** Tell the renderer which edge it is attached to: the surface squares the
+   *  corners against that edge and hugs it. */
+  const announceDock = () => {
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    const bounds = window.getBounds()
+    const display = screen.getDisplayMatching(bounds)
+    const dock = islandDock({ display, platform, width: surface?.width ?? bounds.width })
+
+    window.webContents.send('hermes:island:dock', dock)
+  }
+
+  /** Whether the app window has the keyboard: the island reads it as "step
+   *  aside", because a notification about the app you are reading is noise. */
+  const announceMainFocus = () => {
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    window.webContents.send('hermes:island:main-focus', options.isMainFocused?.() === true)
+  }
+
+  let originTimer: null | ReturnType<typeof setTimeout> = null
+
+  /**
+   * The drag is over: snap the surface to an edge if it is close to one, move the
+   * window by the correction, let the surface spring into place and remember the
+   * result. Debounced from the last pointer move — the renderer never says
+   * "released", and one write per gesture is enough.
+   */
+  const rememberOrigin = () => {
+    if (originTimer) {
+      clearTimeout(originTimer)
+    }
+
+    originTimer = setTimeout(() => {
+      originTimer = null
+
+      if (!window || window.isDestroyed()) {
+        return
+      }
+
+      const bounds = window.getBounds()
+      const current = surfaceRect(bounds)
+
+      const settled = islandDragTarget({
+        dx: 0,
+        dy: 0,
+        displays: screen.getAllDisplays(),
+        platform,
+        surface: current
+      })
+
+      const dx = Math.round(settled.x - current.x)
+      const dy = Math.round(settled.y - current.y)
+
+      if (dx !== 0 || dy !== 0) {
+        window.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
+
+        if (!window.webContents.isDestroyed()) {
+          window.webContents.send('hermes:island:settle', { dx, dy })
+        }
+      }
+
+      announceDock()
+      options.writeOrigin?.({ x: Math.round(bounds.x + dx), y: Math.round(bounds.y + dy) })
+    }, 320)
+  }
+
   const spawn = (): BrowserWindow => {
     if (window && !window.isDestroyed()) {
       return window
@@ -104,7 +182,17 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
     const display = anchorDisplay()
     const notched = islandHasNotch(display, platform)
-    const bounds = islandWindowBounds(display, platform)
+    const anchor = islandWindowBounds(display, platform)
+    // A parked pill reopens where it was parked, on whatever display that was.
+    const saved = islandHasNotch(display, platform) ? null : (options.readOrigin?.() ?? null)
+
+    const parkedDisplay = saved
+      ? screen.getDisplayMatching({ height: 40, width: 320, x: saved.x, y: saved.y })
+      : display
+
+    const bounds = saved
+      ? { ...islandWindowBounds(parkedDisplay, platform), x: Math.round(saved.x), y: Math.round(saved.y) }
+      : anchor
 
     const next = new BrowserWindow({
       ...bounds,
@@ -205,6 +293,8 @@ export function createIslandWindowController(options: IslandWindowOptions) {
   }
 
   return {
+    announceDock,
+    announceMainFocus,
     ensureSpawned: spawn,
     getWindow: () => window,
     /** The island shell is mounted: show the window, without taking the caret. */
@@ -252,29 +342,23 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       // What the surface would occupy if nothing were in its way, and where it
       // is allowed to settle: clamped to the displays, then snapped to an edge.
-      const settled = islandDragTarget({
+      // Clamp only while the gesture is live. A snap here would re-snap on the
+      // next event and the pill could never leave the 30px band it landed in.
+      const moved = islandDragTarget({
         dx: delta.dx,
         dy: delta.dy,
         displays: screen.getAllDisplays(),
         platform,
+        settle: false,
         surface: current
       })
 
       window.setPosition(
-        Math.round(settled.x - (current.x - bounds.x)),
-        Math.round(settled.y - (current.y - bounds.y))
+        Math.round(moved.x - (current.x - bounds.x)),
+        Math.round(moved.y - (current.y - bounds.y))
       )
 
-      // The window jumps; the surface is told how far it was corrected so it can
-      // spring from where the pointer asked for into the place it settled.
-      const correction = {
-        dx: Math.round(settled.x - (current.x + delta.dx)),
-        dy: Math.round(settled.y - (current.y + delta.dy))
-      }
-
-      if ((correction.dx !== 0 || correction.dy !== 0) && !window.webContents.isDestroyed()) {
-        window.webContents.send('hermes:island:settle', correction)
-      }
+      rememberOrigin()
     },
     /** Follow a display topology change — the island is pinned to one display. */
     reposition() {
@@ -288,6 +372,14 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       // Same level as at creation, or a display change drops it back behind the
       // menu bar.
       window.setAlwaysOnTop(true, 'screen-saver')
+
+      // The window's own width changed with the display, so the pill sits at a
+      // different offset inside it: ask for a fresh measurement.
+      if (!window.webContents.isDestroyed()) {
+        window.webContents.send('hermes:island:remeasure')
+      }
+
+      announceDock()
     },
     dispose() {
       const target = window
@@ -330,6 +422,10 @@ function readSurfaceRect(raw: unknown): IslandSurfaceRect | null {
 export function registerIslandIpc(getController: () => IslandWindowController | null) {
   ipcMain.on('hermes:island:ready', () => {
     getController()?.markReady()
+    // The renderer boots with no idea where the window was restored, so the dock
+    // and the app's focus are announced with the first paint.
+    getController()?.announceDock()
+    getController()?.announceMainFocus()
   })
 
   ipcMain.on('hermes:island:surface', (_event, raw) => {

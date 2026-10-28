@@ -467,20 +467,18 @@ export function IslandShell() {
   // drift from the CSS the user is looking at. Main clamps and snaps this rect.
   const reportSurface = useCallback(() => {
     const surfaceEl = surfaceRef.current
-    const rootEl = rootRef.current
 
-    if (!surfaceEl || !rootEl) {
+    if (!surfaceEl) {
       return
     }
 
-    const rect = surfaceEl.getBoundingClientRect()
-    const origin = rootEl.getBoundingClientRect()
-
+    // Layout, not paint: `getBoundingClientRect` includes the drag's scale and the
+    // settle spring, so a re-measure mid-gesture would hand main a phantom rect.
     window.hermesDesktop?.island?.surface?.({
-      height: rect.height,
-      offsetX: rect.left - origin.left,
-      offsetY: rect.top - origin.top,
-      width: rect.width
+      height: surfaceEl.offsetHeight,
+      offsetX: surfaceEl.offsetLeft,
+      offsetY: surfaceEl.offsetTop,
+      width: surfaceEl.offsetWidth
     })
   }, [])
 
@@ -490,6 +488,10 @@ export function IslandShell() {
 
   // The window is snapped by main in one jump; the pill springs from where the
   // pointer asked for into where it settled, so the jump reads as a settle.
+  useEffect(() => {
+    return window.hermesDesktop?.island?.onRemeasure?.(() => reportSurface())
+  }, [reportSurface])
+
   useEffect(() => {
     return window.hermesDesktop?.island?.onSettle?.(correction => {
       const surfaceEl = surfaceRef.current
@@ -865,7 +867,7 @@ export function IslandShell() {
 
   return (
     <div
-      className="flex h-screen w-screen items-start justify-center overflow-hidden"
+      className="relative flex h-screen w-screen items-start justify-center overflow-hidden"
       dir={rtl ? 'rtl' : 'ltr'}
       onBlur={onSurfaceBlur}
       ref={rootRef}

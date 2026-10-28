@@ -139,6 +139,27 @@ export function islandDisplayUnder(rect: IslandRect, displays: IslandDisplay[]):
   return under
 }
 
+/** The display closest to a rect that overlaps none of them. */
+export function islandNearestDisplay(rect: IslandRect, displays: IslandDisplay[]): IslandDisplay | null {
+  const centreX = rect.x + rect.width / 2
+  const centreY = rect.y + rect.height / 2
+  let best: IslandDisplay | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const display of displays) {
+    const dx = Math.max(display.bounds.x - centreX, 0, centreX - (display.bounds.x + display.bounds.width))
+    const dy = Math.max(display.bounds.y - centreY, 0, centreY - (display.bounds.y + display.bounds.height))
+    const distance = dx * dx + dy * dy
+
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = display
+    }
+  }
+
+  return best
+}
+
 /**
  * Where a drag may put the SURFACE.
  *
@@ -153,13 +174,19 @@ export function islandDragTarget(input: {
   dy: number
   displays: IslandDisplay[]
   platform: string
+  /** Snap to an edge on this move. False while a drag is in flight: a pill that
+   *  snapped on every pointer event could not be dragged back out of the band it
+   *  snapped into. */
+  settle?: boolean
   surface: IslandRect
 }): { x: number; y: number } {
-  const { dx, dy, displays, platform, surface } = input
+  const { dx, dy, displays, platform, settle = true, surface } = input
   const floor = Math.min(...displays.map(display => display.bounds.y))
   // The ceiling belongs to the display the pill is on NOW: a drag that asks for
   // the far side of the desk must not be allowed to jump a whole screen down.
-  const under = islandDisplayUnder(surface, displays)
+  // A pill in the void between displays has no overlap at all, so the nearest
+  // display governs — `floor` alone would pin it to the top of the desktop.
+  const under = islandDisplayUnder(surface, displays) ?? islandNearestDisplay(surface, displays)
   const ceiling = under ? under.workArea.y + under.workArea.height - surface.height : floor
 
   const moved: IslandRect = {
@@ -173,7 +200,11 @@ export function islandDragTarget(input: {
     y: clamp(surface.y + dy, floor, Math.max(floor, ceiling))
   }
 
-  const docked = islandDisplayUnder(moved, displays)
+  if (!settle) {
+    return { x: Math.round(moved.x), y: Math.round(moved.y) }
+  }
+
+  const docked = islandDisplayUnder(moved, displays) ?? islandNearestDisplay(moved, displays)
   const dock = docked ? islandDock({ display: docked, platform, width: moved.width }) : null
 
   // The top of a display is the notch position, and a pill that stops 10px short
