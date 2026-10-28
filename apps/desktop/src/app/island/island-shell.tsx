@@ -13,7 +13,9 @@
 //                hides IN the housing rather than floating under it. Where there
 //                is no housing there is nothing to hide inside, so idle is fully
 //                transparent and takes no space at all.
-//   pill       — something is running: a dot and a count.
+//   pill       — something is running: a dot, and one line — the session, its
+//                tool and the buttons — that widens sideways on hover. It is
+//                never taller than the housing, and it never opens the list.
 //   attention — a turn is parked on the user. The island grows BY ITSELF (main
 //               shows it with `showInactive`, so the caret stays in the app the
 //               user is in) and puts Deny/Approve one click away.
@@ -61,7 +63,18 @@ import {
   submitToIslandSession
 } from './island-session'
 import { islandSettleTransform, useIslandSettle } from './island-settle'
-import { type IslandDockSide, islandDockSide, islandShape, NOTCH_HEIGHT } from './island-view'
+import {
+  islandClipPath,
+  islandCorners,
+  type IslandDockSide,
+  islandDockSide,
+  islandGooBlur,
+  islandLeash,
+  islandShape,
+  islandSurfaceTransform,
+  LEASH_BAND,
+  NOTCH_HEIGHT
+} from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
 /** macOS's own expansion curve — fast out, long settle. */
@@ -70,7 +83,7 @@ const SPRING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 /** A dragged size, kept inside the window's ceiling and above the size that
  *  still holds a header and a line of transcript. */
 const limitSize = (value: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, value)))
-const MORPH = `width 380ms ${SPRING}, height 380ms ${SPRING}, border-radius 300ms ${SPRING}, margin-top 380ms ${SPRING}, opacity 200ms ease-out, transform 300ms ${SPRING}`
+const MORPH = `margin-top 380ms ${SPRING}, opacity 200ms ease-out, transform 300ms ${SPRING}`
 const REVEAL = `opacity 220ms ease-out 60ms, transform 320ms ${SPRING} 40ms`
 
 const DOT = 'size-1.5 shrink-0 rounded-full'
@@ -122,8 +135,14 @@ export function IslandShell() {
   /** True between the pointer travelling and the release: no CSS transition runs
    *  while the window itself is moving, or every frame re-rasterises the text. */
   const [dragging, setDragging] = useState(false)
-  /** At rest the pill is a dot; the line and the width appear under the pointer. */
+  /** At rest the pill is a dot; the line and the width appear under the pointer.
+   *  Hover is a widening, never an expansion: it says what is running and offers
+   *  the buttons, and the list still waits for a click. */
   const [hovered, setHovered] = useState(false)
+  /** How far the surface has been let out from the notch WITHOUT the window
+   *  moving: the leash's own travel, painted inside the window so the anchor
+   *  holds. Zero once the leash is cut. */
+  const [leash, setLeash] = useState(0)
   /** The list's own search: the island is also the quickest way back in. */
   const [query, setQuery] = useState('')
 
@@ -163,7 +182,7 @@ export function IslandShell() {
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<null | { moved: boolean; startX: number; startY: number; x: number; y: number }>(null)
+  const dragRef = useRef<null | { moved: boolean; startX: number; startY: number; travel: number; x: number; y: number }>(null)
 
   const { approvalsById, answer } = useIslandApprovals(attentionIds)
   const projectList = useStore($projects)
@@ -488,14 +507,20 @@ export function IslandShell() {
     cardHeight: question ? 184 : answered ? (answerOpen ? 300 : 120) : 104,
     notchHeight,
     notched,
-    // Nothing running, nothing waiting: the pill is a dot in the notch. The richer
-    // width is a hover affordance, so the island stops being a strip of text on
-    // top of whatever the user is doing.
-    rich: stage === 'pill' && activityParts.length > 0 && hovered,
+    // Nothing running, nothing waiting: the pill is the notch itself. Hover
+    // widens it into the wings either side of the housing for one line — the
+    // session, its tool and the buttons — so the island stops being a strip of
+    // text on top of whatever the user is doing without ever growing taller.
+    rich: stage === 'pill' && hovered,
     rows: stage === 'session' ? transcript.length : rows.length,
     sessionSize,
     stage
   })
+
+  // The shape follows its target directly: `island-spring.ts` carries the
+  // velocity a retarget needs, and its host has to survive a render per frame.
+  const target = { height: shape.height, radius: shape.radius, width: shape.width }
+  const box = target
 
   // Collapsed with something running and nothing waiting: the pill's only job is
   // the dot and the line, so its buttons wait for the pointer.
@@ -773,11 +798,6 @@ export function IslandShell() {
   const onPointerLeaveSurface = useCallback(() => {
     setHovered(false)
 
-    if (hoverTimer.current) {
-      clearTimeout(hoverTimer.current)
-      hoverTimer.current = null
-    }
-
     // The open session takes the keyboard, so it closes on blur instead: a
     // pointer that wanders off while you read is not a request to close it.
     if (focused) {
@@ -794,12 +814,10 @@ export function IslandShell() {
     }, 1200)
   }, [collapse, focused])
 
-  // Hovering is asking what is going on: the pill opens the list on its own
-  // after a beat, without a click and without taking the keyboard.
-  const hoverTimer = useRef<null | ReturnType<typeof setTimeout>>(null)
-  const attentionRef = useRef(false)
-  attentionRef.current = Boolean(top)
-
+  // Hovering is asking what is going on, and the answer is one line: the session,
+  // the tool it is in, and the buttons. It never opens the list — a surface that
+  // unfolds under a passing pointer takes the screen from whatever the user was
+  // reading — so the list stays a click away and nothing else here runs on a timer.
   const onPointerEnterSurface = useCallback(() => {
     setHovered(true)
 
@@ -807,20 +825,6 @@ export function IslandShell() {
       clearTimeout(leaveTimer.current)
       leaveTimer.current = null
     }
-
-    if (hoverTimer.current) {
-      clearTimeout(hoverTimer.current)
-    }
-
-    hoverTimer.current = setTimeout(() => {
-      hoverTimer.current = null
-
-      // Never over a card that asks for an answer: expanding the list would put
-      // the approval or the question behind it.
-      if (!attentionRef.current) {
-        setExpanded(true)
-      }
-    }, 260)
   }, [])
 
   // Dragging belongs to the displays without a housing: there the island is the
@@ -842,7 +846,7 @@ export function IslandShell() {
       // keyboard: without this the click activates Hermes and the app window
       // comes forward over whatever the user was doing.
       event.preventDefault()
-      dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, x: event.screenX, y: event.screenY }
+      dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, travel: 0, x: event.screenX, y: event.screenY }
       event.currentTarget.setPointerCapture(event.pointerId)
       // Main clamps the pill, not the window: it needs the pill's rect before
       // the first delta, not after it.
@@ -880,9 +884,22 @@ export function IslandShell() {
         return
       }
 
-      window.hermesDesktop?.island?.drag?.({ dx, dy })
+      // The leash: the surface's travel away from the notch is NOT the pointer's.
+      // While it is attached the window HOLDS and the lag is painted inside it, so
+      // the top edge stays on the housing and the body is let out from it. Past
+      // the band the leash is cut, the held lag goes to main with this same move
+      // (so the place on the glass does not jump), and the surface then tracks the
+      // pointer one for one.
+      const travel = from.travel + dy
+      const attached = Math.abs(travel) <= LEASH_BAND
+      const cut = !attached && Math.abs(from.travel) <= LEASH_BAND
+      const held = cut ? islandLeash(from.travel) : 0
+
+      from.travel = travel
       from.x = event.screenX
       from.y = event.screenY
+      setLeash(attached ? islandLeash(travel) : 0)
+      window.hermesDesktop?.island?.drag?.({ dx, dy: attached ? 0 : dy + held })
     },
     []
   )
@@ -890,6 +907,7 @@ export function IslandShell() {
   const cancelDrag = useCallback(() => {
     dragRef.current = null
     setDragging(false)
+    setLeash(0)
   }, [])
 
   // The surface is the expand control: a press that stayed put was a click.
@@ -897,6 +915,7 @@ export function IslandShell() {
     const from = dragRef.current
     dragRef.current = null
     setDragging(false)
+    setLeash(0)
 
     if (!from || from.moved || focused) {
       return
@@ -959,6 +978,22 @@ export function IslandShell() {
         paddingTop: notched || dock === 'top' ? 0 : 8
       }}
     >
+      {/* The neck is a SILHOUETTE layer, never a wrapper: the goo filter's alpha
+          threshold eats glyphs, so the text stays in the crisp surface below and
+          only this black shape is blurred and re-thresholded. */}
+      <svg aria-hidden="true" className="pointer-events-none absolute size-0">
+        <filter colorInterpolationFilters="sRGB" id="island-goo">
+          <feGaussianBlur result="goo" stdDeviation={islandGooBlur(leash)} />
+          <feColorMatrix in="goo" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+        </filter>
+      </svg>
+      {leash > 0.5 ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 bg-black"
+          style={{ filter: 'url(#island-goo)', height: leash + 2, width: Math.max(96, box.width * 0.5) }}
+        />
+      ) : null}
       <div
         className={cn(
           'group pointer-events-auto select-none overflow-hidden bg-black text-white/90',
@@ -979,39 +1014,34 @@ export function IslandShell() {
         onPointerUp={endDrag}
         ref={surfaceRef}
         style={{
+          // A notch surface is clipped instead: its top corners flare outward
+          // into the screen's edge, which no radius can express.
+          clipPath: islandClipPath(shape) ?? undefined,
           // A docked island squares the corners against its edge: a capsule
           // floating 30px from the screen edge is not attached to it.
-          borderRadius:
-            shape.bottomOnly
-              ? `0 0 ${shape.radius}px ${shape.radius}px`
-              : notched || dock === 'free'
-                ? shape.radius
-              : dock === 'top'
-                ? `0 0 ${shape.radius}px ${shape.radius}px`
-                : dock === 'bottom'
-                  ? `${shape.radius}px ${shape.radius}px 0 0`
-                  : dock === 'left'
-                    ? `0 ${shape.radius}px ${shape.radius}px 0`
-                    : `${shape.radius}px 0 0 ${shape.radius}px`,
+          borderRadius: islandCorners(box.radius, shape.bottomOnly ? 'top' : dock),
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
-          height: shape.height,
+          height: box.height,
           // A notched surface is an extrusion of the housing, not a pill below it:
           // flush with the screen's top edge, and the housing's height is taken as
           // padding inside instead (see the content box).
-          marginTop: notched ? 0 : shape.top,
+          // The leash's lag is painted here, inside the window: the housing keeps
+          // the top edge while the body is let out from it.
+          marginTop: (notched ? 0 : shape.top) + leash,
           opacity: shape.opacity,
-          // A release holds its correction with no transition for one frame and
-          // is then released into the spring, which is what makes it land.
-          transform: settleOffset
-            ? islandSettleTransform(settleOffset)
-            : shape.opacity === 0
-              ? 'scale(0.92)'
-              : dragging
-                ? 'scale(1.03, 1.28)'
-                : 'none',
+          // One transform, in priority order: the drag's lift while the gesture is
+          // live, the release's correction on the frame after it, the resting
+          // pose otherwise. A hidden surface rests scaled down, so its fade reads
+          // as a retreat.
+          transform: islandSurfaceTransform({
+            dragging,
+            paint: '',
+            settle: settleOffset ? islandSettleTransform(settleOffset) : null,
+            visible: shape.opacity !== 0
+          }),
           transformOrigin: 'top center',
           transition: settleOffset || dragging ? 'none' : MORPH,
-          width: shape.width
+          width: box.width
         }}
       >
         <div
@@ -1414,7 +1444,7 @@ export function IslandShell() {
                     event.stopPropagation()
                     event.currentTarget.setPointerCapture(event.pointerId)
                     gripRef.current = {
-                      height: shape.height,
+                      height: box.height,
                       startX: event.screenX,
                       startY: event.screenY,
                       width: shape.width
