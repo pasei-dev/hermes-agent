@@ -707,6 +707,7 @@ export const deOverrides = {
     cancelQueued: 'Diese wartende Nachricht verwerfen',
     workers: (count: number) => (count === 1 ? '1 Worker' : `${count} Worker`),
     newSessionPlaceholder: 'Neue Sitzung starten…',
+    search: 'Diese Sitzungen filtern',
     send: 'Senden'
   },
   settings: {

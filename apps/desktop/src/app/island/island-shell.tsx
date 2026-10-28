@@ -30,23 +30,26 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router'
 
+import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { WiredPane } from '@/app/contrib/wiring'
 import { sessionRoute } from '@/app/routes'
 import { MessageTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
-import { prefersReducedMotion } from '@/hooks/use-media-query'
 import { isRtlLocale, useI18n } from '@/i18n'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, X } from '@/lib/icons'
+import { sessionProjectLabel } from '@/lib/session-project-label'
 import { cn } from '@/lib/utils'
 import { $busyInputConfig } from '@/store/busy-input-mode'
 import { $clarifyRequests, RECOMMENDED_LABEL } from '@/store/clarify'
 import { $queuedPromptsBySession } from '@/store/composer-queue'
 import { $gateway } from '@/store/gateway'
 import { $island, saveIslandSettings } from '@/store/island'
+import { $projects } from '@/store/projects'
 import { sessionApprovalStackSize } from '@/store/prompts'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import { $attentionSessionIds, $sessionStates, $workingSessionIds } from '@/store/session-states'
 import { $unreadFinishedMarkers, ackStoredSessionId } from '@/store/session-unread'
+import type { SessionInfo } from '@/types/hermes'
 
 import { islandQueueView } from './island-actions'
 import { $islandActivityBySession, type IslandActivity } from './island-activity'
@@ -57,6 +60,7 @@ import {
   readIslandTranscript,
   submitToIslandSession
 } from './island-session'
+import { islandSettleTransform, useIslandSettle } from './island-settle'
 import { type IslandDockSide, islandDockSide, islandShape } from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
@@ -66,7 +70,7 @@ const SPRING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 /** A dragged size, kept inside the window's ceiling and above the size that
  *  still holds a header and a line of transcript. */
 const limitSize = (value: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, value)))
-const MORPH = `width 380ms ${SPRING}, height 380ms ${SPRING}, border-radius 300ms ${SPRING}, opacity 200ms ease-out, transform 300ms ${SPRING}`
+const MORPH = `width 380ms ${SPRING}, height 380ms ${SPRING}, border-radius 300ms ${SPRING}, margin-top 380ms ${SPRING}, opacity 200ms ease-out, transform 300ms ${SPRING}`
 const REVEAL = `opacity 220ms ease-out 60ms, transform 320ms ${SPRING} 40ms`
 
 const DOT = 'size-1.5 shrink-0 rounded-full'
@@ -149,26 +153,47 @@ export function IslandShell() {
   const dragRef = useRef<null | { moved: boolean; startX: number; startY: number; x: number; y: number }>(null)
 
   const { approvalsById, answer } = useIslandApprovals(attentionIds)
+  const projectList = useStore($projects)
+  const { offset: settleOffset, settle } = useIslandSettle()
 
-  // Titles come from the stored session list; attention/working ids are stored
-  // ids already (lineage-expanded), so the app's own matcher resolves them.
-  const titles = useMemo(() => {
-    const map: Record<string, string> = {}
+  // One row lookup behind all three per-row facts: the title, the project and
+  // the session the status dot colors itself from. Attention/working ids are
+  // stored ids already (lineage-expanded), so the app's own matcher resolves
+  // them; the project goes through the SIDEBAR's resolver (`sessionProjectLabel`)
+  // so the island cannot name a row differently from the list beside it.
+  const meta = useMemo(() => {
+    const byId: Record<string, SessionInfo> = {}
+    const projects: Record<string, string> = {}
+    const titles: Record<string, string> = {}
 
     for (const id of [...attentionIds, ...workingIds]) {
-      const row = sessions.find(session => sessionMatchesStoredId(session, id))
+      const session = sessions.find(row => sessionMatchesStoredId(row, id))
 
-      if (row?.title) {
-        map[id] = row.title
+      if (!session) {
+        continue
+      }
+
+      byId[id] = session
+
+      if (session.title) {
+        titles[id] = session.title
+      }
+
+      const project = sessionProjectLabel(session, projectList)
+
+      if (project) {
+        projects[id] = project
       }
     }
 
-    return map
-  }, [attentionIds, sessions, workingIds])
+    return { projects, sessions: byId, titles }
+  }, [attentionIds, projectList, sessions, workingIds])
+
+  const { projects, sessions: sessionsById, titles } = meta
 
   const rows = useMemo(
-    () => islandRows({ approvalsById, attentionIds, titles, workingIds }),
-    [approvalsById, attentionIds, titles, workingIds]
+    () => islandRows({ approvalsById, attentionIds, projects, titles, workingIds }),
+    [approvalsById, attentionIds, projects, titles, workingIds]
   )
 
   // Recent sessions, not only the running ones: the island is also the quickest
@@ -351,6 +376,8 @@ export function IslandShell() {
   const queues = useStore($queuedPromptsBySession)
   const busyMode = useStore($busyInputConfig)?.mode ?? null
   const activity = lead ? activities[lead.id] : undefined
+  // The session the header dot speaks for: the one open in place, else the pill's lead.
+  const headSessionId = (focused ?? lead)?.id ?? null
 
   // No clock on the island: a timer ticking once a second to say how long
   // something has been running is a wakeup and a glyph that never changed a
@@ -462,6 +489,44 @@ export function IslandShell() {
 
   useIslandClickThrough(rootRef)
 
+  // A character typed into the open list is a search. The field appears WITH
+  // that character in it, which is how a field that is hidden until typing can
+  // be reached by typing alone.
+  useEffect(() => {
+    if (stage !== 'expanded' || query) {
+      return
+    }
+
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+
+      // The composer and the deny reason own their own typing.
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey || event.key.length !== 1 || !event.key.trim()) {
+        return
+      }
+
+      window.hermesDesktop?.island?.setFocusable?.(true)
+      setQuery(event.key)
+    }
+
+    window.addEventListener('keydown', onKey)
+
+    return () => window.removeEventListener('keydown', onKey)
+  }, [query, stage])
+
+  const searching = query.length > 0
+
+  // Matches the title and the project, so a row is found by either half of what
+  // it shows. The filter never touches the geometry: the island is sized from
+  // the unfiltered list so typing cannot grow or shrink it under the pointer.
+  const shownRows = searching
+    ? rows.filter(row => `${row.title} ${row.project ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+    : rows
+
   // Where the pill sits inside the window, measured rather than derived: the
   // shape changes per stage and mid-animation, so a number calculated here would
   // drift from the CSS the user is looking at. Main clamps and snaps this rect.
@@ -492,20 +557,12 @@ export function IslandShell() {
     return window.hermesDesktop?.island?.onRemeasure?.(() => reportSurface())
   }, [reportSurface])
 
+  // Main's release message is the correction it applied to the window. The
+  // surface paints that correction for one frame and springs to rest, so a
+  // snapped window lands instead of teleporting — `island-settle.ts` owns it.
   useEffect(() => {
-    return window.hermesDesktop?.island?.onSettle?.(correction => {
-      const surfaceEl = surfaceRef.current
-
-      if (!surfaceEl || (correction.dx === 0 && correction.dy === 0) || prefersReducedMotion()) {
-        return
-      }
-
-      surfaceEl.animate(
-        [{ transform: `translate(${-correction.dx}px, ${-correction.dy}px)` }, { transform: 'none' }],
-        { duration: 300, easing: SPRING }
-      )
-    })
-  }, [])
+    return window.hermesDesktop?.island?.onSettle?.(correction => settle(correction))
+  }, [settle])
 
   // Main holds the window hidden until this lands: the island is a full renderer,
   // so its first paint is the app's boot screen.
@@ -843,6 +900,14 @@ export function IslandShell() {
         return
       }
 
+      // The search is the shallowest thing on screen: it goes first, and the
+      // list collapses on the next Escape.
+      if (query) {
+        setQuery('')
+
+        return
+      }
+
       if (focused) {
         setFocused(null)
         setTranscript([])
@@ -861,7 +926,7 @@ export function IslandShell() {
     window.addEventListener('keydown', onKey)
 
     return () => window.removeEventListener('keydown', onKey)
-  }, [expanded, focused, stage])
+  }, [expanded, focused, query, stage])
 
   const content = stage !== 'hidden'
 
@@ -910,10 +975,20 @@ export function IslandShell() {
                     : `${shape.radius}px 0 0 ${shape.radius}px`,
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
           height: shape.height,
+          // Never paint under the housing: every grown state starts below it.
+          marginTop: shape.top,
           opacity: shape.opacity,
-          transform: shape.opacity === 0 ? 'scale(0.92)' : dragging ? 'scale(1.03, 1.28)' : 'none',
+          // A release holds its correction with no transition for one frame and
+          // is then released into the spring, which is what makes it land.
+          transform: settleOffset
+            ? islandSettleTransform(settleOffset)
+            : shape.opacity === 0
+              ? 'scale(0.92)'
+              : dragging
+                ? 'scale(1.03, 1.28)'
+                : 'none',
           transformOrigin: 'top center',
-          transition: dragging ? 'none' : MORPH,
+          transition: settleOffset || dragging ? 'none' : MORPH,
           width: shape.width
         }}
       >
@@ -942,12 +1017,11 @@ export function IslandShell() {
                 <ChevronLeft />
               </Button>
             ) : null}
-            <span
-              className={cn(
-                DOT,
-                waitingRows.length > 0 ? 'bg-amber-400' : runningCount > 0 ? 'bg-white' : 'bg-white/30'
-              )}
-            />
+            {headSessionId ? (
+              <SessionStatusDot session={sessionsById[headSessionId] ?? null} storedSessionId={headSessionId} />
+            ) : (
+              <span className={cn(DOT, 'bg-white/30')} />
+            )}
             <span className={cn('min-w-0 flex-1 truncate text-xs', atRest && !hovered && 'opacity-0')}>
               {focused
                 ? focused.title || t.island.needsInput
@@ -1176,56 +1250,83 @@ export function IslandShell() {
 
           {stage === 'expanded' ? (
             <div className="mt-1.5 flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {rows.length === 0 && recents.length === 0 ? (
-                  <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
-                ) : null}
-                {rows.map(row => (
-                  <button className={ROW} key={row.id} onClick={() => focusSession(row)} type="button">
-                    <span className={cn(DOT, row.state === 'needs-input' ? 'bg-amber-400' : 'bg-white')} />
-                    <span className="min-w-0 flex-1 truncate text-xs">{row.title || t.island.needsInput}</span>
-                    <span className="shrink-0 text-[0.65rem] text-white/35">
-                      {row.state === 'needs-input'
-                        ? t.island.needsAnswer
-                        : describe(activities[row.id]).join(' · ') || t.island.working}
-                    </span>
-                  </button>
-                ))}
-                {recents.length > 0 ? (
-                  <div className="mt-1.5 px-2 text-[0.6rem] uppercase tracking-[0.08em] text-white/25">
-                    {t.island.recent}
+              <div className="relative min-h-0 flex-1">
+                {/* The field appears with the first character already in it, and
+                    covers the first row rather than taking a row of its own: the
+                    island has room for rows or for a field, not both. */}
+                {searching ? (
+                  <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-1 rounded-lg bg-black/85 px-2 py-1 shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.14)]">
+                    <input
+                      aria-label={t.island.search}
+                      autoFocus
+                      className="min-w-0 flex-1 bg-transparent px-1 text-xs text-white/90 outline-none"
+                      data-island-search=""
+                      onChange={event => setQuery(event.target.value)}
+                      onFocus={event => focusIsland(event.currentTarget)}
+                      onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                          setQuery('')
+                        }
+                      }}
+                      onPointerDown={event => focusIsland(event.currentTarget)}
+                      value={query}
+                    />
+                    <Button
+                      aria-label={t.island.collapse}
+                      className={GLYPH}
+                      onClick={() => setQuery('')}
+                      size="icon-xs"
+                      variant="ghost"
+                    >
+                      <X />
+                    </Button>
                   </div>
                 ) : null}
-                {recents.map(session => (
-                  <button
-                    className={ROW}
-                    key={session.id}
-                    onClick={() => focusSession({ id: session.id, state: 'working', title: session.title ?? '' })}
-                    type="button"
-                  >
-                    <span className={cn(DOT, 'bg-white/25')} />
-                    <span className="min-w-0 flex-1 truncate text-xs text-white/75">
-                      {session.title || t.island.needsInput}
-                    </span>
-                  </button>
-                ))}
-              </div>
 
-              {/* One field, both jobs: type to narrow the list, or paste a title
-                  you half remember. Empty means "show me what is recent". */}
-              <form
-                className="mt-1 flex shrink-0 items-center gap-1.5 border-t border-white/10 pt-1.5"
-                onSubmit={event => event.preventDefault()}
-              >
-                <input
-                  className="min-w-0 flex-1 bg-transparent px-1 text-xs text-white/90 outline-none placeholder:text-white/30"
-                  onChange={event => setQuery(event.target.value)}
-                  onFocus={event => focusIsland(event.currentTarget)}
-                  onPointerDown={event => focusIsland(event.currentTarget)}
-                  placeholder={t.island.searchSessions}
-                  value={query}
-                />
-              </form>
+                <div className="h-full overflow-y-auto">
+                  {shownRows.length === 0 && recents.length === 0 ? (
+                    <div className="px-2 py-1 text-[0.7rem] text-white/40">{t.island.empty}</div>
+                  ) : null}
+                  {shownRows.map(row => (
+                    <button className={ROW} key={row.id} onClick={() => focusSession(row)} type="button">
+                      <SessionStatusDot session={sessionsById[row.id]} storedSessionId={row.id} />
+                      <span className="min-w-0 flex-1 truncate text-xs">{row.title || t.island.needsInput}</span>
+                      {row.project ? (
+                        <span
+                          className="max-w-[6.5rem] shrink-0 truncate text-right text-[0.65rem] text-white/45"
+                          data-island-project=""
+                          title={row.project}
+                        >
+                          {row.project}
+                        </span>
+                      ) : null}
+                      <span className="shrink-0 text-[0.65rem] text-white/35">
+                        {row.state === 'needs-input'
+                          ? t.island.needsAnswer
+                          : describe(activities[row.id]).join(' · ') || t.island.working}
+                      </span>
+                    </button>
+                  ))}
+                  {recents.length > 0 ? (
+                    <div className="mt-1.5 px-2 text-[0.6rem] uppercase tracking-[0.08em] text-white/25">
+                      {t.island.recent}
+                    </div>
+                  ) : null}
+                  {recents.map(session => (
+                    <button
+                      className={ROW}
+                      key={session.id}
+                      onClick={() => focusSession({ id: session.id, state: 'working', title: session.title ?? '' })}
+                      type="button"
+                    >
+                      <span className={cn(DOT, 'bg-white/25')} />
+                      <span className="min-w-0 flex-1 truncate text-xs text-white/75">
+                        {session.title || t.island.needsInput}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : null}
 

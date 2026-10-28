@@ -710,6 +710,7 @@ export const esOverrides = {
     cancelQueued: 'Descartar este mensaje en cola',
     workers: (count: number) => (count === 1 ? '1 trabajador' : `${count} trabajadores`),
     newSessionPlaceholder: 'Iniciar una sesión nueva…',
+    search: 'Filtrar estas sesiones',
     send: 'Enviar'
   },
   settings: {

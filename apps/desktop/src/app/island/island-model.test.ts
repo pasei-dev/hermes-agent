@@ -53,6 +53,22 @@ describe('islandRows', () => {
     expect(rows.map(row => row.id)).toEqual(['ghost', 's-c', 's-a'])
     expect(rows[0].title).toBe('')
   })
+
+  it('carries each session its project label without touching the order', () => {
+    const rows = islandRows({
+      approvalsById: {},
+      attentionIds: [],
+      projects: { 's-a': ' hermes-agent ', 's-b': 'Buchla' },
+      titles: TITLES,
+      workingIds: ['s-c', 's-a', 's-b']
+    })
+
+    expect(rows.map(row => [row.id, row.project])).toEqual([
+      ['s-b', 'Buchla'],
+      ['s-c', undefined],
+      ['s-a', 'hermes-agent']
+    ])
+  })
 })
 
 describe('islandStage', () => {

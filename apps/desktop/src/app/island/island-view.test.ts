@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { islandShape, NOTCH_HEIGHT, NOTCH_WIDTH } from './island-view'
+import { DOCKED_RADIUS, islandShape, NOTCH_HEIGHT, NOTCH_WIDTH } from './island-view'
 
 describe('islandShape', () => {
   it('rests as the notch itself on a notched display — that is the autohide', () => {
@@ -8,9 +8,35 @@ describe('islandShape', () => {
       height: NOTCH_HEIGHT,
       mode: 'notch',
       opacity: 1,
-      radius: NOTCH_HEIGHT / 2,
+      radius: DOCKED_RADIUS,
+      top: 0,
       width: NOTCH_WIDTH
     })
+  })
+
+  it('squares the resting pill off against the housing, and keeps it docked there', () => {
+    const docked = islandShape({ notched: true, rows: 0, stage: 'hidden' })
+    const floating = islandShape({ notched: false, rows: 0, stage: 'hidden' })
+
+    // Squarer than the floating pill's full round, so the docked state reads as
+    // pressed into the housing rather than as another floating bubble.
+    expect(docked.radius).toBeLessThan(docked.height / 2)
+    expect(floating.radius).toBe(floating.height / 2)
+  })
+
+  it('starts every grown state BELOW the housing, and the resting pill inside it', () => {
+    for (const stage of ['attention', 'expanded', 'session'] as const) {
+      expect(islandShape({ notched: true, rows: 2, stage }).top, stage).toBe(NOTCH_HEIGHT)
+    }
+
+    // The pill IS the housing on a notched display; where there is no housing
+    // there is nothing to clear, so only the notched case pays the offset.
+    expect(islandShape({ notched: true, rows: 2, stage: 'pill' }).top).toBe(0)
+    expect(islandShape({ notched: true, rows: 0, stage: 'hidden' }).top).toBe(0)
+
+    for (const stage of ['attention', 'expanded', 'session'] as const) {
+      expect(islandShape({ notched: false, rows: 2, stage }).top, stage).toBe(0)
+    }
   })
 
   it('is fully invisible when idle with no housing to hide inside', () => {

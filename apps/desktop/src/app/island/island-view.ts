@@ -20,6 +20,10 @@ export const NOTCH_WIDTH = 208
 export const NOTCH_HEIGHT = 32
 
 const EXPANDED_WIDTH = 452
+/** Corner radius of the pill while it rests in the housing: squarer than the
+ *  rounded pill it grows out of, so a surface that has settled against the notch
+ *  reads as docked rather than as an ordinary floating bubble. */
+export const DOCKED_RADIUS = 10
 /** One open session: the app's chat view, so it is a panel — the island window's
  *  own ceiling is 480 × 560, and the surface takes all of it bar the padding. */
 const SESSION_WIDTH = 478
@@ -38,6 +42,11 @@ export interface IslandShape {
   mode: 'expanded' | 'floating' | 'notch'
   opacity: number
   radius: number
+  /** Distance from the top of the window to the surface's first painted row.
+   *  Zero for the resting pill (it IS the housing there), the housing's height
+   *  for everything that grows out of it — a notched Mac's top centre is opaque,
+   *  so nothing may be painted under it. */
+  top: number
   width: number
 }
 
@@ -53,10 +62,15 @@ export function islandShape(input: {
 }): IslandShape {
   const { cardHeight = ATTENTION_CARD_HEIGHT, notched, rich = false, rows, sessionSize, stage } = input
 
+  // Everything that grows out of the housing starts BELOW it on a notched
+  // display: the camera housing is physically opaque, so a row painted at the
+  // top of the window would sit behind the notch and never be seen.
+  const belowHousing = notched ? NOTCH_HEIGHT : 0
+
   if (stage === 'hidden') {
     return notched
-      ? { height: NOTCH_HEIGHT, mode: 'notch', opacity: 1, radius: NOTCH_HEIGHT / 2, width: NOTCH_WIDTH }
-      : { height: 30, mode: 'floating', opacity: 0, radius: 15, width: 132 }
+      ? { height: NOTCH_HEIGHT, mode: 'notch', opacity: 1, radius: DOCKED_RADIUS, top: 0, width: NOTCH_WIDTH }
+      : { height: 30, mode: 'floating', opacity: 0, radius: 15, top: 0, width: 132 }
   }
 
   if (stage === 'pill') {
@@ -68,6 +82,7 @@ export function islandShape(input: {
       mode: 'floating',
       opacity: 1,
       radius: HEADER_HEIGHT / 2,
+      top: 0,
       width: rich ? (notched ? 316 : 268) : notched ? 236 : 190
     }
   }
@@ -78,6 +93,7 @@ export function islandShape(input: {
       mode: 'floating',
       opacity: 1,
       radius: 22,
+      top: belowHousing,
       width: notched ? 372 : 344
     }
   }
@@ -90,6 +106,7 @@ export function islandShape(input: {
       mode: 'expanded',
       opacity: 1,
       radius: 22,
+      top: belowHousing,
       width: sessionSize?.width ?? SESSION_WIDTH
     }
   }
@@ -101,7 +118,7 @@ export function islandShape(input: {
     HEADER_HEIGHT + listHeight + SEARCH_FIELD_HEIGHT + SURFACE_PADDING * 2
   )
 
-  return { height, mode: 'expanded', opacity: 1, radius: 24, width: EXPANDED_WIDTH }
+  return { height, mode: 'expanded', opacity: 1, radius: 24, top: belowHousing, width: EXPANDED_WIDTH }
 }
 
 /** Which edge the island's window is attached to, as main reports it. */

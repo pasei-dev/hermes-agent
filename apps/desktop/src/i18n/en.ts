@@ -710,10 +710,10 @@ export const en: Translations = {
     workers: (count: number) => (count === 1 ? '1 worker' : `${count} workers`),
     newSessionPlaceholder: 'Start a new session…',
     recent: 'Recent',
-    searchSessions: 'Search sessions…',
     finished: 'Finished — open it to read the answer',
     finishedTitle: 'The agent answered',
     answerPlaceholder: 'Your answer…',
+    search: 'Filter these sessions',
     send: 'Send'
   },
 

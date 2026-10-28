@@ -21,6 +21,9 @@ export interface IslandApproval {
 export interface IslandRow {
   approval?: IslandApproval
   id: string
+  /** The session's project, named the way the sidebar's card header names it.
+   *  Absent for a chat with no workspace at all. */
+  project?: string
   state: 'needs-input' | 'working'
   title: string
 }
@@ -29,6 +32,9 @@ export interface IslandRowsInput {
   /** Parked approvals, keyed by the session that raised them. */
   approvalsById: Record<string, readonly IslandApproval[]>
   attentionIds: readonly string[]
+  /** Project labels keyed by stored session id; resolved by the app's own
+   *  `sessionProjectLabel`, so the island and the sidebar cannot disagree. */
+  projects?: Record<string, string>
   /** Titles keyed by stored session id; a missing one falls back to a generic label. */
   titles: Record<string, string>
   workingIds: readonly string[]
@@ -40,14 +46,16 @@ export interface IslandRowsInput {
  * that is BOTH busy and waiting (a turn parked on its own approval) is listed
  * once, as `needs-input` — the newer, more actionable fact.
  */
-export function islandRows({ approvalsById, attentionIds, titles, workingIds }: IslandRowsInput): IslandRow[] {
+export function islandRows({ approvalsById, attentionIds, projects, titles, workingIds }: IslandRowsInput): IslandRow[] {
   const needsInput = new Set(attentionIds)
   const rows: IslandRow[] = []
+  const projectOf = (id: string) => projects?.[id]?.trim() || undefined
 
   for (const id of needsInput) {
     rows.push({
       approval: approvalsById[id]?.[0],
       id,
+      project: projectOf(id),
       state: 'needs-input',
       title: titles[id]?.trim() ?? ''
     })
@@ -58,7 +66,7 @@ export function islandRows({ approvalsById, attentionIds, titles, workingIds }: 
       continue
     }
 
-    rows.push({ id, state: 'working', title: titles[id]?.trim() ?? '' })
+    rows.push({ id, project: projectOf(id), state: 'working', title: titles[id]?.trim() ?? '' })
   }
 
   const rank = (row: IslandRow) => (row.state === 'needs-input' ? 0 : 1)

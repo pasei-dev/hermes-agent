@@ -707,6 +707,7 @@ export const frOverrides = {
     cancelQueued: 'Supprimer ce message en file',
     workers: (count: number) => (count === 1 ? '1 agent' : `${count} agents`),
     newSessionPlaceholder: 'Démarrer une nouvelle session…',
+    search: 'Filtrer ces sessions',
     send: 'Envoyer'
   },
   settings: {

@@ -621,10 +621,10 @@ catalog: CatalogTranslations
     workers: (count: number) => string
     newSessionPlaceholder: string
     recent: string
-    searchSessions: string
     finished: string
     finishedTitle: string
     answerPlaceholder: string
+    search: string
     send: string
   }
 
