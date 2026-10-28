@@ -1286,6 +1286,9 @@ export const en: Translations = {
       notificationsTitle: 'Approvals only in the island',
       notificationsDesc:
         'Skip the system notification for an approval the island can answer, so one question is never asked twice.',
+      expandShortcutTitle: 'Expand chord',
+      expandShortcutDesc:
+        'A global shortcut that opens the island list from any app. Empty means no chord.',
       shortcutTitle: 'Approve chord',
       shortcutDesc: 'A global shortcut that approves the card on top from any app. Empty means no chord.',
       shortcutTaken: 'Another app already uses this shortcut.',

@@ -222,6 +222,13 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       ipcRenderer.on('hermes:island:approve-top', listener)
 
       return () => ipcRenderer.removeListener('hermes:island:approve-top', listener)
+    },
+    // Main → island renderer: the global expand chord fired.
+    onExpand: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('hermes:island:expand', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:expand', listener)
     }
   },
   hudModifier: {

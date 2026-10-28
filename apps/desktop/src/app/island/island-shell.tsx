@@ -98,6 +98,8 @@ export function IslandShell() {
   /** True between the pointer travelling and the release: no CSS transition runs
    *  while the window itself is moving, or every frame re-rasterises the text. */
   const [dragging, setDragging] = useState(false)
+  /** At rest the pill is a dot; the line and the width appear under the pointer. */
+  const [hovered, setHovered] = useState(false)
   /** The list's own search: the island is also the quickest way back in. */
   const [query, setQuery] = useState('')
 
@@ -357,7 +359,10 @@ export function IslandShell() {
 
   const shape = islandShape({
     notched,
-    rich: stage === 'pill' && activityParts.length > 0,
+    // Nothing running, nothing waiting: the pill is a dot in the notch. The richer
+    // width is a hover affordance, so the island stops being a strip of text on
+    // top of whatever the user is doing.
+    rich: stage === 'pill' && activityParts.length > 0 && hovered,
     rows: stage === 'session' ? transcript.length : rows.length,
     stage
   })
@@ -491,6 +496,18 @@ export function IslandShell() {
 
     return () => stop?.()
   }, [respond, top])
+
+  // The expand chord: same door, one gesture. Opening the list is a keyboard act,
+  // so the window takes the keyboard with it — a list you cannot type into is
+  // not what the chord promised.
+  useEffect(() => {
+    const stop = window.hermesDesktop?.island?.onExpand?.(() => {
+      window.hermesDesktop?.island?.setFocusable?.(true)
+      setExpanded(true)
+    })
+
+    return () => stop?.()
+  }, [])
 
   // Typing is the ONE case that asks for the keyboard. Main keeps the window
   // non-activating otherwise, so a click on Deny never pulls Hermes forward.
@@ -643,6 +660,8 @@ export function IslandShell() {
         data-island-surface=""
         onPointerCancel={cancelDrag}
         onPointerDown={onPointerDown}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         style={{
@@ -686,7 +705,7 @@ export function IslandShell() {
                 waitingRows.length > 0 ? 'bg-amber-400' : runningCount > 0 ? 'bg-white' : 'bg-white/30'
               )}
             />
-            <span className="min-w-0 flex-1 truncate text-xs">
+            <span className={cn('min-w-0 flex-1 truncate text-xs', atRest && !hovered && 'opacity-0')}>
               {focused
                 ? focused.title || t.island.needsInput
                 : waitingRows.length > 0

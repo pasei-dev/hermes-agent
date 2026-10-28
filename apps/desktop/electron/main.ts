@@ -12660,11 +12660,24 @@ const islandShortcut = createQuickEntryShortcut(globalShortcut, () => {
   }
 })
 
+const islandExpandShortcut = createQuickEntryShortcut(globalShortcut, () => {
+  const target = islandController?.getWindow()
+
+  if (target && !target.isDestroyed()) {
+    target.webContents.send('hermes:island:expand')
+  }
+})
+
 /** What Settings sees: the saved preferences plus what the OS actually holds. */
 function islandStatus(): IslandStatus {
   const chord = islandShortcut.current()
+  const expand = islandExpandShortcut.current()
 
-  return { ...currentIslandSettings, registeredShortcut: chord.registered ? chord.shortcut : '' }
+  return {
+    ...currentIslandSettings,
+    registeredExpandShortcut: expand.registered ? expand.shortcut : '',
+    registeredShortcut: chord.registered ? chord.shortcut : ''
+  }
 }
 
 function applyIslandSettings(settings: IslandSettings): IslandStatus {
@@ -12674,6 +12687,10 @@ function applyIslandSettings(settings: IslandSettings): IslandStatus {
   islandShortcut.apply({
     enabled: settings.enabled && Boolean(settings.shortcut),
     shortcut: settings.shortcut
+  })
+  islandExpandShortcut.apply({
+    enabled: settings.enabled && Boolean(settings.expandShortcut),
+    shortcut: settings.expandShortcut
   })
 
   if (!settings.enabled) {

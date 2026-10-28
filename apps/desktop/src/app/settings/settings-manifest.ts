@@ -201,6 +201,15 @@ export const SETTINGS_MANIFEST = {
       keywords: ['dynamic island', 'shortcut', 'hotkey', 'chord', 'keybind', 'approve'],
       available: () => Boolean(window.hermesDesktop?.island?.getSettings),
       copy: t => ({ label: t.settings.island.shortcutTitle, description: t.settings.island.shortcutDesc })
+    },
+    islandExpandShortcut: {
+      subpage: 'desktop',
+      keywords: ['dynamic island', 'shortcut', 'hotkey', 'chord', 'keybind', 'expand', 'open'],
+      available: () => Boolean(window.hermesDesktop?.island?.getSettings),
+      copy: t => ({
+        label: t.settings.island.expandShortcutTitle,
+        description: t.settings.island.expandShortcutDesc
+      })
     }
   },
   keybinds: {

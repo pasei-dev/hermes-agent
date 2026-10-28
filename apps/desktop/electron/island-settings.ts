@@ -24,6 +24,8 @@ export interface IslandSettings {
   followPointer: boolean
   /** Off means the window is never created at all — no renderer, no surface. */
   enabled: boolean
+  /** Global chord that expands the list; '' means none. */
+  expandShortcut: string
   /**
    * Where the user last parked the floating pill, in screen coordinates. Null
    * means "at the anchor". A notch belongs to the housing and never moves, so
@@ -37,6 +39,7 @@ export interface IslandSettings {
 }
 
 export const ISLAND_DEFAULTS: IslandSettings = {
+  expandShortcut: '',
   followPointer: false,
   enabled: true,
   origin: null,
@@ -66,8 +69,10 @@ function sanitizeOrigin(raw: unknown): IslandOrigin | null {
 export function sanitizeIslandSettings(raw: unknown): IslandSettings {
   const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const shortcut = typeof record.shortcut === 'string' ? record.shortcut.trim() : ''
+  const expandShortcut = typeof record.expandShortcut === 'string' ? record.expandShortcut.trim() : ''
 
   return {
+    expandShortcut: expandShortcut && parseQuickEntryShortcut(expandShortcut).ok ? expandShortcut : '',
     followPointer: record.followPointer === true,
     enabled: record.enabled === undefined ? ISLAND_DEFAULTS.enabled : record.enabled === true,
     origin: sanitizeOrigin(record.origin),
@@ -81,6 +86,8 @@ export function sanitizeIslandSettings(raw: unknown): IslandSettings {
 
 /** What Settings reads back: the saved preferences plus what the OS actually holds. */
 export interface IslandStatus extends IslandSettings {
+  /** The chord the OS accepted for expanding the list, or '' when none is registered. */
+  registeredExpandShortcut: string
   /** The chord the OS accepted, or '' when none is registered. */
   registeredShortcut: string
 }
@@ -90,6 +97,7 @@ export function withIslandPatch(current: IslandSettings, patch: unknown): Island
   const next = patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}
 
   return sanitizeIslandSettings({
+    expandShortcut: next.expandShortcut === undefined ? current.expandShortcut : next.expandShortcut,
     followPointer: next.followPointer === undefined ? current.followPointer : next.followPointer,
     enabled: next.enabled === undefined ? current.enabled : next.enabled,
     // The parked position is main's own state: the renderer drags the window, it

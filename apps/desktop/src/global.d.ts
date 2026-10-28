@@ -206,6 +206,7 @@ declare global {
         setSettings: (patch: IslandSettingsPatch) => Promise<IslandStatus>
         // Main → island renderer: the global approval chord fired.
         onApproveTop: (callback: () => void) => () => void
+        onExpand: (callback: () => void) => () => void
       }
       // macOS native screenshot gesture; absent on other platforms.
       screenshot?: ScreenshotApi

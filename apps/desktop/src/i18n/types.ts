@@ -1078,6 +1078,8 @@ catalog: CatalogTranslations
       displayDesc: string
       notificationsTitle: string
       notificationsDesc: string
+      expandShortcutTitle: string
+      expandShortcutDesc: string
       shortcutTitle: string
       shortcutDesc: string
       shortcutTaken: string

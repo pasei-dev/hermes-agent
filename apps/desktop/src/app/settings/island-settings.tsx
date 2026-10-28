@@ -25,6 +25,10 @@ export function IslandSettings() {
   // tears down the accelerator the OS is currently holding.
   const [draft, setDraft] = useState<null | string>(null)
   const [note, setNote] = useState<null | string>(null)
+  // Two chords, two drafts: a half-typed expand binding must not tear down the
+  // approval accelerator either.
+  const [expandDraft, setExpandDraft] = useState<null | string>(null)
+  const [expandNote, setExpandNote] = useState<null | string>(null)
 
   useEffect(() => {
     void loadIslandSettings()
@@ -58,6 +62,27 @@ export function IslandSettings() {
     }
   }
 
+  const commitExpand = async () => {
+    const wanted = (expandDraft ?? '').trim()
+
+    setExpandDraft(null)
+    setExpandNote(null)
+
+    if (wanted === state.expandShortcut) {
+      return
+    }
+
+    await saveIslandSettings({ expandShortcut: wanted })
+
+    const saved = $island.get()
+
+    if (wanted && !saved.expandShortcut) {
+      setExpandNote(copy.shortcutInvalid)
+    } else if (saved.expandShortcut && saved.registeredExpandShortcut !== saved.expandShortcut) {
+      setExpandNote(copy.shortcutTaken)
+    }
+  }
+
   return (
     <>
       <ToggleRow
@@ -82,6 +107,33 @@ export function IslandSettings() {
         id={settingElementId(SETTING_IDS.advanced.islandNotifications)}
         label={copy.notificationsTitle}
         onChange={suppressApprovalNotifications => void saveIslandSettings({ suppressApprovalNotifications })}
+      />
+      <ListRow
+        action={
+          <Input
+            aria-label={copy.expandShortcutTitle}
+            disabled={!state.enabled}
+            onBlur={() => void commitExpand()}
+            onChange={event => setExpandDraft(event.target.value)}
+            onKeyDown={event => {
+              if (isSubmitEnter(event)) {
+                event.preventDefault()
+                void commitExpand()
+              }
+            }}
+            value={expandDraft ?? state.expandShortcut}
+          />
+        }
+        below={
+          expandNote && (
+            <div className="mt-1 text-[length:var(--conversation-caption-font-size)] text-amber-500/90">
+              {expandNote}
+            </div>
+          )
+        }
+        description={copy.expandShortcutDesc}
+        id={settingElementId(SETTING_IDS.advanced.islandExpandShortcut)}
+        title={copy.expandShortcutTitle}
       />
       <ListRow
         action={

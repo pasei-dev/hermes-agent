@@ -16,6 +16,7 @@
 import { atom } from 'nanostores'
 
 export interface IslandSettings {
+  expandShortcut: string
   followPointer: boolean
   enabled: boolean
   shortcut: string
@@ -23,6 +24,8 @@ export interface IslandSettings {
 }
 
 export interface IslandStatus extends IslandSettings {
+  /** The expand chord the OS actually holds; '' when the user set none or it was taken. */
+  registeredExpandShortcut: string
   /** The chord the OS actually holds; '' when the user set none or it was taken. */
   registeredShortcut: string
 }
@@ -30,6 +33,7 @@ export interface IslandStatus extends IslandSettings {
 export type IslandSettingsPatch = Partial<IslandSettings>
 
 export const ISLAND_DEFAULT_SETTINGS: IslandSettings = {
+  expandShortcut: '',
   followPointer: false,
   enabled: true,
   shortcut: '',
@@ -39,12 +43,14 @@ export const ISLAND_DEFAULT_SETTINGS: IslandSettings = {
 export interface IslandState extends IslandSettings {
   /** null before the first read; the Settings rows show their skeleton until then. */
   loaded: boolean
+  registeredExpandShortcut: string
   registeredShortcut: string
 }
 
 export const $island = atom<IslandState>({
   ...ISLAND_DEFAULT_SETTINGS,
   loaded: false,
+  registeredExpandShortcut: '',
   registeredShortcut: ''
 })
 
@@ -64,9 +70,12 @@ function adopt(status: IslandStatus | undefined): void {
   }
 
   $island.set({
+    expandShortcut: typeof status.expandShortcut === 'string' ? status.expandShortcut : '',
     followPointer: status.followPointer === true,
     enabled: status.enabled === true,
     loaded: true,
+    registeredExpandShortcut:
+      typeof status.registeredExpandShortcut === 'string' ? status.registeredExpandShortcut : '',
     registeredShortcut: typeof status.registeredShortcut === 'string' ? status.registeredShortcut : '',
     shortcut: typeof status.shortcut === 'string' ? status.shortcut : '',
     suppressApprovalNotifications: status.suppressApprovalNotifications === true
