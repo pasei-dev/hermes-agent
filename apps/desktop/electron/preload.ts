@@ -206,6 +206,22 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     setInteractive: (interactive: boolean) => ipcRenderer.send('hermes:island:interactive', interactive),
     setFocusable: (focusable: boolean) => ipcRenderer.send('hermes:island:focusable', focusable),
     openSession: (sessionId: string) => ipcRenderer.send('hermes:island:open-session', sessionId),
+    // Which edge the window is attached to, as main sees it: the surface squares
+    // the corners on that side and hugs it.
+    onDock: (callback: (dock: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, dock: string) => callback(dock)
+      ipcRenderer.on('hermes:island:dock', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:dock', listener)
+    },
+    // The app window took or lost the keyboard: the island gets out of the way
+    // while the user is reading the app itself.
+    onMainFocus: (callback: (focused: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, focused: boolean) => callback(focused === true)
+      ipcRenderer.on('hermes:island:main-focus', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:main-focus', listener)
+    },
     onOpenSession: (callback: (sessionId: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
       ipcRenderer.on('hermes:island:open-session', listener)

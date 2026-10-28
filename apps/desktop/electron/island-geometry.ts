@@ -83,21 +83,53 @@ export function islandWindowBounds(display: IslandDisplay, platform: string) {
  */
 export function islandDragTarget(input: {
   bounds: { height: number; width: number; x: number; y: number }
-  bottomMargin: number
   display: IslandDisplay
   dx: number
   dy: number
 }): { x: number; y: number } {
-  const { bottomMargin, bounds, display, dx, dy } = input
+  const { bounds, display, dx, dy } = input
   const minX = display.bounds.x
   const maxX = display.bounds.x + display.bounds.width - bounds.width
   const minY = display.bounds.y
-  const maxY = Math.max(minY, display.workArea.y + bottomMargin)
+  // The whole work area: the island is the user's to park, and a 200pt ceiling
+  // read as a drag that fought the pointer a quarter of the way down.
+  const maxY = Math.max(minY, display.workArea.y + display.workArea.height - bounds.height)
 
   return {
     x: Math.round(Math.min(maxX, Math.max(minX, bounds.x + dx))),
     y: Math.round(Math.min(maxY, Math.max(minY, bounds.y + dy)))
   }
+}
+
+/** Which edge the island is attached to, once a drop has snapped. */
+export type IslandDock = 'bottom' | 'free' | 'left' | 'right' | 'top'
+
+/** The edge a snapped origin sits on, or `free` in open space. */
+export function islandDock(input: {
+  anchor: { x: number; y: number }
+  bounds: { height: number; width: number; x: number; y: number }
+  display: IslandDisplay
+}): IslandDock {
+  const { anchor, bounds, display } = input
+  const bottom = display.workArea.y + display.workArea.height - bounds.height
+
+  if (Math.abs(bounds.y - anchor.y) <= 1) {
+    return 'top'
+  }
+
+  if (Math.abs(bounds.y - bottom) <= 1) {
+    return 'bottom'
+  }
+
+  if (Math.abs(bounds.x - display.bounds.x) <= 1) {
+    return 'left'
+  }
+
+  if (Math.abs(bounds.x - (display.bounds.x + display.bounds.width - bounds.width)) <= 1) {
+    return 'right'
+  }
+
+  return 'free'
 }
 
 /** Where the collapsed black pill sits inside that window. Flush with the top

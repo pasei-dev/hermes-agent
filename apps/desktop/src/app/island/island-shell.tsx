@@ -49,13 +49,13 @@ import { $unreadFinishedMarkers, ackStoredSessionId } from '@/store/session-unre
 import { islandQueueView } from './island-actions'
 import { $islandActivityBySession, type IslandActivity } from './island-activity'
 import { useIslandClickThrough } from './island-click-through'
-import { type IslandRow, islandRows, islandStage } from './island-model'
+import { type IslandRow, islandRows, type IslandStage, islandStage } from './island-model'
 import {
   type IslandTranscriptRow,
   readIslandTranscript,
   submitToIslandSession
 } from './island-session'
-import { islandShape } from './island-view'
+import { type IslandDockSide, islandDockSide, islandShape } from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
 /** macOS's own expansion curve — fast out, long settle. */
@@ -121,6 +121,24 @@ export function IslandShell() {
   const runtimeRef = useRef<null | string>(null)
   const [sessionDraft, setSessionDraft] = useState('')
   const [sessionBusy, setSessionBusy] = useState(false)
+
+  // Main owns where the window is; the surface follows it. A docked island
+  // squares the corners against that edge and hugs it, so an edge is an edge and
+  // not a pill that happens to be nearby.
+  const [dock, setDock] = useState<IslandDockSide>('free')
+  // The app window has the keyboard. The island is a notification, not a HUD:
+  // while the user is reading Hermes itself it goes back into the notch.
+  const [mainFocused, setMainFocused] = useState(false)
+
+  useEffect(() => {
+    const offDock = window.hermesDesktop?.island?.onDock?.(side => setDock(islandDockSide(side)))
+    const offFocus = window.hermesDesktop?.island?.onMainFocus?.(setMainFocused)
+
+    return () => {
+      offDock?.()
+      offFocus?.()
+    }
+  }, [])
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -232,10 +250,13 @@ export function IslandShell() {
       return
     }
 
-    const timer = setTimeout(() => ackStoredSessionId(answeredId), 20_000)
+    // Six seconds: long enough to read one line, short enough that the island is
+    // gone before the user looks up. Focused, there is nothing to tell them —
+    // they are reading the app itself — so it clears at once.
+    const timer = setTimeout(() => ackStoredSessionId(answeredId), mainFocused ? 0 : 6_000)
 
     return () => clearTimeout(timer)
-  }, [answeredId])
+  }, [answeredId, mainFocused])
 
   // A clarify is answered by talking: the same submit the composer uses.
   const answerClarify = useCallback(
@@ -355,12 +376,15 @@ export function IslandShell() {
     return null
   }, [focused?.id, lead?.id, queues, runtimeId])
 
-  const stage = islandStage({
+  const rawStage = islandStage({
     attentionCount: waitingRows.length + (answeredId ? 1 : 0),
     expanded,
     focused: focused !== null,
     workingCount: runningCount
   })
+
+  const quiet = mainFocused && !expanded && focused === null && !top?.approval && !question
+  const stage: IslandStage = quiet ? 'hidden' : rawStage
 
   // The panel's size is the user's: a grip's live drag wins, then the size they
   // last dragged it to, then the window's ceiling.
@@ -662,7 +686,10 @@ export function IslandShell() {
       dir={rtl ? 'rtl' : 'ltr'}
       onBlur={onSurfaceBlur}
       ref={rootRef}
-      style={{ paddingTop: notched ? 0 : 8 }}
+      style={{
+        justifyContent: dock === 'left' ? 'flex-start' : dock === 'right' ? 'flex-end' : 'center',
+        paddingTop: notched || dock === 'top' ? 0 : 8
+      }}
     >
       <div
         className={cn(
@@ -683,11 +710,22 @@ export function IslandShell() {
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         style={{
-          borderRadius: shape.radius,
+          // A docked island squares the corners against its edge: a capsule
+          // floating 30px from the screen edge is not attached to it.
+          borderRadius:
+            notched || dock === 'free'
+              ? shape.radius
+              : dock === 'top'
+                ? `0 0 ${shape.radius}px ${shape.radius}px`
+                : dock === 'bottom'
+                  ? `${shape.radius}px ${shape.radius}px 0 0`
+                  : dock === 'left'
+                    ? `0 ${shape.radius}px ${shape.radius}px 0`
+                    : `${shape.radius}px 0 0 ${shape.radius}px`,
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
           height: shape.height,
           opacity: shape.opacity,
-          transform: shape.opacity === 0 ? 'scale(0.92)' : dragging ? 'scale(1.015, 1.12)' : 'none',
+          transform: shape.opacity === 0 ? 'scale(0.92)' : dragging ? 'scale(1.03, 1.28)' : 'none',
           transformOrigin: 'top center',
           transition: dragging ? 'none' : MORPH,
           width: shape.width

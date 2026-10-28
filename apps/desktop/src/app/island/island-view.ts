@@ -104,6 +104,15 @@ export function islandShape(input: {
   return { height, mode: 'expanded', opacity: 1, radius: 24, width: EXPANDED_WIDTH }
 }
 
+/** Which edge the island's window is attached to, as main reports it. */
+export type IslandDockSide = 'bottom' | 'free' | 'left' | 'right' | 'top'
+
+/** Anything main did not name is a free island: a bad channel value must not
+ *  square a corner against an edge the window is not on. */
+export function islandDockSide(raw: unknown): IslandDockSide {
+  return raw === 'bottom' || raw === 'left' || raw === 'right' || raw === 'top' ? raw : 'free'
+}
+
 /** The width the black surface needs before a command or a title is truncated
  *  into uselessness — used by the attention card's own line clamp. */
 export function islandCardLineClamp(stage: IslandStage): number {

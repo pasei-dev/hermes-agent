@@ -12726,6 +12726,13 @@ const islandController = createIslandWindowController({
   anchorDisplay: islandAnchorDisplay,
   devServer: DEV_SERVER,
   isMac: IS_MAC,
+  // The island steps aside while the user is reading the app itself — see
+  // announceMainFocus in island-window.ts.
+  isMainFocused: (): boolean => {
+    const target: BrowserWindow | null = mainWindow
+
+    return Boolean(target && !target.isDestroyed() && target.isFocused())
+  },
   loadWindowUrl,
   log: rememberLog,
   openSession: sessionId => {
@@ -12754,6 +12761,12 @@ const islandController = createIslandWindowController({
 })
 
 registerIslandIpc(() => islandController)
+
+// Focus is the island's quiet signal. Announced on every window change rather
+// than on the app window alone: the island's own window takes the keyboard when
+// the expand chord fires, and that is exactly when it should stay.
+app.on('browser-window-focus', () => islandController?.announceMainFocus())
+app.on('browser-window-blur', () => islandController?.announceMainFocus())
 
 registerWindowSizing({ mainWindow: (): BrowserWindow | null => mainWindow })
 registerMachineProfile()

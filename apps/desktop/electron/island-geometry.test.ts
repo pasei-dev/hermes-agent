@@ -7,6 +7,7 @@ import {
   ISLAND_WINDOW_HEIGHT,
   ISLAND_WINDOW_WIDTH,
   islandAnchor,
+  islandDock,
   islandDragTarget,
   islandHasNotch,
   islandSnapOrigin,
@@ -85,7 +86,7 @@ describe('islandDragTarget', () => {
   const window = { height: 560, width: 480, x: 136, y: 25 }
 
   const drag = (dx: number, dy: number, display = PLAIN) =>
-    islandDragTarget({ bottomMargin: 200, bounds: window, display, dx, dy })
+    islandDragTarget({ bounds: window, display, dx, dy })
 
   it('follows the pointer exactly while it stays in bounds', () => {
     expect(drag(40, 30)).toEqual({ x: 176, y: 55 })
@@ -96,8 +97,8 @@ describe('islandDragTarget', () => {
     expect(drag(4000, 0)).toEqual({ x: 2560 - 480, y: 25 })
   })
 
-  it('stops before it becomes a second HUD', () => {
-    expect(drag(0, 4000).y).toBe(25 + 200)
+  it('can be parked anywhere down the screen, stopping only at the work area', () => {
+    expect(drag(0, 4000).y).toBe(1440 - 560)
   })
 
   it('follows a display offset, so a second monitor is usable', () => {
@@ -107,10 +108,28 @@ describe('islandDragTarget', () => {
     }
 
     const onSecond = (dx: number, dy: number) =>
-      islandDragTarget({ bottomMargin: 200, bounds: { height: 560, width: 480, x: 2696, y: -175 }, display, dx, dy })
+      islandDragTarget({ bounds: { height: 560, width: 480, x: 2696, y: -175 }, display, dx, dy })
 
     expect(onSecond(0, 0)).toEqual({ x: 2696, y: -175 })
     expect(onSecond(0, -400)).toEqual({ x: 2696, y: -200 })
+  })
+})
+
+describe('islandDock', () => {
+  const anchor = { height: 560, width: 480, x: 20, y: 31 }
+  const size = { height: 560, width: 480 }
+
+  const dock = (x: number, y: number) => islandDock({ anchor, bounds: { ...size, x, y }, display: PLAIN })
+
+  it('reads each edge a snapped window sits on', () => {
+    expect(dock(20, 31)).toBe('top')
+    expect(dock(0, 300)).toBe('left')
+    expect(dock(2560 - 480, 300)).toBe('right')
+    expect(dock(700, 1440 - 560)).toBe('bottom')
+  })
+
+  it('reads open space as free', () => {
+    expect(dock(700, 400)).toBe('free')
   })
 })
 

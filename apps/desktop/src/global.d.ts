@@ -204,6 +204,10 @@ declare global {
         // is the state that actually resulted.
         getSettings: () => Promise<IslandStatus>
         setSettings: (patch: IslandSettingsPatch) => Promise<IslandStatus>
+        // Main → island renderer: which edge the window is attached to.
+        onDock: (callback: (dock: string) => void) => () => void
+        // Main → island renderer: the app window took or lost the keyboard.
+        onMainFocus: (callback: (focused: boolean) => void) => () => void
         // Main → island renderer: the global approval chord fired.
         onApproveTop: (callback: () => void) => () => void
         onExpand: (callback: () => void) => () => void

@@ -28,6 +28,8 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 
 import {
   type IslandDisplay,
+  type IslandDock,
+  islandDock,
   islandDragTarget,
   islandHasNotch,
   islandSnapOrigin,
@@ -38,10 +40,14 @@ import { buildIslandWindowUrl } from './island-url'
 import { attachRendererConsoleCapture } from './renderer-log'
 import { installWindowRendererLifecycle } from './window-renderer-lifecycle'
 
-/** How far below its anchor the island may be dragged. */
-const ISLAND_DRAG_BOTTOM_MARGIN = 200
+/** The edge the island is currently attached to, and the way it says so. */
+export interface IslandDockReport {
+  dock: IslandDock
+}
 
 export interface IslandWindowOptions {
+  /** Whether the app's own window has the keyboard right now. */
+  isMainFocused?: () => boolean
   /** The display the island belongs on: the one the app window is on, else the
    *  primary. Not the cursor — a pointer resting on a second monitor at boot
    *  must not park the island there for the life of the session. */
@@ -130,6 +136,36 @@ export function createIslandWindowController(options: IslandWindowOptions) {
   }
 
   /**
+   * Tell the renderer which edge it is attached to: the surface squares the
+   * corners against that edge and hugs it, so a docked island reads as part of
+   * the screen rather than as a pill that happens to be near it.
+   */
+  const announceDock = () => {
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    const bounds = window.getBounds()
+    const display = screen.getDisplayMatching(bounds)
+    const dock = islandDock({ anchor: islandWindowBounds(display, platform), bounds, display })
+
+    window.webContents.send('hermes:island:dock', dock)
+  }
+
+  /**
+   * Whether the app window has the keyboard. The island is a notification, not a
+   * HUD: when the user is reading Hermes itself there is nothing to notify them
+   * of, so it collapses into the notch instead of sitting over the app.
+   */
+  const announceMainFocus = () => {
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    window.webContents.send('hermes:island:main-focus', options.isMainFocused?.() === true)
+  }
+
+  /**
    * Write the parked position once the drag settles. `dragBy` fires per pointer
    * move, and a file write per move is hundreds of them for one gesture.
    */
@@ -164,6 +200,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         window.setPosition(origin.x, origin.y)
       }
 
+      announceDock()
       options.writeOrigin?.(origin)
     }, 400)
   }
@@ -308,7 +345,6 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       const bounds = window.getBounds()
 
       const next = islandDragTarget({
-        bottomMargin: ISLAND_DRAG_BOTTOM_MARGIN,
         bounds,
         display: screen.getDisplayMatching(bounds),
         dx: delta.dx,
@@ -331,7 +367,10 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         true,
         islandHasNotch(display, platform) ? 'status' : isMac ? 'floating' : 'screen-saver'
       )
+      announceDock()
     },
+    announceDock,
+    announceMainFocus,
     dispose() {
       const target = window
       window = null
@@ -349,6 +388,10 @@ export type IslandWindowController = ReturnType<typeof createIslandWindowControl
 export function registerIslandIpc(getController: () => IslandWindowController | null) {
   ipcMain.on('hermes:island:ready', () => {
     getController()?.markReady()
+    // The renderer boots with no idea where the window was restored, so the dock
+    // is announced with the first paint or a docked island loses its squared edge.
+    getController()?.announceDock()
+    getController()?.announceMainFocus()
   })
 
   ipcMain.on('hermes:island:interactive', (_event, interactive) => {
