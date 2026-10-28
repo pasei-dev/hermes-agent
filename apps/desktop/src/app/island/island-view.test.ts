@@ -5,6 +5,7 @@ import { DOCKED_RADIUS, islandShape, NOTCH_HEIGHT, NOTCH_WIDTH } from './island-
 describe('islandShape', () => {
   it('rests as the notch itself on a notched display — that is the autohide', () => {
     expect(islandShape({ notched: true, rows: 0, stage: 'hidden' })).toEqual({
+      bottomOnly: true,
       height: NOTCH_HEIGHT,
       mode: 'notch',
       opacity: 1,
@@ -83,13 +84,14 @@ describe('islandShape', () => {
 
     // The session stage mounts the app's own chat surface: a panel of a fixed
     // size, not a band that grows per transcript line.
-    expect(session.height).toBe(546)
+    // The panel plus the housing band it grows out of.
+    expect(session.height).toBe(546 + NOTCH_HEIGHT)
     expect(session.width).toBe(478)
     expect(session.height).toBeGreaterThan(expanded.height)
     expect(session.height).toBeGreaterThan(attention.height)
     // Still inside the island window, or the surface would be clipped by it.
     expect(session.width).toBeLessThanOrEqual(480)
-    expect(session.height).toBeLessThanOrEqual(560)
+    expect(session.height).toBeLessThanOrEqual(620)
   })
 
   it('keeps an empty expanded list short enough to still look like a control', () => {

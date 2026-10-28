@@ -61,7 +61,7 @@ import {
   submitToIslandSession
 } from './island-session'
 import { islandSettleTransform, useIslandSettle } from './island-settle'
-import { type IslandDockSide, islandDockSide, islandShape } from './island-view'
+import { type IslandDockSide, islandDockSide, islandShape, NOTCH_HEIGHT } from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
 /** macOS's own expansion curve — fast out, long settle. */
@@ -95,11 +95,24 @@ function islandNotched(): boolean {
   }
 }
 
+/** The housing's height on this display, as main measured it: the menu bar is the
+ *  notch, and its height moves with the display's scaling. */
+function islandNotchHeight(): number {
+  try {
+    const raw = Number(new URLSearchParams(window.location.search).get('nh'))
+
+    return Number.isFinite(raw) && raw > 0 ? raw : NOTCH_HEIGHT
+  } catch {
+    return NOTCH_HEIGHT
+  }
+}
+
 export function IslandShell() {
   const { locale, t } = useI18n()
   const navigate = useNavigate()
   const rtl = isRtlLocale(locale)
   const notched = useMemo(islandNotched, [])
+  const notchHeight = useMemo(islandNotchHeight, [])
   const sessions = useStore($sessions)
   const attentionIds = useStore($attentionSessionIds)
   const workingIds = useStore($workingSessionIds)
@@ -473,6 +486,7 @@ export function IslandShell() {
     // answers, and the field. Sized from the kind, so nothing is drawn past the
     // surface's own bottom edge.
     cardHeight: question ? 184 : answered ? (answerOpen ? 300 : 120) : 104,
+    notchHeight,
     notched,
     // Nothing running, nothing waiting: the pill is a dot in the notch. The richer
     // width is a hover affordance, so the island stops being a strip of text on
@@ -964,8 +978,10 @@ export function IslandShell() {
           // A docked island squares the corners against its edge: a capsule
           // floating 30px from the screen edge is not attached to it.
           borderRadius:
-            notched || dock === 'free'
-              ? shape.radius
+            shape.bottomOnly
+              ? `0 0 ${shape.radius}px ${shape.radius}px`
+              : notched || dock === 'free'
+                ? shape.radius
               : dock === 'top'
                 ? `0 0 ${shape.radius}px ${shape.radius}px`
                 : dock === 'bottom'
@@ -975,8 +991,10 @@ export function IslandShell() {
                     : `${shape.radius}px 0 0 ${shape.radius}px`,
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
           height: shape.height,
-          // Never paint under the housing: every grown state starts below it.
-          marginTop: shape.top,
+          // A notched surface is an extrusion of the housing, not a pill below it:
+          // flush with the screen's top edge, and the housing's height is taken as
+          // padding inside instead (see the content box).
+          marginTop: notched ? 0 : shape.top,
           opacity: shape.opacity,
           // A release holds its correction with no transition for one frame and
           // is then released into the spring, which is what makes it land.
@@ -993,9 +1011,10 @@ export function IslandShell() {
         }}
       >
         <div
-          className="flex h-full flex-col px-2.5 pt-1.5 pb-2"
+          className="flex h-full flex-col px-2.5 pb-2"
           style={{
             opacity: content ? 1 : 0,
+            paddingTop: shape.top + 6,
             transform: content ? 'none' : 'translateY(-6px)',
             transition: REVEAL
           }}

@@ -12,17 +12,22 @@ import { pathToFileURL } from 'node:url'
 
 export function buildIslandWindowUrl({
   devServer,
+  notchHeight,
   notched,
   profile,
   rendererIndexPath
 }: {
   devServer?: null | string
+  /** The housing's height on this display, in points: the menu bar IS the notch,
+   *  and it changes with the display's scaling. */
+  notchHeight?: number
   notched: boolean
   profile?: null | string
   rendererIndexPath?: string
 }): string {
   const profileKey = typeof profile === 'string' ? profile.trim() : ''
-  const query = `?win=island${notched ? '&notch=1' : ''}${profileKey ? `&profile=${encodeURIComponent(profileKey)}` : ''}`
+  const housing = notched && Number.isFinite(notchHeight) && Number(notchHeight) > 0 ? `&nh=${Math.round(Number(notchHeight))}` : ''
+  const query = `?win=island${notched ? '&notch=1' : ''}${housing}${profileKey ? `&profile=${encodeURIComponent(profileKey)}` : ''}`
 
   if (devServer) {
     const base = devServer.endsWith('/') ? devServer.slice(0, -1) : devServer

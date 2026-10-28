@@ -280,6 +280,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       next,
       buildIslandWindowUrl({
         devServer,
+        notchHeight: display.workArea.y - display.bounds.y,
         notched,
         profile,
         rendererIndexPath: devServer ? undefined : rendererIndex()

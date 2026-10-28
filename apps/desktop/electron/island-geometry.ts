@@ -21,7 +21,7 @@
 
 export const ISLAND_WINDOW_WIDTH = 480
 /** Tallest the expanded island may get; the surface itself is usually shorter. */
-export const ISLAND_WINDOW_HEIGHT = 560
+export const ISLAND_WINDOW_HEIGHT = 620
 /** The notch-shaped resting pill — roughly a 14" MacBook Pro's notch. */
 export const ISLAND_NOTCH_WIDTH = 208
 export const ISLAND_NOTCH_HEIGHT = 32
