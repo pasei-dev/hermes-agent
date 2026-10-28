@@ -97,11 +97,12 @@ describe('islandAnsweredNotice', () => {
 
   // The store acknowledge no-ops while the session row is not loaded, so the
   // marker outlives the card. The dismissal is what closes it, and it must hold
-  // for that marker alone.
-  it('holds a dismissed marker down and re-arms for the next one', () => {
+  // for that marker alone — including when a second session's marker was already
+  // there, oldest-first, as `writeUnread` appends them.
+  it('holds a dismissed marker down and does not swallow the marker behind it', () => {
     const down = { dismissed: 's-a', markerIds: ['s-a'], rowIds: [] }
 
     expect(islandAnsweredNotice(down)).toBeNull()
-    expect(islandAnsweredNotice({ ...down, markerIds: ['s-b', 's-a'] })).toBe('s-b')
+    expect(islandAnsweredNotice({ ...down, markerIds: ['s-a', 's-b'] })).toBe('s-b')
   })
 })

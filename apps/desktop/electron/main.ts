@@ -12754,7 +12754,6 @@ const islandController = createIslandWindowController({
   // Kept as the one entrance `island-window.ts` registers; it reveals rather
   // than opens, so the only path out of the island is the reveal below. A press
   // on the pill itself must never reach it.
-  openSession: revealIslandSession,
   platform: process.platform,
   preloadPath: PRELOAD_PATH,
   profile: primaryProfileKey(),

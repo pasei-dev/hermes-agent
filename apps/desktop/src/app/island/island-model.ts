@@ -100,15 +100,13 @@ export interface IslandNoticeInput {
 }
 
 /**
- * The finished-turn notice: the first marker that is not already a row, unless
- * the user has dismissed it. A dismissal is keyed by marker id, so the next
- * finished turn re-arms the card while this one stays gone — the island cannot
- * rely on the store to clear a marker whose session row is not loaded.
+ * The finished-turn notice: the first marker that is not already a row and is not
+ * the one the user dismissed. Filtering inside the search matters because the
+ * store appends oldest-first: taking the first marker and rejecting it would
+ * swallow a second, different session's notice behind a stale dismissal.
  */
 export function islandAnsweredNotice(input: IslandNoticeInput): null | string {
-  const fresh = input.markerIds.find(id => !input.rowIds.includes(id))
-
-  return fresh && fresh !== input.dismissed ? fresh : null
+  return input.markerIds.find(id => !input.rowIds.includes(id) && id !== input.dismissed) ?? null
 }
 
 /** The one line the pill shows: what needs the user, else what is running. */

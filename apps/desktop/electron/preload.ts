@@ -195,7 +195,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // Dynamic Island: a black pill parked at the top of the screen (in the notch
   // itself where there is a housing). Main owns the window — position,
   // click-through, focus — and the renderer owns the shape. The app window is on
-  // the other end of `openSession` / `onOpenSession`.
+  // the other end of `revealSession`.
   island: {
     drag: (delta: { dx: number; dy: number }) => ipcRenderer.send('hermes:island:drag', delta),
     // The island is a full renderer, so it boots the whole app shell first and

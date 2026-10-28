@@ -203,14 +203,25 @@ export function IslandShell() {
   // reading the KEYS handed this card a profile name, which no row matches and
   // no acknowledge can clear — the island stayed open on a marker that was never
   // a session.
+  const markers = useMemo(() => Object.values(unread).flat(), [unread])
+
   const answeredId =
     top || waitingRows.length > 0
       ? null
       : islandAnsweredNotice({
           dismissed: dismissedAnswerId,
-          markerIds: Object.values(unread).flat(),
+          markerIds: markers,
           rowIds: rows.map(row => row.id)
         })
+
+  // A dismissal is only good for the marker it was made against. Once that
+  // marker is gone the notice is re-armed, so the same session finishing again
+  // shows its card instead of being silenced forever by an old dismissal.
+  useEffect(() => {
+    if (dismissedAnswerId && !markers.includes(dismissedAnswerId)) {
+      setDismissedAnswerId(null)
+    }
+  }, [dismissedAnswerId, markers])
 
   // A finished session is rarely in `titles` (that map covers only the waiting
   // and the working), so its card fell back to "Waiting on your answer" — a

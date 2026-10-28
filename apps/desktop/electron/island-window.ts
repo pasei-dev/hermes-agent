@@ -57,7 +57,6 @@ export interface IslandWindowOptions {
   loadWindowUrl: (window: BrowserWindow, url: string, label: string) => void
   log: (message: string) => void
   /** Re-open the app window on a session the island points at. */
-  openSession: (sessionId: string) => void
   platform: string
   preloadPath: string
   profile?: null | string
@@ -98,12 +97,47 @@ function forwardable(platform: string): boolean {
   return platform === 'darwin' || platform === 'win32'
 }
 
+const displayUnder = (bounds: Electron.Rectangle): IslandDisplay => {
+  // Largest overlap wins. Electron's own matcher answers the primary display
+  // when a window overlaps none of them — a seam wider than the island would
+  // then teleport it across the desk mid-drag.
+  let best: Electron.Display | null = null
+  let bestArea = 0
+
+  for (const candidate of screen.getAllDisplays()) {
+    const overlapX =
+      Math.min(bounds.x + bounds.width, candidate.bounds.x + candidate.bounds.width) -
+      Math.max(bounds.x, candidate.bounds.x)
+
+    const overlapY =
+      Math.min(bounds.y + bounds.height, candidate.bounds.y + candidate.bounds.height) -
+      Math.max(bounds.y, candidate.bounds.y)
+
+    const area = Math.max(0, overlapX) * Math.max(0, overlapY)
+
+    if (area > bestArea) {
+      best = candidate
+      bestArea = area
+    }
+  }
+
+  // Nothing overlaps: the nearest display to the window's centre is the one the
+  // user is dragging toward.
+  return (
+    best ??
+    screen.getDisplayNearestPoint({
+      x: Math.round(bounds.x + bounds.width / 2),
+      y: Math.round(bounds.y + bounds.height / 2)
+    })
+  )
+}
+
 function displayFor(win: BrowserWindow | null, anchor: () => IslandDisplay): IslandDisplay {
-  return win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()) : anchor()
+  return win && !win.isDestroyed() ? displayUnder(win.getBounds()) : anchor()
 }
 
 export function createIslandWindowController(options: IslandWindowOptions) {
-  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, openSession, platform, profile, rendererIndex } = options
+  const { anchorDisplay, devServer, isMac, loadWindowUrl, log, platform, profile, rendererIndex } = options
   let window: BrowserWindow | null = null
   let originTimer: null | ReturnType<typeof setTimeout> = null
 
@@ -194,7 +228,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       }
 
       const bounds = window.getBounds()
-      const display = screen.getDisplayMatching(bounds)
+      const display = displayUnder(bounds)
 
       // Attach on release: near an edge the island goes flush to it, so a
       // dropped pill is docked rather than left a few pixels off a corner. The
@@ -360,7 +394,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       // stopping dead at it.
       const next = islandDragTarget({
         bounds,
-        display: screen.getDisplayMatching(bounds),
+        display: displayUnder(window.getBounds()),
         displays: screen.getAllDisplays(),
         dx: delta.dx,
         dy: delta.dy
@@ -393,8 +427,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       if (target && !target.isDestroyed()) {
         target.destroy()
       }
-    },
-    openSession
+    }
   }
 }
 
@@ -426,9 +459,4 @@ export function registerIslandIpc(getController: () => IslandWindowController | 
     }
   })
 
-  ipcMain.on('hermes:island:open-session', (_event, sessionId) => {
-    if (typeof sessionId === 'string' && sessionId.trim()) {
-      getController()?.openSession(sessionId.trim())
-    }
-  })
 }
