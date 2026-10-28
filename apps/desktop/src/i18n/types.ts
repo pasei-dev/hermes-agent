@@ -623,6 +623,7 @@ catalog: CatalogTranslations
     recent: string
     searchSessions: string
     finished: string
+    finishedTitle: string
     answerPlaceholder: string
     send: string
   }

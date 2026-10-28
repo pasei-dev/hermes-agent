@@ -43,7 +43,7 @@ import { $gateway } from '@/store/gateway'
 import { sessionApprovalStackSize } from '@/store/prompts'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import { $attentionSessionIds, $sessionStates, $workingSessionIds } from '@/store/session-states'
-import { $unreadFinishedMarkers } from '@/store/session-unread'
+import { $unreadFinishedMarkers, ackStoredSessionId } from '@/store/session-unread'
 
 import { islandQueueView } from './island-actions'
 import { $islandActivityBySession, type IslandActivity } from './island-activity'
@@ -95,6 +95,9 @@ export function IslandShell() {
 
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState<null | string>(null)
+  /** True between the pointer travelling and the release: no CSS transition runs
+   *  while the window itself is moving, or every frame re-rasterises the text. */
+  const [dragging, setDragging] = useState(false)
   /** The list's own search: the island is also the quickest way back in. */
   const [query, setQuery] = useState('')
 
@@ -115,7 +118,7 @@ export function IslandShell() {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<null | { moved: boolean; x: number; y: number }>(null)
+  const dragRef = useRef<null | { moved: boolean; startX: number; startY: number; x: number; y: number }>(null)
 
   const { approvalsById, answer } = useIslandApprovals(attentionIds)
 
@@ -171,8 +174,19 @@ export function IslandShell() {
       ? null
       : (Object.keys(unread).find(id => !rows.some(row => row.id === id)) ?? null)
 
+  // A finished session is rarely in `titles` (that map covers only the waiting
+  // and the working), so its card fell back to "Waiting on your answer" — a
+  // status it does not have.
+  const answeredTitle = useMemo(() => {
+    if (!answeredId) {
+      return ''
+    }
+
+    return sessions.find(session => sessionMatchesStoredId(session, answeredId))?.title ?? ''
+  }, [answeredId, sessions])
+
   const cardRow: IslandRow | null =
-    top ?? (answeredId ? { id: answeredId, state: 'working', title: titles[answeredId] ?? '' } : null)
+    top ?? (answeredId ? { id: answeredId, state: 'working', title: answeredTitle } : null)
 
   const clarify = cardRow ? clarifies[cardRow.id] : undefined
   const question = clarify?.questions[0]
@@ -201,6 +215,19 @@ export function IslandShell() {
     return () => {
       cancelled = true
     }
+  }, [answeredId])
+
+  // An answer is a notification, not a state: it holds the island open long
+  // enough to be read, then acknowledges itself. A finished card that stayed
+  // until it was clicked is why the island never collapsed again.
+  useEffect(() => {
+    if (!answeredId) {
+      return
+    }
+
+    const timer = setTimeout(() => ackStoredSessionId(answeredId), 20_000)
+
+    return () => clearTimeout(timer)
   }, [answeredId])
 
   // A clarify is answered by talking: the same submit the composer uses.
@@ -499,52 +526,58 @@ export function IslandShell() {
         return
       }
 
-      dragRef.current = { moved: false, x: event.clientX, y: event.clientY }
-
-      if (!notched) {
-        event.currentTarget.setPointerCapture(event.pointerId)
-      }
+      dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, x: event.screenX, y: event.screenY }
+      event.currentTarget.setPointerCapture(event.pointerId)
     },
-    [notched]
+    []
   )
 
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const from = dragRef.current
 
-      if (!from || notched) {
+      if (!from) {
         return
       }
 
       // A press is a click until it travels: three pixels of hand tremor must not
-      // nudge the window, and the drag measures from where it became one.
+      // nudge the window.
       if (!from.moved) {
-        if (Math.abs(event.clientX - from.x) + Math.abs(event.clientY - from.y) < DRAG_THRESHOLD) {
+        if (Math.abs(event.screenX - from.startX) + Math.abs(event.screenY - from.startY) < DRAG_THRESHOLD) {
           return
         }
 
         from.moved = true
-        from.x = event.clientX
-        from.y = event.clientY
+        setDragging(true)
+      }
 
+      // SCREEN coordinates, never client ones: the window moves under the
+      // pointer, so a client delta shrinks by exactly the distance just moved and
+      // the island crawls behind the cursor instead of following it.
+      const dx = event.screenX - from.x
+      const dy = event.screenY - from.y
+
+      if (dx === 0 && dy === 0) {
         return
       }
 
-      window.hermesDesktop?.island?.drag?.({ dx: event.clientX - from.x, dy: event.clientY - from.y })
-      from.x = event.clientX
-      from.y = event.clientY
+      window.hermesDesktop?.island?.drag?.({ dx, dy })
+      from.x = event.screenX
+      from.y = event.screenY
     },
-    [notched]
+    []
   )
 
   const cancelDrag = useCallback(() => {
     dragRef.current = null
+    setDragging(false)
   }, [])
 
   // The surface is the expand control: a press that stayed put was a click.
   const endDrag = useCallback(() => {
     const from = dragRef.current
     dragRef.current = null
+    setDragging(false)
 
     if (!from || from.moved || focused) {
       return
@@ -618,7 +651,7 @@ export function IslandShell() {
           height: shape.height,
           opacity: shape.opacity,
           transform: shape.opacity === 0 ? 'scale(0.92)' : 'none',
-          transition: MORPH,
+          transition: dragging ? 'none' : MORPH,
           width: shape.width
         }}
       >
@@ -713,7 +746,7 @@ export function IslandShell() {
             >
               <div className="flex items-baseline gap-1.5">
                 <span className="min-w-0 flex-1 truncate text-[0.7rem] text-white/55">
-                  {cardRow.title || t.island.needsInput}
+                  {cardRow.title || (answered ? t.island.finishedTitle : t.island.needsInput)}
                 </span>
                 {/* How deep the queue goes. Answering one advances the card, but a
                     single card on screen said nothing about the four behind it. */}

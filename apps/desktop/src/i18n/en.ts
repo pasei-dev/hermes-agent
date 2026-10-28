@@ -712,6 +712,7 @@ export const en: Translations = {
     recent: 'Recent',
     searchSessions: 'Search sessions…',
     finished: 'Finished — open it to read the answer',
+    finishedTitle: 'The agent answered',
     answerPlaceholder: 'Your answer…',
     send: 'Send'
   },
