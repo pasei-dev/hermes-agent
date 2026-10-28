@@ -101,6 +101,22 @@ export const arOverrides = {
   titlebar: arChrome.titlebar,
   keybinds: arChrome.keybinds,
   language: arSettings.language,
+
+  island: {
+    expand: 'إظهار ما يقوم به Hermes',
+    collapse: 'إخفاء قائمة المهام',
+    running: (count: number) => (count === 1 ? 'جلسة واحدة قيد التشغيل' : `${count} جلسات قيد التشغيل`),
+    waiting: (count: number) => (count === 1 ? 'جلسة واحدة بانتظارك' : `${count} جلسات بانتظارك`),
+    needsInput: 'بانتظار ردّك',
+    needsAnswer: 'بحاجة إلى رد',
+    working: 'قيد التنفيذ',
+    empty: 'لا شيء قيد التشغيل',
+    open: 'فتح في Hermes',
+    approve: 'موافقة',
+    deny: 'رفض',
+    newSessionPlaceholder: 'بدء جلسة جديدة…',
+    send: 'إرسال'
+  },
   settings: arSettings.settings,
   skills: arCapabilities.skills,
   agents: arCapabilities.agents,

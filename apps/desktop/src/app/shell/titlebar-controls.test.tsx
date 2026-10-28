@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { useEffect } from 'react'
-import { MemoryRouter, useNavigate } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
+import { setMainZoneLeft } from '@/components/pane-shell/tree/main-zone-anchor'
 import { $narrowViewport } from '@/components/pane-shell/tree/store'
 import { registry } from '@/contrib/registry'
 import { I18nProvider } from '@/i18n'
 import { $fileBrowserOpen, $leftSideOpen, CHAT_SIDEBAR_PANE_ID, FILE_BROWSER_PANE_ID } from '@/store/layout'
 import { REVIEW_PANE_ID } from '@/store/review'
 import { setTitlebarAppActionsSide } from '@/store/titlebar-app-actions'
+import { $viewHistory, noteViewChange } from '@/store/view-history'
 
 import { ROUTES_AREA } from '../routes'
 
@@ -21,9 +23,11 @@ import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
 const PLUGIN_TOOL: TitlebarTool = { icon: <span />, id: 'plugin-tool', label: 'plugin tool' }
 
 let navigateTo: (to: string) => void = () => {}
+let currentPath = ''
 
 function NavigateProbe() {
   navigateTo = useNavigate()
+  currentPath = useLocation().pathname
 
   return null
 }
@@ -316,5 +320,97 @@ describe('titlebar app-action cluster', () => {
     expect(screen.queryByLabelText('HUD mode')).toBeNull()
     expect(within(screen.getByLabelText('Window controls')).getByLabelText('Open settings')).toBeTruthy()
     expect(screen.getByLabelText('Layout editor')).toBeTruthy()
+  })
+})
+
+describe('back affordance', () => {
+  const resetHistory = () => $viewHistory.set({ entries: [], index: -1 })
+
+  beforeEach(() => {
+    resetHistory()
+    setMainZoneLeft(null)
+  })
+  afterEach(() => {
+    resetHistory()
+    setMainZoneLeft(null)
+    cleanup()
+  })
+
+  it('stays off the session view, where it could only point at another session', () => {
+    noteViewChange('/session-1')
+    noteViewChange('/session-2')
+
+    renderControls('/session-2')
+
+    expect(screen.queryByLabelText('Back')).toBeNull()
+  })
+
+  it('leaves a page route to the main view, not to the window cluster', () => {
+    noteViewChange('/session-1')
+    noteViewChange('/capabilities')
+
+    renderControls('/capabilities')
+
+    // The zone the page renders in owns the affordance (`main-zone-anchor.ts`);
+    // a second one in the window-controls cluster would sit over the sidebar.
+    expect(windowControls()?.querySelector('[aria-label="Back"]') ?? null).toBeNull()
+    expect(screen.queryByLabelText('Back')).toBeNull()
+  })
+
+  it('anchors to the main zone and returns to the view it came from', () => {
+    noteViewChange('/session-1')
+    noteViewChange('/capabilities')
+    setMainZoneLeft(412)
+
+    renderControls('/capabilities')
+
+    const back = screen.getByLabelText('Back')
+    const cluster = back.closest('[data-titlebar-back]')
+
+    // The cluster the page's back button stands in is anchored to the main zone.
+    expect(cluster?.getAttribute('style')).toContain('412px')
+
+    act(() => back.click())
+
+    expect(currentPath).toBe('/session-1')
+    // Back in the session view: the affordance has nothing left to offer.
+    expect(screen.queryByLabelText('Back')).toBeNull()
+  })
+
+  it('announces its chrome when the anchored control arrives, so the band reserves it', () => {
+    noteViewChange('/session-1')
+    noteViewChange('/capabilities')
+
+    const listener = vi.fn()
+    window.addEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
+
+    try {
+      renderControls('/capabilities')
+
+      // The control is anchored to the main zone, whose start is measured after
+      // the first paint — so the zone's own band has to hear about it arriving,
+      // or it never reserves the width the button stands on (and the band's
+      // remaining space is a native drag region that swallows its clicks).
+      expect(screen.queryByLabelText('Back')).toBeNull()
+
+      listener.mockClear()
+      act(() => setMainZoneLeft(412))
+
+      expect(screen.queryByLabelText('Back')).not.toBeNull()
+      expect(listener).toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
+    }
+  })
+
+  it('renders alone in the titlebar band on an overlay, without claiming a cluster', () => {
+    noteViewChange('/session-1')
+    noteViewChange('/settings')
+
+    renderControls('/settings')
+
+    expect(screen.getByLabelText('Back')).not.toBeNull()
+    expect(windowControls()).toBeNull()
+    expect(appControls()).toBeNull()
   })
 })

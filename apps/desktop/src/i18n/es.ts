@@ -21,6 +21,7 @@ import { esPluginPreviewAccess } from './es_plugin_preview_access'
 import { esPluginUpdate } from './es_plugin_update'
 import { esPreviewWeb } from './es_preview_web'
 import { esProjects } from './es_projects'
+import { esRepoScanDescriptions, esRepoScanLabels } from './es_repo_scan'
 import { esSharedMetrics } from './es_shared_metrics'
 import { esThemePicker } from './es_theme_picker'
 import { esUpdateChannel } from './es_update_channel'
@@ -530,6 +531,7 @@ export const esOverrides = {
     }
   },
   titlebar: {
+    back: 'Atrás',
     hideSidebar: 'Ocultar barra lateral',
     showSidebar: 'Mostrar barra lateral',
     search: 'Buscar',
@@ -683,6 +685,22 @@ export const esOverrides = {
     switchTo: 'Cambiar idioma',
     searchPlaceholder: 'Buscar idiomas…',
     noResults: 'No se encontraron idiomas'
+  },
+
+  island: {
+    expand: 'Ver qué está haciendo Hermes',
+    collapse: 'Ocultar la lista de tareas',
+    running: (count: number) => (count === 1 ? '1 sesión en curso' : `${count} sesiones en curso`),
+    waiting: (count: number) => (count === 1 ? '1 sesión esperándote' : `${count} sesiones esperándote`),
+    needsInput: 'Esperando tu respuesta',
+    needsAnswer: 'Falta respuesta',
+    working: 'En curso',
+    empty: 'No hay nada en curso',
+    open: 'Abrir en Hermes',
+    approve: 'Aprobar',
+    deny: 'Rechazar',
+    newSessionPlaceholder: 'Iniciar una sesión nueva…',
+    send: 'Enviar'
   },
   settings: {
     memoryLayers: esMemoryLayers,
@@ -1144,11 +1162,7 @@ export const esOverrides = {
         personality: 'Personalidad',
         showReasoning: 'Bloques de razonamiento'
       },
-      desktop: {
-        repoScanEnabled: 'Detección automática de repositorios',
-        repoScanRoots: 'Carpetas de búsqueda de repositorios',
-        repoScanExcludePaths: 'Rutas de repositorio excluidas'
-      },
+      ...esRepoScanLabels,
       agent: {
         maxTurns: 'Pasos máximos del agente',
         imageInputMode: 'Adjuntos de imagen',
@@ -1319,12 +1333,7 @@ export const esOverrides = {
         personality: 'Estilo predeterminado del asistente para sesiones nuevas.',
         showReasoning: 'Muestra secciones de razonamiento cuando el backend las proporcione.'
       },
-      desktop: {
-        repoScanEnabled: 'Busca repositorios Git en carpetas locales para mostrarlos en Proyectos.',
-        repoScanRoots: 'Carpetas que se buscarán. Déjalo vacío para buscar en tu directorio de inicio.',
-        repoScanExcludePaths:
-          'Carpetas que se omitirán, junto con todos sus subdirectorios, durante la detección de repositorios.'
-      },
+      ...esRepoScanDescriptions,
       timezone: 'Identificador de zona horaria IANA. Vacío usa la zona horaria del sistema.',
       browser: {
         useRealProfile:

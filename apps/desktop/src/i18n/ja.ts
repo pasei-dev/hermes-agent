@@ -22,6 +22,7 @@ import { jaPluginPreviewAccess } from './ja_plugin_preview_access'
 import { jaPluginSettings, jaPluginsTab } from './ja_plugins'
 import { jaPreviewWeb } from './ja_preview_web'
 import { jaProjects } from './ja_projects'
+import { jaRepoScanDescriptions, jaRepoScanLabels } from './ja_repo_scan'
 import { jaSharedMetrics } from './ja_shared_metrics'
 import { jaThemePicker } from './ja_theme_picker'
 import { jaUpdateChannel } from './ja_update_channel'
@@ -218,6 +219,7 @@ export const jaOverrides = {
   },
 
   titlebar: {
+    back: '戻る',
     hideSidebar: 'サイドバーを非表示',
     showSidebar: 'サイドバーを表示',
     search: '検索',
@@ -243,6 +245,21 @@ export const jaOverrides = {
     noResults: '言語が見つかりません'
   },
 
+  island: {
+    expand: 'Hermes の動作を表示',
+    collapse: 'タスク一覧を隠す',
+    running: (count: number) => (count === 1 ? '1 件のセッションが実行中' : `${count} 件のセッションが実行中`),
+    waiting: (count: number) => (count === 1 ? '1 件のセッションが応答待ち' : `${count} 件のセッションが応答待ち`),
+    needsInput: '回答をお待ちしています',
+    needsAnswer: '要回答',
+    working: '実行中',
+    empty: '実行中のものはありません',
+    open: 'Hermes で開く',
+    approve: '承認',
+    deny: '拒否',
+    newSessionPlaceholder: '新しいセッションを開始…',
+    send: '送信'
+  },
   settings: {
     memoryLayers: jaMemoryLayers,
     // Window plans (Nous subscription with included usage). Other billing strings: overlay-gaps.json.
@@ -663,11 +680,7 @@ export const jaOverrides = {
         personality: '人格',
         showReasoning: '推論ブロック'
       },
-      desktop: {
-        repoScanEnabled: 'リポジトリの自動検出',
-        repoScanRoots: 'リポジトリの検索ルート',
-        repoScanExcludePaths: '除外するリポジトリパス'
-      },
+      ...jaRepoScanLabels,
       agent: {
         maxTurns: '最大エージェントステップ',
         imageInputMode: '画像添付',
@@ -828,11 +841,7 @@ export const jaOverrides = {
         personality: '新しいセッションのデフォルトのアシスタントスタイルです。',
         showReasoning: 'バックエンドが推論内容を提供したときに表示します。'
       },
-      desktop: {
-        repoScanEnabled: 'ローカルフォルダを検索して Git リポジトリをプロジェクトに表示します。',
-        repoScanRoots: '検索するフォルダです。空の場合はホームディレクトリを検索します。',
-        repoScanExcludePaths: 'リポジトリ検出時に除外するフォルダとその配下です。'
-      },
+      ...jaRepoScanDescriptions,
       timezone:
         'Hermes がローカル時刻のコンテキストを必要とするときに使用します。空欄ならシステムのタイムゾーンを使います。',
       agent: {

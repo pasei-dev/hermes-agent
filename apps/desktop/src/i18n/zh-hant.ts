@@ -145,6 +145,22 @@ export const zhHantOverrides = {
   sendDiagnostics: zhHantDiagnostics.sendDiagnostics,
   titlebar: zhHantChrome.titlebar,
   language: zhHantSettings.language,
+
+  island: {
+    expand: '顯示 Hermes 正在做什麼',
+    collapse: '隱藏工作清單',
+    running: (count: number) => (count === 1 ? '1 個工作階段正在執行' : `${count} 個工作階段正在執行`),
+    waiting: (count: number) => (count === 1 ? '1 個工作階段在等你' : `${count} 個工作階段在等你`),
+    needsInput: '等待你的回答',
+    needsAnswer: '需要回答',
+    working: '執行中',
+    empty: '沒有正在執行的工作',
+    open: '在 Hermes 中開啟',
+    approve: '核准',
+    deny: '拒絕',
+    newSessionPlaceholder: '開始新的工作階段…',
+    send: '傳送'
+  },
   settings: zhHantSettings.settings,
   skills: zhHantCapabilities.skills,
   starmap: zhHantCapabilities.starmap,

@@ -182,6 +182,20 @@ declare global {
         onCursor: (callback: (point: { x: number; y: number } | null) => void) => () => void
         onGameOverlay: (callback: (state: { active: boolean; app: string }) => void) => () => void
       }
+      // Dynamic Island: a transparent status strip at the top of the screen
+      // showing what is running and taking an approval answer without the user
+      // leaving their app. Main owns the window (position, click-through,
+      // focus); the island renderer reports what it is showing, and asks for the
+      // keyboard only when the user is actually typing.
+      island?: {
+        report: (report: { height?: number; visible: boolean }) => void
+        setInteractive: (interactive: boolean) => void
+        setFocusable: (focusable: boolean) => void
+        // Island → main: bring the app window up on this session.
+        openSession: (sessionId: string) => void
+        // App window side: main hands it the session the island pointed at.
+        onOpenSession: (callback: (sessionId: string) => void) => () => void
+      }
       // macOS native screenshot gesture; absent on other platforms.
       screenshot?: ScreenshotApi
       hudModifier?: HudModifierApi
@@ -605,7 +619,7 @@ declare global {
         // Repo-first discovery: scan bounded roots for git repos (depth-capped).
         scanRepos: (
           roots: string[],
-          options?: { maxDepth?: number; enabled?: boolean; excludePaths?: string[] }
+          options?: { maxDepth?: number; enabled?: boolean; excludePaths?: string[]; nested?: boolean }
         ) => Promise<{ root: string; label: string }[]>
       }
       terminal: {

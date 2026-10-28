@@ -7,6 +7,7 @@ import { $layoutTree, noteActiveTreeGroup } from '@/components/pane-shell/tree/s
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { runTour } from '@/lib/tour'
 import { $previewTabs, closeRightRail, openPreview, setPreviewTabPinned } from '@/store/preview'
+import { $approvalRequests } from '@/store/prompts'
 import { hasOpenServerRequest, resetServerRequestsForTests } from '@/store/server-requests'
 import { setActiveSessionId, setSelectedStoredSessionId, setSessions } from '@/store/session'
 import { $sessionStates, $sessionTiles, dropSessionState, publishSessionState } from '@/store/session-states'
@@ -93,15 +94,20 @@ describe('approval request routing', () => {
     setActiveSessionId(null)
   })
 
-  it('titles the parked approval toast with the session it belongs to', () => {
+  it('parks the approval for the island instead of raising an OS banner', async () => {
     deliver(
       'approval',
       { command: 'rm -rf /', description: 'dangerous', request_id: 'r1', session_id: 'session-a' },
       'session-b'
     )
 
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'approval', title: expect.stringContaining('Fix the flaky test') })
+    // The Dynamic Island is the approval surface now: it shows the command and
+    // the Deny/Approve buttons wherever the user is, so a banner whose only job
+    // was to send them back into Hermes is noise. The prompt is still parked,
+    // which is what the island reads.
+    expect(notify).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect($approvalRequests.get()['session-a']).toMatchObject({ command: 'rm -rf /', requestId: 'r1' })
     )
   })
 })

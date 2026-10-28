@@ -54,6 +54,31 @@ export function isHudWindow(): boolean {
   return result
 }
 
+// A "island" window is the Dynamic Island: a full app renderer (own gateway,
+// like the HUD) painted as a transparent status strip at the top of the screen.
+// The flag only tells the shell to render the island instead of the pane tree,
+// so the session and prompt stores behind it are the app's own. Read from
+// location.search for the same reason as the flags above.
+let islandWindowCache: boolean | null = null
+
+export function isIslandWindow(): boolean {
+  if (islandWindowCache !== null) {
+    return islandWindowCache
+  }
+
+  let result = false
+
+  try {
+    result = new URLSearchParams(window.location.search).get('win') === 'island'
+  } catch {
+    result = false
+  }
+
+  islandWindowCache = result
+
+  return result
+}
+
 // A "watch" window spectates a session that is being driven elsewhere (a
 // running subagent). It resumes lazily — the gateway registers history + a
 // transport for the live mirror without building an agent, so opening it is
@@ -111,7 +136,8 @@ export function windowBrowserTabId(): null | string {
 // session window, the HUD, or a popped-out Browser. Single-claim channels
 // (the quick-entry capture bridge, the pet overlay control bridge) and the
 // install/onboarding overlays belong to the primary alone.
-export const isAuxiliaryWindow = (): boolean => isSecondaryWindow() || isHudWindow() || isBrowserWindow()
+export const isAuxiliaryWindow = (): boolean =>
+  isSecondaryWindow() || isHudWindow() || isBrowserWindow() || isIslandWindow()
 
 // A full peer window renders the ordinary app shell against the backend that
 // Electron already has running. It is not an auxiliary/specialized renderer,

@@ -20,6 +20,7 @@ import { dePluginPreviewAccess } from './de_plugin_preview_access'
 import { dePluginUpdate } from './de_plugin_update'
 import { dePreviewWeb } from './de_preview_web'
 import { deProjects } from './de_projects'
+import { deRepoScanDescriptions, deRepoScanLabels } from './de_repo_scan'
 import { deSharedMetrics } from './de_shared_metrics'
 import { deThemePicker } from './de_theme_picker'
 import { deUpdateChannel } from './de_update_channel'
@@ -527,6 +528,7 @@ export const deOverrides = {
     }
   },
   titlebar: {
+    back: 'Zurück',
     hideSidebar: 'Sidebar ausblenden',
     showSidebar: 'Sidebar einblenden',
     search: 'Suchen',
@@ -680,6 +682,22 @@ export const deOverrides = {
     switchTo: 'Sprache wechseln',
     searchPlaceholder: 'Sprachen suchen…',
     noResults: 'Keine Sprachen gefunden'
+  },
+
+  island: {
+    expand: 'Zeigen, was Hermes tut',
+    collapse: 'Aufgabenliste ausblenden',
+    running: (count: number) => (count === 1 ? '1 Sitzung läuft' : `${count} Sitzungen laufen`),
+    waiting: (count: number) => (count === 1 ? '1 Sitzung wartet auf dich' : `${count} Sitzungen warten auf dich`),
+    needsInput: 'Wartet auf deine Antwort',
+    needsAnswer: 'Antwort nötig',
+    working: 'Läuft',
+    empty: 'Nichts läuft',
+    open: 'In Hermes öffnen',
+    approve: 'Genehmigen',
+    deny: 'Ablehnen',
+    newSessionPlaceholder: 'Neue Sitzung starten…',
+    send: 'Senden'
   },
   settings: {
     memoryLayers: deMemoryLayers,
@@ -1143,11 +1161,7 @@ export const deOverrides = {
         personality: 'Persönlichkeit',
         showReasoning: 'Denkblöcke'
       },
-      desktop: {
-        repoScanEnabled: 'Automatische Repository-Erkennung',
-        repoScanRoots: 'Repository-Erkennungs-Wurzeln',
-        repoScanExcludePaths: 'Ausgeschlossene Repository-Pfade'
-      },
+      ...deRepoScanLabels,
       agent: {
         maxTurns: 'Maximale Agent-Schritte',
         imageInputMode: 'Bildanhänge',
@@ -1317,11 +1331,7 @@ export const deOverrides = {
         personality: 'Standard-Assistentenstil für neue Sessions.',
         showReasoning: 'Denkabschnitte anzeigen, wenn das Backend sie liefert.'
       },
-      desktop: {
-        repoScanEnabled: 'Lokale Ordner nach Git-Repositories durchsuchen, die in Projekten angezeigt werden.',
-        repoScanRoots: 'Zu durchsuchende Ordner. Leer lassen, um Ihr Home-Verzeichnis zu durchsuchen.',
-        repoScanExcludePaths: 'Ordner und deren Unterordner, die bei der Repository-Erkennung übersprungen werden.'
-      },
+      ...deRepoScanDescriptions,
       timezone: 'IANA-Zeitzonenkennung. Leer verwendet die Systemzeitzone.',
       browser: {
         useRealProfile:

@@ -26,9 +26,9 @@ import { enPluginPreviewAccess } from './en_plugin_preview_access'
 import { enPluginUpdate } from './en_plugin_update'
 import { enPreviewWeb } from './en_preview_web'
 import { enProjects } from './en_projects'
+import { enSettingsRepoScan } from './en_repo_scan'
 import { enSharedMetrics } from './en_shared_metrics'
 import { enThemePicker } from './en_theme_picker'
-import { enUninstallSection } from './en_uninstall_section'
 import { enUpdateChannel } from './en_update_channel'
 import type { Translations } from './types'
 
@@ -521,6 +521,7 @@ export const en: Translations = {
   },
 
   titlebar: {
+    back: 'Back',
     hideSidebar: 'Hide sidebar',
     showSidebar: 'Show sidebar',
     search: 'Search',
@@ -681,6 +682,24 @@ export const en: Translations = {
     switchTo: 'Switch language',
     searchPlaceholder: 'Search languages…',
     noResults: 'No languages found'
+  },
+
+  // Dynamic Island — the floating status strip. Its copy is chrome, not
+  // settings, so it sits with the other top-level surfaces.
+  island: {
+    expand: 'Show what Hermes is doing',
+    collapse: 'Hide the task list',
+    running: (count: number) => (count === 1 ? '1 session running' : `${count} sessions running`),
+    waiting: (count: number) => (count === 1 ? '1 session waiting on you' : `${count} sessions waiting on you`),
+    needsInput: 'Waiting on your answer',
+    needsAnswer: 'Needs answer',
+    working: 'Working',
+    empty: 'Nothing is running',
+    open: 'Open in Hermes',
+    approve: 'Approve',
+    deny: 'Deny',
+    newSessionPlaceholder: 'Start a new session…',
+    send: 'Send'
   },
 
   settings: {
@@ -1103,7 +1122,7 @@ export const en: Translations = {
     },
     fieldLabels: FIELD_LABELS,
     fieldDescriptions: FIELD_DESCRIPTIONS,
-    uninstallSection: enUninstallSection,
+    ...enSettingsRepoScan,
     memoryLayers: enMemoryLayers,
     customEndpoints: {
       active: 'Active',

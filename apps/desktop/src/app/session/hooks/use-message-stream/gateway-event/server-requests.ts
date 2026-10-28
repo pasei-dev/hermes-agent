@@ -405,24 +405,11 @@ const approval: Handler = ctx => {
   }).catch(() => undefined)
   markNeedsInput(ctx)
 
-  if (!request.replayed) {
-    dispatchNativeNotification({
-      actions: [
-        {
-          id: str(p.request_id) ? `approve:${str(p.request_id)}` : 'approve',
-          text: translateNow('notifications.native.approveAction')
-        },
-        {
-          id: str(p.request_id) ? `reject:${str(p.request_id)}` : 'reject',
-          text: translateNow('notifications.native.rejectAction')
-        }
-      ],
-      body: command || description,
-      kind: 'approval',
-      sessionId: sessionId || null,
-      title: translateNow('notifications.native.approvalTitle')
-    })
-  }
+  // No native notification: the approval belongs to the Dynamic Island, which
+  // shows the command and its Deny/Approve buttons above every app — the OS
+  // banner's whole job was to get the user back into Hermes to answer, and that
+  // now happens in place. (The in-app card still renders for the chat that
+  // raised it; this is about where the user is when they are NOT in Hermes.)
 }
 
 const sudo: Handler = ctx => {

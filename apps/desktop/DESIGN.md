@@ -49,7 +49,13 @@ one-off at the call site.
   previews, files, review, and terminal complement the conversation.
 - **Pages are durable destinations.** Chat, Skills, Messaging, and Artifacts
   remain in shell chrome. Do not hide a distinct product noun inside an
-  unrelated page.
+  unrelated page. A full page renders as a layer ABOVE the session view, not in
+  its place: the chat stays mounted beneath it, so returning to a session is a
+  route change, never a remount. The way back out of a page stands at the MAIN
+  view's top-left — the zone the page renders in, inset from that zone's left
+  edge by the chrome gutter so it never touches the sidebar; when that zone
+  starts under the window controls (a collapsed or dragged-in sidebar), the
+  control clamps to the right of them.
 - **Route overlays are short tasks.** Settings, Command Center, Cron, Profiles,
   Agents, and Starmap render as `OverlayView` cards and return to the previous
   route on close. Model/session pickers and dialogs layer above the current
@@ -320,6 +326,22 @@ existing traffic-light and Window Controls Overlay measurements.
 
 The left cluster shows sidebar, settings, layout editor, and HUD controls. Flip
 and the right-sidebar toggle sit on the right; haptics remain in settings.
+Back stands at the main view's top-left on every view that is not the session
+view, while a view is behind this one — the app's own view history
+(`store/view-history`), recorded per navigation by the wiring, never the
+router's query-string history. Back restores the view as it was left, down to
+the main-strip tab it had fronted: a session tile is not in the route, so the
+history carries it (`noteActiveViewPane`, written where the tab is fronted, and
+the page's own fronting of the workspace hands back the tile it displaced — the
+affordance fronts it in the click's own tick, so a route change has nothing left
+to read) or Back lands on the workspace — the first session tab.
+The zone it stands on reserves its width in its own band (`panel-titlebar`),
+because that band's remaining space is a native
+drag region, and a drag region swallows a press. It is absent in the session
+view (where it could only point at another session) and when nothing is behind
+(a cold start straight into a page). Overlays hide the clusters, so there it
+renders alone in the titlebar band — the card starts below the band, and Back
+stays the way out.
 In Simple interface mode only sidebar, settings and the layout editor render,
 and the reserved cluster width shrinks with them (`TITLEBAR_FIXED_TOOLS` is the
 one table both the buttons and the width reservation read).

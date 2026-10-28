@@ -25,7 +25,7 @@ import { NotificationStack } from '@/components/notifications'
 import { DesktopOnboardingOverlay } from '@/components/onboarding'
 import { firstRunIntro } from '@/components/onboarding/first-run/kickoff'
 import { OnboardingEnd } from '@/components/onboarding/onboarding-end'
-import { $newSessionTabAction, registerPaneCloser } from '@/components/pane-shell/tree/store'
+import { $newSessionTabAction, activeMainStripPane, registerPaneCloser } from '@/components/pane-shell/tree/store'
 import { setWorkspaceScope } from '@/components/pane-shell/workspace-scope'
 import { FloatingPet } from '@/components/pet/floating-pet'
 import { RemoteDisplayBanner } from '@/components/remote-display-banner'
@@ -91,8 +91,9 @@ import {
 import { reportPendingUpdateRun } from '@/store/shared-metrics'
 import { $archivedSessions } from '@/store/sidebar-archive'
 import { $titlebarAppActionsSide, titlebarAppActionsClusterCounts } from '@/store/titlebar-app-actions'
+import { noteActiveViewPane, noteViewChange } from '@/store/view-history'
 import { armWakeWord, stopClientCapture } from '@/store/wake-word'
-import { isAuxiliaryWindow, isBrowserWindow, isHudWindow, isMainWindow } from '@/store/windows'
+import { isAuxiliaryWindow, isBrowserWindow, isHudWindow, isIslandWindow, isMainWindow } from '@/store/windows'
 import { useSkinCommand } from '@/themes/use-skin-command'
 import type { SessionInfo } from '@/types/hermes'
 
@@ -107,6 +108,7 @@ import { useGatewayRequest } from '../gateway/hooks/use-gateway-request'
 import { useHermesConfigRecord } from '../hooks/use-config-record'
 import { useKeybinds } from '../hooks/use-keybinds'
 import { useHudHandoff } from '../hud/handoff'
+import { useIslandOpenRequest } from '../island/use-island-open-request'
 import { ModelPickerOverlay } from '../model-picker-overlay'
 import { ModelVisibilityOverlay } from '../model-visibility-overlay'
 import { mainChatOccupied, openSession, openSessionFromPicker } from '../open-session'
@@ -371,6 +373,19 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // a focused session tile.
   useEffect(() => {
     syncWorkspaceRoute(location.pathname)
+    // The app's own view history — what the back affordance walks. Recorded here
+    // because this is the one effect that sees every navigation, whichever
+    // entry point made it (sidebar, palette, a plugin's `to` target, restore).
+    noteViewChange(location.pathname)
+    // The main-strip tab each view had FRONTED rides along: the tab is written
+    // where it is fronted (components/pane-shell/tree/store.ts), and once more
+    // here for the RESTORED layout, which fronts the saved tab before any route
+    // is known, so that front had nothing to be recorded onto.
+    const fronted = activeMainStripPane()
+
+    if (fronted) {
+      noteActiveViewPane(fronted)
+    }
   }, [location.pathname])
 
   const {
@@ -755,6 +770,9 @@ export function ContribWiring({ children }: { children: ReactNode }) {
 
   // Leaving HUD mode hands this window the session back (see hud/handoff).
   useHudHandoff({ navigate, resumeSession })
+
+  // A row clicked in the Dynamic Island points at a chat that belongs here.
+  useIslandOpenRequest(navigate)
 
   // Clear a failed turn's red error banner. Errors are renderer-local (never
   // persisted): a bare error placeholder is dropped entirely; a partial-output
@@ -1248,17 +1266,17 @@ export function ContribWiring({ children }: { children: ReactNode }) {
           } as CSSProperties
         }
       >
-        {/* HUD and the popped-out Browser have no titlebar to hang these off —
-            the clusters are `fixed`, so without this they'd float over the
-            surface as orphaned buttons. */}
-        {!isHudWindow() && !isBrowserWindow() && (
+        {/* HUD, the popped-out Browser and the Dynamic Island have no titlebar
+            to hang these off — the clusters are `fixed`, so without this they'd
+            float over the surface as orphaned buttons. */}
+        {!isHudWindow() && !isBrowserWindow() && !isIslandWindow() && (
           <TitlebarControls
             leftTools={leftTitlebarTools}
             onOpenSettings={() => navigate(SETTINGS_ROUTE)}
             tools={rightTitlebarTools}
           />
         )}
-        {!isHudWindow() && customWindowControls && (
+        {!isHudWindow() && !isIslandWindow() && customWindowControls && (
           <WslgWindowControls
             isFullscreen={Boolean(connection?.isFullscreen)}
             isMaximized={Boolean(connection?.isMaximized)}
@@ -1410,17 +1428,18 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       <ExternalOpenFailedDialog />
 
       {/* Petdex floating mascot — renders nothing unless installed + enabled.
-          Never in the HUD: that window is the chat bar and nothing else. */}
-      {!isHudWindow() && !isBrowserWindow() && <FloatingPet />}
+          Never in the HUD or the island: those windows are one surface each and
+          nothing else. */}
+      {!isHudWindow() && !isBrowserWindow() && !isIslandWindow() && <FloatingPet />}
 
       {/* In-app tips. Renders nothing until the app is quiet and has something
           to point at, and nothing at all once they're off or all retired. The
           HUD and browser windows have none of the surfaces a tip talks about. */}
-      {!isHudWindow() && !isBrowserWindow() && <TipHost />}
+      {!isHudWindow() && !isBrowserWindow() && !isIslandWindow() && <TipHost />}
 
       {/* Single persistent xterm host chasing the terminal pane's slot rect.
           The HUD has no terminal pane, so it has nothing to chase. */}
-      {!isHudWindow() && !isBrowserWindow() && (
+      {!isHudWindow() && !isBrowserWindow() && !isIslandWindow() && (
         <PersistentTerminal onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
       )}
     </ContribWiringContext.Provider>

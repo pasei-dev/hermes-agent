@@ -323,6 +323,7 @@ import { buildHudWindowUrl } from './hud-url'
 import { linuxOzoneBackend, resolveHudWindowing } from './hud-windowing'
 import { INSTALL_STAMP, installShape } from './install-stamp'
 import type { InstallStamp } from './install-stamp'
+import { createIslandWindowController, registerIslandIpc } from './island-window'
 import { createKeepAwakeController } from './keep-awake-controller'
 import { launchBuildIdentity } from './launch-build-identity'
 import { applyLaunchProfileOverride } from './launch-profile'
@@ -1394,11 +1395,11 @@ const BOOT_FAKE_STEP_MS = (() => {
 const APP_NAME: string = IDENTITY_APP_NAME || process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
-const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
+const MACOS_TRAFFIC_LIGHTS_HEIGHT = 20
 
 const WINDOW_BUTTON_POSITION = {
-  x: 24,
-  y: TITLEBAR_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
+  x: 20,
+  y: MACOS_TRAFFIC_LIGHTS_HEIGHT
 }
 
 // Right-edge window-control reservation lives in titlebar-overlay-width.ts
@@ -12593,6 +12594,39 @@ const wakeIndicatorController = createWakeIndicatorWindowController({
   wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('wakeIndicator'))
 })
 
+// The Dynamic Island — see island-window.ts. A full app renderer with its own
+// gateway (the same thing the HUD is), painted as a transparent status strip at
+// the top of the screen. Main owns the window and the renderer owns the
+// decision: it reports what it is showing, and "nothing" hides the window
+// outright. It is spawned once at ready and stays hidden until then, because
+// an approval it has to answer can arrive at any moment.
+const islandController = createIslandWindowController({
+  devServer: DEV_SERVER,
+  isMac: IS_MAC,
+  loadWindowUrl,
+  log: rememberLog,
+  openSession: sessionId => {
+    const target = mainWindow as BrowserWindow | null
+
+    if (!target || target.isDestroyed()) {
+      return
+    }
+
+    // Bring the app forward on that session: the island's row click is the
+    // user asking for the full surface, the opposite of answering in place.
+    focusWindow(target)
+    target.webContents.send('hermes:island:open-session', sessionId)
+  },
+  platform: process.platform,
+  preloadPath: PRELOAD_PATH,
+  profile: primaryProfileKey(),
+  rendererIndex: resolveRendererIndex,
+  webPreferences: chatWindowWebPreferences,
+  wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('chat'))
+})
+
+registerIslandIpc(() => islandController)
+
 registerWindowSizing({ mainWindow: (): BrowserWindow | null => mainWindow })
 registerMachineProfile()
 
@@ -13815,6 +13849,13 @@ function createWindow() {
   mainWindow.on('closed', () => {
     closePetOverlay()
     wakeIndicatorController.close()
+
+    // The island outlives the app window on macOS (the app stays running there,
+    // and an approval can still arrive) — but on Windows/Linux a window nobody
+    // can see would keep the process alive past the point the app used to quit.
+    if (!IS_MAC) {
+      islandController.dispose()
+    }
 
     if (mainWindow === createdMainWindow) {
       mainWindow = null
@@ -17872,6 +17913,11 @@ app.whenReady().then(() => {
   // it without the renderer visiting Settings. A failed registration is logged
   // here and surfaced in Settings via the IPC state (never silent).
   applyQuickEntrySettings(readQuickEntrySettings())
+
+  // The island exists from boot but stays hidden: the renderer is what notices
+  // a turn starting or an approval landing, and either can happen before the
+  // user ever brings the app forward.
+  islandController.ensureSpawned()
   installCommandScreenshot({ rendererUrl: DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString() })
   installHudModifierTap({
     rendererUrl: DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString(),
@@ -17891,6 +17937,16 @@ app.whenReady().then(() => {
 
     screen.on('display-removed', reposition)
   }
+
+  // The island is pinned to one display and follows it through a topology
+  // change; otherwise a monitor unplugged under it strands it off-screen.
+  const repositionIsland = () => islandController.reposition()
+
+  screen.on('display-added', repositionIsland)
+
+  screen.on('display-metrics-changed', repositionIsland)
+
+  screen.on('display-removed', repositionIsland)
 
   // The popped-out pet must never be stranded on a disconnected display: when
   // the topology changes, pull an off-screen overlay back onto the display
@@ -18200,6 +18256,7 @@ app.on('before-quit', event => {
   // pet can't keep the process alive or float over a quit app.
   closePetOverlay()
   wakeIndicatorController.close()
+  islandController.dispose()
 
   // Same for the HUD — an always-on-top panel outliving the app would leave a
   // floating composer with nothing behind it. Close it directly rather than via

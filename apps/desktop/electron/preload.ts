@@ -192,6 +192,22 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('hermes:hud:game-overlay', listener)
     }
   },
+  // Dynamic Island: a transparent status strip at the top of the screen. Main
+  // owns the window; the island renderer reports what it is showing and asks for
+  // the keyboard only when the user is typing. The app window is on the other
+  // end of `openSession` / `onOpenSession`.
+  island: {
+    report: (report: { height?: number; visible: boolean }) => ipcRenderer.send('hermes:island:report', report),
+    setInteractive: (interactive: boolean) => ipcRenderer.send('hermes:island:interactive', interactive),
+    setFocusable: (focusable: boolean) => ipcRenderer.send('hermes:island:focusable', focusable),
+    openSession: (sessionId: string) => ipcRenderer.send('hermes:island:open-session', sessionId),
+    onOpenSession: (callback: (sessionId: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
+      ipcRenderer.on('hermes:island:open-session', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:open-session', listener)
+    }
+  },
   hudModifier: {
     getSettings: () => ipcRenderer.invoke('hermes:hud-modifier:settings:get'),
     setEnabled: enabled => ipcRenderer.invoke('hermes:hud-modifier:settings:set', enabled),

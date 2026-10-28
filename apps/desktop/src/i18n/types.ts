@@ -29,6 +29,7 @@ import type { OnboardingTranslations } from './types_onboarding'
 import type { PluginPreviewAccessTranslations } from './types_plugin_preview_access'
 import type { PluginUpdateTranslations } from './types_plugin_update'
 import type { SidebarProjectsTranslations } from './types_projects'
+import type { RepoScanSettingsTranslations } from './types_repo_scan'
 import type { RightSidebarTranslations } from './types_right_sidebar'
 import type { SharedMetricsTranslations } from './types_shared_metrics'
 import type { ThemePickerCopy } from './types_theme_picker'
@@ -545,6 +546,7 @@ catalog: CatalogTranslations
   }
 
   titlebar: {
+    back: string
     hideSidebar: string
     showSidebar: string
     search: string
@@ -595,7 +597,23 @@ catalog: CatalogTranslations
     noResults: string
   }
 
-  settings: {
+  island: {
+    expand: string
+    collapse: string
+    running: (count: number) => string
+    waiting: (count: number) => string
+    needsInput: string
+    needsAnswer: string
+    working: string
+    empty: string
+    open: string
+    approve: string
+    deny: string
+    newSessionPlaceholder: string
+    send: string
+  }
+
+  settings: RepoScanSettingsTranslations & {
     subpages: Record<string, string>
     closeSettings: string
     exportConfig: string
