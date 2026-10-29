@@ -71,10 +71,12 @@ export const GOO_BLEED = 6
 const GOO_TAPER_PER_PX = 0.22
 const GOO_MAX_TAPER = 18
 
-/** One open session: the app's chat view, so it is a panel — the island window's
- *  own ceiling is 480 × 620, and the surface takes all of it bar the padding. */
-const SESSION_WIDTH = 478
-const SESSION_HEIGHT = 546
+/** One open session: the app's chat view, so it is a panel — the island window
+ *  opens at 600 x 820, and the surface takes it bar the margins and the housing
+ *  band. The shell passes its own measured ceiling; these are the fallback for a
+ *  caller without one. */
+const SESSION_WIDTH = 584
+const SESSION_HEIGHT = 780
 const MAX_EXPANDED_HEIGHT = 420
 const ROW_HEIGHT = 26
 /** The list's search field, its divider and its breathing room. */

@@ -145,13 +145,14 @@ describe('islandShape', () => {
     // The session stage mounts the app's own chat surface: a panel of a fixed
     // size, not a band that grows per transcript line.
     // The panel plus the housing band it grows out of.
-    expect(session.height).toBe(546 + NOTCH_HEIGHT)
-    expect(session.width).toBe(478)
+    expect(session.height).toBe(780 + NOTCH_HEIGHT)
+    expect(session.width).toBe(584)
     expect(session.height).toBeGreaterThan(expanded.height)
     expect(session.height).toBeGreaterThan(attention.height)
-    // Still inside the island window, or the surface would be clipped by it.
-    expect(session.width).toBeLessThanOrEqual(480)
-    expect(session.height).toBeLessThanOrEqual(620)
+    // Still inside the island window, or the surface would be clipped by it: the
+    // window opens at 600 x 820 and the panel keeps a margin inside it.
+    expect(session.width).toBeLessThanOrEqual(600)
+    expect(session.height).toBeLessThanOrEqual(820)
   })
 
   it('keeps an empty expanded list short enough to still look like a control', () => {

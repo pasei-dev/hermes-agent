@@ -111,6 +111,9 @@ const REST_CHROME =
 /** The gap the neck is replayed at when a surface docks home: taller than the
  *  housing, so a length of it shows below the notch before it closes. */
 const ABSORB_GAP = 56
+/** How close to the window's edges the session panel may grow: the housing band
+ *  is unpainted and the panel is a card inside the rectangle, not the rectangle. */
+const PANEL_MARGIN = 8
 /** How the neck closes over a surface that has just landed in the housing. */
 const GOO_CLOSE = 'height 260ms ease-out, opacity 200ms ease-out, transform 280ms cubic-bezier(0.32, 0.72, 0, 1)'
 
@@ -639,7 +642,66 @@ export function IslandShell() {
   const [liveSize, setLiveSize] = useState<{ height: number; width: number } | null>(null)
   const gripRef = useRef<null | { height: number; startX: number; startY: number; width: number }>(null)
   const gripPending = useRef<{ height: number; width: number } | null>(null)
-  const sessionSize = liveSize ?? islandPrefs.sessionSize ?? undefined
+  /** The island window's own size, as main announces it (on create, on every
+   *  resize, on a display change). It is the ceiling on every stage, so the
+   *  panel may not exceed it — before the first announcement it is the size main
+   *  opens at. */
+  const [windowSize, setWindowSize] = useState({ height: 820, width: 600 })
+
+  /** What the panel may occupy inside that window, leaving its edges breathing
+   *  room and the housing band unpainted. */
+  const panelMax = useMemo(
+    () => ({
+      height: Math.max(240, windowSize.height - (notched ? notchHeight : 0) - PANEL_MARGIN * 2),
+      width: Math.max(320, windowSize.width - PANEL_MARGIN * 2)
+    }),
+    [notched, notchHeight, windowSize.height, windowSize.width]
+  )
+
+  // A remembered size is clamped to the window it is drawn in: the user may have
+  // sized the panel before the window could grow, and a stale size that exceeds
+  // it is clipped with no error.
+  const remembered = islandPrefs.sessionSize
+
+  const sessionSize =
+    liveSize ??
+    (remembered
+      ? {
+          height: Math.min(remembered.height, panelMax.height),
+          width: Math.min(remembered.width, panelMax.width)
+        }
+      : panelMax)
+
+  /** Ask main for a window that fits this panel. One request per frame: a
+   *  `setBounds` per pointer event is the synchronous compositor round trip the
+   *  island's fixed-rectangle design exists to avoid. Main clamps and applies
+   *  it, then announces the size back. */
+  const resizeFrame = useRef(0)
+
+  const requestWindowSize = useCallback(
+    (size: { height: number; width: number }) => {
+      if (resizeFrame.current) {
+        return
+      }
+
+      resizeFrame.current = requestAnimationFrame(() => {
+        resizeFrame.current = 0
+        window.hermesDesktop?.island?.resize?.({
+          height: size.height + (notched ? notchHeight : 0) + PANEL_MARGIN * 2,
+          width: size.width + PANEL_MARGIN * 2
+        })
+      })
+    },
+    [notched, notchHeight]
+  )
+
+  useEffect(() => {
+    return window.hermesDesktop?.island?.onBounds?.(size => {
+      if (size.width > 0 && size.height > 0) {
+        setWindowSize(size)
+      }
+    })
+  }, [])
 
   // The surface stops being the housing the moment it is let out of it: below the
   // housing's own height the shape is a capsule and the neck painted behind it
@@ -1790,12 +1852,16 @@ export function IslandShell() {
                     }
 
                     const size = {
-                      height: limitSize(from.height + event.screenY - from.startY, 260, 546),
-                      width: limitSize(from.width + event.screenX - from.startX, 340, 478)
+                      height: limitSize(from.height + event.screenY - from.startY, 240, panelMax.height),
+                      width: limitSize(from.width + event.screenX - from.startX, 320, panelMax.width)
                     }
 
                     gripPending.current = size
                     setLiveSize(size)
+                    // The window grows with the panel: the window is the ceiling
+                    // on every stage, so a panel that outgrew it would be
+                    // clipped with no error.
+                    requestWindowSize(size)
                   }}
                   onPointerUp={() => {
                     const size = gripPending.current
