@@ -203,6 +203,10 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     // larger than the island and its edges are not the visible ones.
     surface: (rect: { height: number; offsetX: number; offsetY: number; width: number }) =>
       ipcRenderer.send('hermes:island:surface', rect),
+    // The panel's own grip, dragged. Main owns the window, so it applies the
+    // floor and the ceiling for this display and resizes it — the surface is
+    // click-through, so the window's edges are not reachable with the mouse.
+    resize: (size: { height: number; width: number }) => ipcRenderer.send('hermes:island:resize', size),
     // Main → island renderer: the drag was corrected by this much, so the pill
     // can spring from where the pointer asked for into where it settled.
     onSettle: (callback: (correction: { dx: number; dy: number }) => void) => {
@@ -220,6 +224,17 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       ipcRenderer.on('hermes:island:remeasure', listener)
 
       return () => ipcRenderer.removeListener('hermes:island:remeasure', listener)
+    },
+    // Main → island renderer: how big the window is. The renderer lays a stage out
+    // inside a rectangle it cannot otherwise see, so a resized window that was
+    // never announced clips the panel at its old size.
+    onBounds: (callback: (bounds: { height: number; width: number }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, bounds: { height: number; width: number }) =>
+        callback({ height: Number(bounds?.height), width: Number(bounds?.width) })
+
+      ipcRenderer.on('hermes:island:bounds', listener)
+
+      return () => ipcRenderer.removeListener('hermes:island:bounds', listener)
     },
     // The island is a full renderer, so it boots the whole app shell first and
     // paints the app's own boot screen until this arrives. Main keeps the window
