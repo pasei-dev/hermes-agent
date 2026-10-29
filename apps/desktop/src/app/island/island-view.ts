@@ -6,12 +6,13 @@
 // numbers are derived here, unit-tested without a DOM, and the component only
 // paints them.
 //
-// On a notched Mac the resting shape IS the notch — same width, same height,
-// flush with the top edge — so "hidden" reads as the housing rather than as a
-// black bar under it. That is the autohide: the surface grows down and out of
-// the notch when there is something to say, and retreats into it when there is
-// not. Where there is no housing there is nothing to hide inside, so idle is
-// fully invisible and activity floats a pill below the menu bar.
+// On a notched Mac, AT THE TOP EDGE, the resting shape IS the notch — same
+// width, same height, flush with the top edge — so "hidden" reads as the housing
+// rather than as a black bar under it. That is the autohide: the surface grows
+// down and out of the notch when there is something to say, and retreats into it
+// when there is not. Anywhere else — dragged off that edge, or docked to another
+// one — there is no housing over the surface, so it is an ordinary capsule or
+// card and nothing reserves room for a cutout that is not there.
 
 import type { IslandStage } from './island-model'
 
@@ -30,8 +31,14 @@ export const NOTCH_FILLET = 6
 export const ISLAND_EDGE_SNAP = 30
 /** How far the pointer may travel before the leash is cut, and how hard the
  *  rubber band holds: the curve flattens toward c·L, so the surface lags the
- *  pointer by a growing distance instead of stopping dead. */
-export const LEASH_BAND = 80
+ *  pointer by a growing distance instead of stopping dead.
+ *
+ *  The band is several housing heights on purpose. The rubber band's own ceiling
+ *  is 0.35·L, and a lag shorter than the housing's height leaves the surface
+ *  under an opaque cutout — nothing to see, and no neck that could bridge it. At
+ *  this band the surface is ~70 px out when it tears free, so the last ~40 px of
+ *  the pull are the neck. */
+export const LEASH_BAND = 200
 const LEASH_CURVE = 0.55
 
 const EXPANDED_WIDTH = 452
@@ -40,8 +47,32 @@ const EXPANDED_WIDTH = 452
  *  reads as docked rather than as an ordinary floating bubble. */
 export const DOCKED_RADIUS = 14
 
+/** The pointer widens the band SIDEWAYS into the wings either side of the opaque
+ *  housing, and never a pixel taller than the housing: the avatar and the line on
+ *  one side, the status counts and the buttons on the other. It stops short of the
+ *  island window's own 480 px so the spring's overshoot is never clipped. */
+export const HOVER_WIDTH = 470
+/** A pill pulled off the edge is a capsule that carries its line all the time,
+ *  so it is wider than the bare dot it rests as in the housing — wide enough for
+ *  the avatar, a readable title and the counts, with room to widen on a hover. */
+const PILL_WIDTH = 300
+const PILL_WIDTH_RICH = 340
+
+/** The goo neck: blur per pixel of gap, and the ceiling where the threshold can
+ *  no longer smooth a corner — past ~6 px the silhouette's own edges round off. */
+const GOO_BLUR_PER_PX = 0.16
+const GOO_MAX_BLUR = 5.5
+/** How far the silhouette is bled past the surface's top edge, so its tapered end
+ *  is painted UNDER the surface instead of meeting it in a step. */
+export const GOO_BLEED = 6
+/** How far the neck is pulled in at its far end, per pixel of gap, and the
+ *  ceiling: a neck that thins to a point is a shape no blur can smooth back, and
+ *  a steep diagonal leaves a kink where the neck meets the band it hangs from. */
+const GOO_TAPER_PER_PX = 0.22
+const GOO_MAX_TAPER = 18
+
 /** One open session: the app's chat view, so it is a panel — the island window's
- *  own ceiling is 480 × 560, and the surface takes all of it bar the padding. */
+ *  own ceiling is 480 × 620, and the surface takes all of it bar the padding. */
 const SESSION_WIDTH = 478
 const SESSION_HEIGHT = 546
 const MAX_EXPANDED_HEIGHT = 420
@@ -51,6 +82,8 @@ const ROW_HEIGHT = 26
 const ATTENTION_CARD_HEIGHT = 104
 const HEADER_HEIGHT = 34
 const SURFACE_PADDING = 12
+/** The one row of chrome every stage paints above its content. */
+const CONTENT_ROW = 24
 
 export interface IslandShape {
   height: number
@@ -59,10 +92,10 @@ export interface IslandShape {
   mode: 'expanded' | 'floating' | 'notch'
   opacity: number
   radius: number
-  /** Content inset from the surface's top: zero where the content lives in the
-   *  housing band (the resting pill, whose text sits in the visible wings), the
-   *  housing's height where the surface grows out of it — a notched Mac's top
-   *  centre is opaque, so nothing may be painted under it. */
+  /** Content inset from the surface's top: the housing's height where the
+   *  surface sits under the housing (a notched Mac's top centre is opaque, so
+   *  nothing may be painted under it), and zero where there is no housing over
+   *  the content — see `islandContentInset`. */
   top: number
   /** A notched surface is an extrusion of the housing: flush with the screen's
    *  top edge, square there, rounded only at the bottom. */
@@ -71,6 +104,9 @@ export interface IslandShape {
 }
 
 export function islandShape(input: {
+  /** Whether the surface is the housing at the top of a notched display. A
+   *  surface dragged off that edge, or docked to another one, is a capsule. */
+  attached?: boolean
   /** Height the attention card needs for its content, in px. */
   cardHeight?: number
   /** The housing's own height on this display; the menu bar IS the notch. */
@@ -85,6 +121,7 @@ export function islandShape(input: {
   stage: IslandStage
 }): IslandShape {
   const {
+    attached = true,
     cardHeight = ATTENTION_CARD_HEIGHT,
     notchHeight = NOTCH_HEIGHT,
     notchWidth = NOTCH_WIDTH,
@@ -99,13 +136,18 @@ export function islandShape(input: {
   // the flare on either side of it.
   const band = Math.max(0, Math.round(notchWidth)) + NOTCH_FILLET * 2
 
-  // Everything that grows out of the housing starts BELOW it on a notched
-  // display: the camera housing is physically opaque, so a row painted at the
-  // top of the window would sit behind the notch and never be seen.
-  const belowHousing = notched ? notchHeight : 0
+  // The housing only overhangs the surface while the surface IS the housing. Off
+  // that edge the cutout is not over it at all, so nothing reserves the band
+  // above the content — the blank line a detached pill used to wear.
+  const housing = notched && attached
+
+  // Everything that grows out of the housing starts BELOW it: the camera housing
+  // is physically opaque, so a row painted at the top of the window would sit
+  // behind the notch and never be seen.
+  const belowHousing = housing ? notchHeight : 0
 
   if (stage === 'hidden') {
-    return notched
+    return housing
       ? {
           bottomOnly: true,
           height: notchHeight,
@@ -119,36 +161,44 @@ export function islandShape(input: {
   }
 
   if (stage === 'pill') {
-    // A pill with an activity line carries four things (tool, clock, plan, workers)
-    // where a bare count carried one word, so the hovered pill grows instead of
-    // truncating the tool name to two letters.
-    // On a notched display the RESTING pill IS the band: the housing's own width
-    // and height, clipped to the housing's flare. Its one line — the title, its
-    // tool and the buttons — arrives on hover, in the wings either side of the
-    // housing. Idle must not widen to say that something is running.
+    const height = notched ? notchHeight : HEADER_HEIGHT
+
+    if (housing) {
+      // At rest it is the housing and nothing more: the cutout is opaque, so a
+      // band exactly its width has nowhere to paint a dot, and the answer is a
+      // hover that widens it into the wings rather than a permanent +48 px.
+      return {
+        bottomOnly: true,
+        height,
+        mode: rich ? 'floating' : 'notch',
+        opacity: 1,
+        radius: DOCKED_RADIUS,
+        top: 0,
+        width: rich ? HOVER_WIDTH : band
+      }
+    }
+
+    // Pulled off the edge: a capsule. No flare, no squared top, no line of
+    // housing above the row — and wide enough to carry avatar, title and tool
+    // without a hover, because nothing hides the middle of it any more.
     return {
-      bottomOnly: notched,
-      height: notched ? notchHeight : HEADER_HEIGHT,
-      mode: notched && !rich ? 'notch' : 'floating',
+      bottomOnly: false,
+      height,
+      mode: 'floating',
       opacity: 1,
-      radius: notched ? DOCKED_RADIUS : HEADER_HEIGHT / 2,
+      radius: height / 2,
       top: 0,
-      // Wider than the housing even at rest: the camera cutout is opaque, so a
-      // band exactly its width has nowhere to put a dot — the island would say
-      // nothing while a session ran. The wings either side are what is visible.
-      // At rest it is the housing and nothing more; a hover widens it into the
-      // wings, where the line, the tool and the buttons can be read.
-      width: notched ? (rich ? 316 : band) : rich ? 268 : 190
+      width: notched ? (rich ? PILL_WIDTH_RICH : PILL_WIDTH) : rich ? PILL_WIDTH : 190
     }
   }
 
   if (stage === 'attention') {
     return {
-      bottomOnly: notched,
+      bottomOnly: housing,
       height: belowHousing + HEADER_HEIGHT + cardHeight + SURFACE_PADDING,
       mode: 'floating',
       opacity: 1,
-      radius: notched ? DOCKED_RADIUS : 22,
+      radius: housing ? DOCKED_RADIUS : 22,
       top: belowHousing,
       width: notched ? 372 : 344
     }
@@ -158,11 +208,11 @@ export function islandShape(input: {
     // The session stage mounts the app's own chat view, which brings its own
     // composer and scrolling: it needs a panel, not one band per transcript line.
     return {
-      bottomOnly: notched,
+      bottomOnly: housing,
       height: belowHousing + (sessionSize?.height ?? SESSION_HEIGHT),
       mode: 'expanded',
       opacity: 1,
-      radius: notched ? DOCKED_RADIUS : 22,
+      radius: housing ? DOCKED_RADIUS : 22,
       top: belowHousing,
       width: sessionSize?.width ?? SESSION_WIDTH
     }
@@ -170,17 +220,14 @@ export function islandShape(input: {
 
   const listHeight = rows === 0 ? 28 : rows * ROW_HEIGHT
 
-  const height = Math.min(
-    MAX_EXPANDED_HEIGHT,
-    HEADER_HEIGHT + listHeight + SURFACE_PADDING * 2
-  )
+  const height = Math.min(MAX_EXPANDED_HEIGHT, HEADER_HEIGHT + listHeight + SURFACE_PADDING * 2)
 
   return {
-    bottomOnly: notched,
+    bottomOnly: housing,
     height: belowHousing + height,
     mode: 'expanded',
     opacity: 1,
-    radius: notched ? DOCKED_RADIUS : 24,
+    radius: housing ? DOCKED_RADIUS : 24,
     top: belowHousing,
     width: EXPANDED_WIDTH
   }
@@ -197,6 +244,82 @@ export function islandDockSide(raw: unknown): IslandDockSide {
 
 /** Two decimals: a path is stringified CSS, so float noise has no business in it. */
 const px = (value: number) => String(Math.round(value * 100) / 100)
+
+/**
+ * Where the content box starts, measured from the surface's top edge.
+ *
+ * Under the housing it starts below the housing — the camera cutout is
+ * physically opaque, so a row painted under it is invisible. Everywhere else the
+ * content starts at the surface's own padding: one band of chrome centres its
+ * row inside a capsule, and a card starts at the top. There is never a blank line
+ * where a housing would have been.
+ */
+export function islandContentInset(shape: IslandShape): number {
+  if (shape.top > 0) {
+    return shape.top + 6
+  }
+
+  if (shape.mode === 'notch') {
+    return 6
+  }
+
+  return shape.height <= CONTENT_ROW + 20 ? Math.max(0, Math.round((shape.height - CONTENT_ROW) / 2)) : 6
+}
+
+/**
+ * The liquid neck painted behind the surface while it tears out of the housing,
+ * and again when it is absorbed back into it.
+ */
+export interface IslandGooLayer {
+  /** `stdDeviation` the silhouette is blurred with, in px. */
+  blur: number
+  /** The silhouette's own clip path: a band as wide as the surface where it
+   *  leaves the housing, tapered toward the end that is drawn under the surface.
+   *  The taper is applied BEFORE the blur, so the filter turns it into the
+   *  shoulders of a neck instead of cutting them off. */
+  clip: string
+  height: number
+  width: number
+}
+
+/**
+ * The neck between the housing and a surface that has been let out of it.
+ *
+ * The silhouette is ONE shape, as wide as the surface where it meets the housing,
+ * so it never arrives at the surface in a step the alpha threshold cannot smooth
+ * — a neck narrower than the bar reads as a block under a bar, not as liquid. It
+ * is bled past the surface's top edge, so its tapered end is painted under the
+ * surface and the join is never on screen; what is on screen is the waist the
+ * blur and the threshold turn into fillets.
+ *
+ * Null when there is nothing to bridge: fused, or torn so far that the neck is
+ * gone.
+ */
+export function islandGooLayer(input: { gap: number; notchHeight?: number; surface: number }): IslandGooLayer | null {
+  const { gap, notchHeight = NOTCH_HEIGHT, surface } = input
+
+  if (!(gap > 0.5) || gap > LEASH_BAND) {
+    return null
+  }
+
+  // Never narrower than the surface it hangs from: that IS the step the
+  // threshold cannot smooth away.
+  const width = Math.max(1, Math.round(surface))
+  const height = Math.round((gap + GOO_BLEED) * 10) / 10
+  // The neck only thins once it has left the housing: inside the band there is
+  // nothing on screen to taper.
+  const open = Math.max(0, gap - notchHeight)
+  const inset = Math.min(GOO_MAX_TAPER, open * GOO_TAPER_PER_PX)
+  const blur = Math.round(Math.min(GOO_MAX_BLUR, gap * GOO_BLUR_PER_PX) * 100) / 100
+
+  // The taper runs the whole height of the layer, so both places where its slope
+  // changes are painted where they cannot be seen: the top under the housing, the
+  // bottom under the surface. A taper that starts on the housing's own bottom edge
+  // instead leaves that edge as a shelf with a kink in it.
+  const clip = `polygon(0px 0px, ${px(width)}px 0px, ${px(width - inset)}px ${px(height)}px, ${px(inset)}px ${px(height)}px)`
+
+  return { blur, clip, height, width }
+}
 
 /**
  * The `clip-path` a notch surface is painted with, or null for every other
@@ -288,7 +411,7 @@ const DRAG_LIFT = 'translateY(1px)'
  */
 export function islandSurfaceTransform(input: {
   dragging: boolean
-  /** The extra transform the leash and the release squash are painting. */
+  /** The extra transform the leash and the goo gap are painting. */
   paint: string
   /** The correction being painted after a release, or null at rest. */
   settle: null | string
