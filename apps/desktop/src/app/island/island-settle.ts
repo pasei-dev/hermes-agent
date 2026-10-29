@@ -4,8 +4,8 @@
 // pixels away from where the pointer put it — that difference is the correction.
 // Painting the correction and letting it spring to zero is what makes the
 // release legible: the surface arrives with the pointer instead of teleporting
-// back. A short scale dip rides along, so a release that corrected nothing still
-// lands visibly, and `prefers-reduced-motion` turns the whole thing off.
+// back. A release that corrected nothing has no travel to paint, so it paints
+// nothing at all, and `prefers-reduced-motion` turns the whole thing off.
 import { useCallback, useEffect, useState } from 'react'
 
 export interface IslandSettle {
@@ -16,15 +16,15 @@ export interface IslandSettle {
 /** The largest correction worth painting: beyond this the surface would visibly
  *  detach from the window it is settling into instead of leaning into it. */
 export const SETTLE_LIMIT = 48
-/** Where the dip bottoms out. Shallow on purpose — the surface is small, and a
- *  deep scale would read as the island being resized rather than as a landing. */
-export const SETTLE_SCALE = 0.94
 
 /**
  * The correction a release message carries, or null when it carries none.
  *
  * Anything that is not two finite numbers is not a correction — a malformed
- * event must leave the surface at rest rather than paint a NaN transform.
+ * event must leave the surface at rest rather than paint a NaN transform. A
+ * correction that rounds to zero is no correction either: the surface is already
+ * where main put it, and painting a transform there would animate a jump that
+ * never happened.
  */
 export function islandSettleOffset(detail: unknown): IslandSettle | null {
   if (!detail || typeof detail !== 'object') {
@@ -40,8 +40,9 @@ export function islandSettleOffset(detail: unknown): IslandSettle | null {
   }
 
   const clamp = (value: number) => Math.max(-SETTLE_LIMIT, Math.min(SETTLE_LIMIT, Math.round(value)))
+  const offset = { dx: clamp(x), dy: clamp(y) }
 
-  return { dx: clamp(x), dy: clamp(y) }
+  return offset.dx === 0 && offset.dy === 0 ? null : offset
 }
 
 /** The transform painted at the instant of release; `none` is the resting pose.
@@ -53,8 +54,10 @@ export function islandSettleTransform(settle: IslandSettle | null, reducedMotion
 
   // Counter the jump, not repeat it: main has already moved the window by
   // (+dx, +dy), the surface rides that move, and it starts from where the pointer
-  // let go — so the first painted frame is at minus the correction.
-  return `translate(${-settle.dx}px, ${-settle.dy}px) scale(${SETTLE_SCALE})`
+  // let go — so the first painted frame is at minus the correction. Travel only:
+  // a scale here reads as a bounce on every drag, which is what a release that
+  // snapped nowhere looked like.
+  return `translate(${-settle.dx}px, ${-settle.dy}px)`
 }
 
 /** Whether the viewer asked for less motion. Guarded: a renderer without a

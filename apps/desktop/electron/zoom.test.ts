@@ -314,6 +314,12 @@ test('wake indicator opts out of zoom', () => {
   assert.deepEqual(zoomWiringForWindowKind('wakeIndicator'), { zoom: false })
 })
 
+// The island is drawn in points (a 185 pt housing, a 32 pt band) and main docks
+// it in points, so the app's text scale would put the surface 14% off the notch.
+test('the dynamic island opts out of zoom', () => {
+  assert.deepEqual(zoomWiringForWindowKind('island'), { zoom: false })
+})
+
 test('unknown window kinds default to chat (zoom enabled)', () => {
   assert.deepEqual(zoomWiringForWindowKind('unknown'), { zoom: true })
   assert.deepEqual(zoomWiringForWindowKind(undefined), { zoom: true })

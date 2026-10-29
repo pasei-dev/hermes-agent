@@ -343,6 +343,67 @@ function isSeam(displays: IslandDisplay[], display: IslandDisplay, side: 'left' 
   )
 }
 
+/** The edge a docked surface is attached to, as the renderer paints it. `free`
+ *  is an island that sits on no edge at all. */
+export type IslandDockSide = 'bottom' | 'free' | 'left' | 'right' | 'top'
+
+/**
+ * How close to an edge still counts as attached.
+ *
+ * A snap puts the surface exactly on the edge, so this only absorbs the rounding
+ * a hand-driven drag leaves behind — a few points, not the 30 that pull a drag
+ * flush.
+ */
+export const ISLAND_DOCK_TOLERANCE = 2
+
+/**
+ * Which display edge a surface is attached to, if any.
+ *
+ * The renderer cannot see where its window is, so this is the only way it learns
+ * it is docked — the drop, the corners and the housing inset all key off the
+ * answer. The edges are the ones `islandDragTarget` clamps to, so the side and
+ * the clamp agree: the desktop's outer edges on each axis, plus the top of the
+ * display the surface is on (the notch) and that display's work-area bottom. A
+ * surface flush with the seam between two displays is on no edge of the desktop,
+ * and reads `free`.
+ */
+export function islandDockSide(input: { displays: IslandDisplay[]; platform: string; rect: IslandRect }): IslandDockSide {
+  const { displays, platform, rect } = input
+
+  if (displays.length === 0) {
+    return 'free'
+  }
+
+  const under = islandDisplayUnder(rect, displays) ?? islandNearestDisplay(rect, displays)
+  const near = (value: number, edge: number) => Math.abs(value - edge) <= ISLAND_DOCK_TOLERANCE
+
+  // The top is asked first: on a notched panel it is the housing the island
+  // exists to fill, and it is the one edge a snap always reaches.
+  if (under) {
+    const top = islandDock({ display: under, platform, width: rect.width }).y
+
+    if (near(rect.y, top)) {
+      return 'top'
+    }
+  }
+
+  const bottom = under ? under.workArea.y + under.workArea.height - rect.height : null
+
+  if (bottom != null && near(rect.y, bottom)) {
+    return 'bottom'
+  }
+
+  if (near(rect.x, Math.min(...displays.map(display => display.bounds.x)))) {
+    return 'left'
+  }
+
+  if (near(rect.x + rect.width, Math.max(...displays.map(display => display.bounds.x + display.bounds.width)))) {
+    return 'right'
+  }
+
+  return 'free'
+}
+
 /** The surface origin at the top of a display: centred, and flush with the
  *  housing on a notched panel (that is the notch itself) or just under the menu
  *  bar where there is none. */

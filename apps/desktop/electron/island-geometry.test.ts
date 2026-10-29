@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ISLAND_DEFAULT_HEIGHT,
   ISLAND_DEFAULT_WIDTH,
+  ISLAND_DOCK_TOLERANCE,
   ISLAND_EDGE_SNAP,
   ISLAND_MIN_HEIGHT,
   ISLAND_MIN_WIDTH,
@@ -13,6 +14,7 @@ import {
   islandClampSize,
   islandDisplayUnder,
   islandDock,
+  islandDockSide,
   islandDragTarget,
   islandHasNotch,
   islandResizedBounds,
@@ -290,6 +292,54 @@ describe('islandDisplayUnder', () => {
 
     expect(islandDisplayUnder({ height: 34, width: 236, x: 2400, y: 300 }, [PLAIN, right])).toBe(PLAIN)
     expect(islandDisplayUnder({ height: 34, width: 236, x: 2600, y: 300 }, [PLAIN, right])).toBe(right)
+  })
+})
+
+describe('islandDockSide', () => {
+  const PILL = { height: 34, width: ISLAND_NOTCH_WIDTH }
+  const notchX = Math.round((1512 - ISLAND_NOTCH_WIDTH) / 2)
+
+  it('names the housing on a notched display: centred and flush with its top', () => {
+    expect(islandDockSide({ displays: [NOTCHED], platform: 'darwin', rect: { ...PILL, x: notchX, y: 0 } })).toBe('top')
+  })
+
+  it('names the top under the menu bar where there is no housing', () => {
+    const y = PLAIN.workArea.y + ISLAND_TOP_GAP
+
+    expect(islandDockSide({ displays: [PLAIN], platform: 'darwin', rect: { ...PILL, x: 900, y } })).toBe('top')
+  })
+
+  it('absorbs the rounding a drag leaves, and nothing more', () => {
+    const flush = { ...PILL, x: notchX, y: 0 }
+
+    expect(islandDockSide({ displays: [NOTCHED], platform: 'darwin', rect: { ...flush, y: ISLAND_DOCK_TOLERANCE } })).toBe('top')
+    expect(islandDockSide({ displays: [NOTCHED], platform: 'darwin', rect: { ...flush, y: ISLAND_DOCK_TOLERANCE + 1 } })).toBe('free')
+  })
+
+  it('names the left and right edges of the desktop', () => {
+    expect(islandDockSide({ displays: [PLAIN], platform: 'darwin', rect: { ...PILL, x: 0, y: 300 } })).toBe('left')
+    expect(islandDockSide({ displays: [PLAIN], platform: 'darwin', rect: { ...PILL, x: 2560 - ISLAND_NOTCH_WIDTH, y: 300 } })).toBe('right')
+  })
+
+  it('names the bottom of the work area, not the bottom of the panel', () => {
+    const bottom = PLAIN.workArea.y + PLAIN.workArea.height - PILL.height
+
+    expect(islandDockSide({ displays: [PLAIN], platform: 'darwin', rect: { ...PILL, x: 900, y: bottom } })).toBe('bottom')
+  })
+
+  it('is free in the middle of the desktop', () => {
+    expect(islandDockSide({ displays: [PLAIN], platform: 'darwin', rect: { ...PILL, x: 900, y: 300 } })).toBe('free')
+  })
+
+  it('is free against the seam two displays share, which is not an edge', () => {
+    const right = {
+      bounds: { height: 1440, width: 1920, x: 2560, y: 0 },
+      workArea: { height: 1415, width: 1920, x: 2560, y: 25 }
+    }
+
+    expect(islandDockSide({ displays: [PLAIN, right], platform: 'darwin', rect: { ...PILL, x: 2560, y: 300 } })).toBe(
+      'free'
+    )
   })
 })
 

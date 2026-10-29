@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { islandSettleOffset, islandSettleTransform, SETTLE_LIMIT, SETTLE_SCALE } from './island-settle'
+import { islandSettleOffset, islandSettleTransform, SETTLE_LIMIT } from './island-settle'
 
 describe('islandSettleOffset', () => {
   it('reads a release correction off the message', () => {
@@ -15,6 +15,12 @@ describe('islandSettleOffset', () => {
     expect(islandSettleOffset({ dx: Number.NaN, dy: 0 })).toBeNull()
   })
 
+  it('is no correction at all when the release landed where it was dropped', () => {
+    expect(islandSettleOffset({ dx: 0, dy: 0 })).toBeNull()
+    // Rounding is what makes a sub-pixel residue a no-op rather than a jump.
+    expect(islandSettleOffset({ dx: 0.4, dy: -0.4 })).toBeNull()
+  })
+
   it('keeps the correction small enough to still read as landing rather than detaching', () => {
     expect(islandSettleOffset({ dx: 500, dy: -900 })).toEqual({ dx: SETTLE_LIMIT, dy: -SETTLE_LIMIT })
     expect(islandSettleOffset({ dx: 3.6, dy: -3.6 })).toEqual({ dx: 4, dy: -4 })
@@ -22,10 +28,11 @@ describe('islandSettleOffset', () => {
 })
 
 describe('islandSettleTransform', () => {
-  it('paints the correction with the dip while the snap is in flight', () => {
+  it('paints the travel of the snap and nothing else', () => {
     // Minus the correction: main already moved the window by it, so the surface
-    // starts where the pointer let go.
-    expect(islandSettleTransform({ dx: 6, dy: -2 })).toBe(`translate(-6px, 2px) scale(${SETTLE_SCALE})`)
+    // starts where the pointer let go. No scale — a dip on every release is the
+    // bounce the user reported.
+    expect(islandSettleTransform({ dx: 6, dy: -2 })).toBe('translate(-6px, 2px)')
   })
 
   it('is at rest with no correction', () => {

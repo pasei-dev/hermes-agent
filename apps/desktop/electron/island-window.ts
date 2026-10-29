@@ -28,7 +28,7 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 
 import {
   type IslandDisplay,
-  islandDock,
+  islandDockSide,
   islandDragTarget,
   islandHasNotch,
   islandNotchWidth,
@@ -107,17 +107,24 @@ export function createIslandWindowController(options: IslandWindowOptions) {
   }
 
   /** Tell the renderer which edge it is attached to: the surface squares the
-   *  corners against that edge and hugs it. */
+   *  corners against that edge and hugs it.
+   *
+   *  The payload is the SIDE, not the dock point: the renderer's door takes a
+   *  string and everything keyed off "am I attached" reads it, so a point would
+   *  fail every comparison and read as a free island forever. The point stays in
+   *  `islandDock`, where main positions the window with it. */
   const announceDock = () => {
-    if (!window || window.isDestroyed()) {
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
       return
     }
 
-    const bounds = window.getBounds()
-    const display = screen.getDisplayMatching(bounds)
-    const dock = islandDock({ display, platform, width: surface?.width ?? bounds.width })
+    const side = islandDockSide({
+      displays: screen.getAllDisplays(),
+      platform,
+      rect: surfaceRect(window.getBounds())
+    })
 
-    window.webContents.send('hermes:island:dock', dock)
+    window.webContents.send('hermes:island:dock', side)
   }
 
   /**
@@ -219,9 +226,10 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         window.setPosition(Math.round(bounds.x + dx), Math.round(bounds.y + dy))
       }
 
-      // Sent even at zero: a release that landed where it was dropped still gets
-      // the dip, which is what makes letting go feel like something happened.
-      if (!window.webContents.isDestroyed()) {
+      // Only a real correction is worth painting. A release that landed where it
+      // was dropped has nothing to travel, and sending it anyway made the surface
+      // play a snap that corrected nothing — a bounce on every drag.
+      if ((dx !== 0 || dy !== 0) && !window.webContents.isDestroyed()) {
         window.webContents.send('hermes:island:settle', { dx, dy })
       }
 
@@ -300,6 +308,15 @@ export function createIslandWindowController(options: IslandWindowOptions) {
     // pill being cut in half at the top of the screen.
     next.setAlwaysOnTop(true, 'screen-saver')
     next.setHiddenInMissionControl?.(true)
+
+    // The island is drawn in POINTS: a 185 pt housing, a 32 pt band, and every
+    // rectangle main clamps and docks is in points too. The app's persisted UI
+    // zoom is a text scale for the chat window and has no business here — at
+    // 1.1429 the renderer's CSS px are 14% wider than the points main places the
+    // window by, so a docked surface lands ~30 pt right of the notch. Pinned, and
+    // wired with zoom disabled (see zoomWiringForWindowKind), so no window event
+    // can re-apply the app's scale to it.
+    next.webContents.setZoomLevel(0)
 
     // Start click-through from MAIN: a transparent window that is slow to load,
     // blank, or whose renderer died must never sit over the top of the screen
