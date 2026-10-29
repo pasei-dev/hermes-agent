@@ -194,11 +194,17 @@ declare global {
         // Renderer → main: where the painted pill sits in the window and how
         // big it is, so main clamps the shape the user actually sees.
         surface: (rect: { height: number; offsetX: number; offsetY: number; width: number }) => void
+        // Renderer → main: the panel's grip was dragged to this size. Main owns
+        // the window, so it applies the display's floor and ceiling and resizes.
+        resize: (size: { height: number; width: number }) => void
         // Main → island renderer: the drag was corrected by this much — the
         // pill springs from the pointer's position into the settled one.
         onSettle: (callback: (correction: { dx: number; dy: number }) => void) => () => void
         // Main → island renderer: the window changed size, measure the pill again.
         onRemeasure: (callback: () => void) => () => void
+        // Main → island renderer: how big the window is, so a stage is laid out
+        // inside the rectangle it is actually painted in.
+        onBounds: (callback: (bounds: { height: number; width: number }) => void) => () => void
         // Renderer → main: the island shell is mounted and painted, show it.
         ready: () => void
         setInteractive: (interactive: boolean) => void

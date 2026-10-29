@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ISLAND_DEFAULT_HEIGHT,
+  ISLAND_DEFAULT_WIDTH,
   ISLAND_EDGE_SNAP,
+  ISLAND_MIN_HEIGHT,
+  ISLAND_MIN_WIDTH,
   ISLAND_NOTCH_HEIGHT,
   ISLAND_NOTCH_WIDTH,
   ISLAND_TOP_GAP,
-  ISLAND_WINDOW_HEIGHT,
-  ISLAND_WINDOW_WIDTH,
   islandAnchor,
+  islandClampSize,
   islandDisplayUnder,
   islandDock,
   islandDragTarget,
   islandHasNotch,
+  islandResizedBounds,
+  islandResizeLimits,
   islandSnapOrigin,
   islandWindowBounds
 } from './island-geometry'
@@ -55,20 +60,22 @@ describe('islandHasNotch', () => {
 })
 
 describe('islandWindowBounds', () => {
-  it('starts at the top of a notched display, where the housing is', () => {
+  it('opens at the session size, hung from the top of a notched display where the housing is', () => {
     const bounds = islandWindowBounds(NOTCHED, 'darwin')
 
     expect(bounds.y).toBe(0)
-    expect(bounds.height).toBe(ISLAND_WINDOW_HEIGHT)
-    expect(bounds.width).toBe(ISLAND_WINDOW_WIDTH)
-    expect(bounds.x).toBe(Math.round((1512 - ISLAND_WINDOW_WIDTH) / 2))
+    // A session stage is a chat panel with a composer: the old 480x620 window
+    // was the ceiling on it.
+    expect(bounds.height).toBe(ISLAND_DEFAULT_HEIGHT)
+    expect(bounds.width).toBe(ISLAND_DEFAULT_WIDTH)
+    expect(bounds.x).toBe(Math.round((1512 - ISLAND_DEFAULT_WIDTH) / 2))
   })
 
   it('starts below the menu bar elsewhere, and still centres', () => {
     const bounds = islandWindowBounds(PLAIN, 'darwin')
 
     expect(bounds.y).toBe(25 + ISLAND_TOP_GAP)
-    expect(bounds.x).toBe(Math.round((2560 - ISLAND_WINDOW_WIDTH) / 2))
+    expect(bounds.x).toBe(Math.round((2560 - ISLAND_DEFAULT_WIDTH) / 2))
   })
 
   it('never asks for more width than the display has, and follows a display offset', () => {
@@ -81,6 +88,91 @@ describe('islandWindowBounds', () => {
 
     expect(bounds.width).toBe(400)
     expect(bounds.x).toBe(1512)
+  })
+
+  it('keeps a size it is handed when the display has room for it', () => {
+    const bounds = islandWindowBounds(PLAIN, 'darwin', { height: 700, width: 900 })
+
+    expect(bounds).toEqual({ height: 700, width: 900, x: Math.round((2560 - 900) / 2), y: 25 + ISLAND_TOP_GAP })
+  })
+})
+
+describe('islandResizeLimits', () => {
+  it('measures the ceiling from the top edge to the bottom of the display', () => {
+    expect(islandResizeLimits({ display: NOTCHED, top: 0 })).toEqual({
+      maxHeight: 982,
+      maxWidth: 1512,
+      minHeight: ISLAND_MIN_HEIGHT,
+      minWidth: ISLAND_MIN_WIDTH
+    })
+  })
+
+  it('loses the height above a window that hangs below the menu bar', () => {
+    expect(islandResizeLimits({ display: PLAIN, top: 25 + ISLAND_TOP_GAP }).maxHeight).toBe(1440 - 31)
+  })
+
+  it('collapses the floor to the ceiling on a display too short for it', () => {
+    const short = {
+      bounds: { height: 500, width: 1200, x: 0, y: 0 },
+      workArea: { height: 475, width: 1200, x: 0, y: 25 }
+    }
+
+    expect(islandResizeLimits({ display: short, top: 0 })).toMatchObject({ maxHeight: 500, minHeight: 500 })
+  })
+})
+
+describe('islandClampSize', () => {
+  it('stops a shrink at the floor the other stages were designed against', () => {
+    expect(islandClampSize({ display: NOTCHED, size: { height: 200, width: 300 }, top: 0 })).toEqual({
+      height: ISLAND_MIN_HEIGHT,
+      width: ISLAND_MIN_WIDTH
+    })
+  })
+
+  it('stops a grow at the display, so the window stays whole on it', () => {
+    expect(islandClampSize({ display: NOTCHED, size: { height: 4000, width: 4000 }, top: 0 })).toEqual({
+      height: 982,
+      width: 1512
+    })
+  })
+
+  it('leaves a size inside the limits alone', () => {
+    expect(islandClampSize({ display: NOTCHED, size: { height: 700, width: 700 }, top: 0 })).toEqual({
+      height: 700,
+      width: 700
+    })
+  })
+})
+
+describe('islandResizedBounds', () => {
+  const WINDOW = { height: ISLAND_DEFAULT_HEIGHT, width: ISLAND_DEFAULT_WIDTH, x: 456, y: 0 }
+
+  it('grows downward: the top edge and the centre line do not move', () => {
+    const grown = islandResizedBounds({ current: WINDOW, display: NOTCHED, size: { height: 940, width: 800 } })
+
+    expect(grown.y).toBe(0)
+    expect(grown.height).toBe(940)
+    expect(grown.width).toBe(800)
+    // 456 + 600/2 - 800/2
+    expect(grown.x).toBe(356)
+    expect(grown.x + grown.width / 2).toBe(WINDOW.x + WINDOW.width / 2)
+  })
+
+  it('honours the floor on a shrink and keeps the same anchor', () => {
+    const shrunk = islandResizedBounds({ current: WINDOW, display: NOTCHED, size: { height: 100, width: 100 } })
+
+    expect(shrunk.height).toBe(ISLAND_MIN_HEIGHT)
+    expect(shrunk.width).toBe(ISLAND_MIN_WIDTH)
+    expect(shrunk.x + shrunk.width / 2).toBe(WINDOW.x + WINDOW.width / 2)
+  })
+
+  it('hangs from an un-notched window where it was parked, not from the display top', () => {
+    const parked = { height: ISLAND_DEFAULT_HEIGHT, width: ISLAND_DEFAULT_WIDTH, x: 900, y: 400 }
+    const grown = islandResizedBounds({ current: parked, display: PLAIN, size: { height: 900, width: 700 } })
+
+    expect(grown.y).toBe(400)
+    // The ceiling follows the top edge: 1440 - 400, and 900 fits under it.
+    expect(grown.height).toBe(900)
   })
 })
 

@@ -4,14 +4,17 @@
 // `wake-indicator.ts`, and for the same reason: a wrong origin is invisible
 // until it is on someone's screen.
 //
-// The window is ONE fixed rectangle for the whole session, top-centred, and the
-// island animates inside it. Resizing a transparent always-on-top window per
-// frame is what makes a web island stutter — every `setBounds` is a synchronous
-// round trip to the compositor — so the window is laid out once as the largest
-// the island can ever be and the black surface moves, scales and fades within
-// it. The area the surface does not cover is click-through (see the renderer's
-// hit test), so a big transparent window costs nothing but pixels it never
-// paints.
+// The window is ONE rectangle for the whole session, and the island animates
+// inside it. Resizing a transparent always-on-top window per animation frame is
+// what makes a web island stutter — every `setBounds` is a synchronous round
+// trip to the compositor — so the rectangle is set when the window opens and
+// when the user resizes it, never while a stage changes shape. It opens at the
+// session size, because a session stage is a chat panel with a composer and the
+// 480x620 rectangle clamped it; the user may shrink it back to that rectangle
+// and grow it to the edge of the display, and the top edge never moves while it
+// happens. The area the surface does not cover is click-through (see the
+// renderer's hit test), so a big transparent window costs nothing but the
+// pixels it never paints.
 //
 // On a notched MacBook the panel starts at the very top of the display and is
 // raised above the menu bar, because that is where the notch is: the collapsed
@@ -19,9 +22,21 @@
 // itself rather than as a floating bar. Everywhere else the panel starts below
 // the menu bar and can be dragged.
 
-export const ISLAND_WINDOW_WIDTH = 480
-/** Tallest the expanded island may get; the surface itself is usually shorter. */
-export const ISLAND_WINDOW_HEIGHT = 620
+export const ISLAND_DEFAULT_WIDTH = 600
+/** Tall enough for the session panel and its composer, which the old 480x620
+ *  rectangle clamped: the window was the ceiling on a stage that is a chat. */
+export const ISLAND_DEFAULT_HEIGHT = 820
+/**
+ * The floor the user may shrink the window to.
+ *
+ * It is exactly the rectangle the other stages were designed against: the
+ * widest of them is the answer card at 452 and the tallest is the session panel
+ * at 546 under a 34pt housing band — 620. Shrinking below that clips a stage
+ * that has nowhere else to go, so the floor is the old window rather than a
+ * guess.
+ */
+export const ISLAND_MIN_WIDTH = 480
+export const ISLAND_MIN_HEIGHT = 620
 /** The notch-shaped resting pill — roughly a 14" MacBook Pro's notch. */
 export const ISLAND_NOTCH_WIDTH = 208
 export const ISLAND_NOTCH_HEIGHT = 32
@@ -88,14 +103,83 @@ export function islandHasNotch(display: IslandDisplay, platform: string): boolea
   return display.workArea.y - display.bounds.y >= 30
 }
 
-export function islandWindowBounds(display: IslandDisplay, platform: string) {
-  const notched = islandHasNotch(display, platform)
-  const top = notched ? display.bounds.y : display.workArea.y + ISLAND_TOP_GAP
+export interface IslandSize {
+  height: number
+  width: number
+}
+
+/** How small and how large the window may be on one display. */
+export interface IslandResizeLimits {
+  maxHeight: number
+  maxWidth: number
+  minHeight: number
+  minWidth: number
+}
+
+/**
+ * The resize limits for a window whose top edge is at `top`.
+ *
+ * Downward is the only direction a taller window can go, so what the display
+ * has left below that line is the ceiling — on a notched panel that is the
+ * whole screen, because the island hangs from the very top of it. The floor is
+ * `ISLAND_MIN_*`, or the ceiling itself on a display too small to honour it.
+ */
+export function islandResizeLimits(input: { display: IslandDisplay; top: number }): IslandResizeLimits {
+  const { display, top } = input
+  const maxHeight = Math.max(1, Math.round(display.bounds.y + display.bounds.height - top))
+  const maxWidth = Math.max(1, Math.round(display.bounds.width))
 
   return {
-    height: ISLAND_WINDOW_HEIGHT,
-    width: Math.min(ISLAND_WINDOW_WIDTH, display.bounds.width),
-    x: islandCentredX(display, Math.min(ISLAND_WINDOW_WIDTH, display.bounds.width)),
+    maxHeight,
+    maxWidth,
+    minHeight: Math.min(ISLAND_MIN_HEIGHT, maxHeight),
+    minWidth: Math.min(ISLAND_MIN_WIDTH, maxWidth)
+  }
+}
+
+/** A requested size, brought inside the display's floor and ceiling. */
+export function islandClampSize(input: { display: IslandDisplay; size: IslandSize; top: number }): IslandSize {
+  const limits = islandResizeLimits(input)
+
+  return {
+    height: clamp(input.size.height, limits.minHeight, limits.maxHeight),
+    width: clamp(input.size.width, limits.minWidth, limits.maxWidth)
+  }
+}
+
+/**
+ * The window rect for a new size, hung from its current top edge and centre.
+ *
+ * Growing happens downward: the top edge stays on the display's top (the
+ * housing) and the x stays on the centre line, so the surface stays attached to
+ * the housing while the panel grows away from it. Only the bottom edge travels,
+ * which is why the drag clamp never has to re-derive the anchor.
+ */
+export function islandResizedBounds(input: { current: IslandRect; display: IslandDisplay; size: IslandSize }): IslandRect {
+  const { current, display } = input
+  const size = islandClampSize({ display, size: input.size, top: current.y })
+
+  return {
+    height: size.height,
+    width: size.width,
+    x: Math.round(current.x + current.width / 2 - size.width / 2),
+    y: Math.round(current.y)
+  }
+}
+
+export function islandWindowBounds(
+  display: IslandDisplay,
+  platform: string,
+  size: IslandSize = { height: ISLAND_DEFAULT_HEIGHT, width: ISLAND_DEFAULT_WIDTH }
+): IslandRect {
+  const notched = islandHasNotch(display, platform)
+  const top = notched ? display.bounds.y : display.workArea.y + ISLAND_TOP_GAP
+  const clamped = islandClampSize({ display, size, top })
+
+  return {
+    height: clamped.height,
+    width: clamped.width,
+    x: islandCentredX(display, clamped.width),
     y: top
   }
 }

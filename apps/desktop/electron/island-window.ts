@@ -27,13 +27,14 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 
 import {
-  ISLAND_WINDOW_WIDTH,
   type IslandDisplay,
   islandDock,
   islandDragTarget,
   islandHasNotch,
   islandNotchWidth,
   type IslandRect,
+  islandResizedBounds,
+  type IslandSize,
   type IslandSurfaceRect,
   islandWindowBounds
 } from './island-geometry'
@@ -94,8 +95,8 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
     // The renderer is the only side that measures the surface, so a stale or
     // nonsense offset must not park the window a screen away from the pointer.
-    const offsetX = Math.max(-ISLAND_WINDOW_WIDTH, Math.min(ISLAND_WINDOW_WIDTH, surface.offsetX))
-    const offsetY = Math.max(-ISLAND_WINDOW_WIDTH, Math.min(ISLAND_WINDOW_WIDTH, surface.offsetY))
+    const offsetX = Math.max(-bounds.width, Math.min(bounds.width, surface.offsetX))
+    const offsetY = Math.max(-bounds.height, Math.min(bounds.height, surface.offsetY))
 
     return {
       height: surface.height,
@@ -117,6 +118,57 @@ export function createIslandWindowController(options: IslandWindowOptions) {
     const dock = islandDock({ display, platform, width: surface?.width ?? bounds.width })
 
     window.webContents.send('hermes:island:dock', dock)
+  }
+
+  /**
+   * Tell the renderer how big the window is.
+   *
+   * The renderer lays its stage out inside a rectangle it cannot see, so main
+   * pushes the size: without it the session panel keeps the ceiling the window
+   * had when the renderer was written, and a resize would clip it.
+   */
+  const announceBounds = () => {
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+      return
+    }
+
+    const bounds = window.getBounds()
+
+    window.webContents.send('hermes:island:bounds', { height: bounds.height, width: bounds.width })
+  }
+
+  /**
+   * Resize the window, hung from its top edge and its centre line.
+   *
+   * Both resize routes end here — a native edge drag (`will-resize`) and the
+   * renderer's grip (`resizeTo`), which is the only one that can reach the
+   * window through a click-through surface. The geometry helper owns the floor
+   * and the ceiling, so neither route can leave the window half off its display
+   * or too small for the stages that are not the session.
+   */
+  const applySize = (requested: IslandRect) => {
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    const current = window.getBounds()
+
+    const target = islandResizedBounds({
+      current,
+      display: screen.getDisplayMatching(requested),
+      size: requested
+    })
+
+    if (
+      target.width !== current.width ||
+      target.height !== current.height ||
+      target.x !== current.x ||
+      target.y !== current.y
+    ) {
+      window.setBounds(target)
+    }
+
+    announceBounds()
   }
 
   /** Whether the app window has the keyboard: the island reads it as "step
@@ -222,7 +274,10 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       // A notch belongs to the housing and must stay put; everywhere else the
       // island is the user's to move.
       movable: !notched,
-      resizable: false,
+      // The window is the ceiling on every stage, so it is the user's to resize
+      // (see `applySize`): the session stage is a chat with a composer and needs
+      // more room than the old fixed rectangle gave it.
+      resizable: true,
       show: false,
       // On macOS a panel is a non-activating helper window that floats over
       // full-screen spaces without becoming the app's switcher window. Elsewhere
@@ -273,6 +328,43 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       }
     })
 
+    // A user resize is clamped inside the gesture, so the shell never overshoots
+    // the display and snaps back: the native rect is refused and the anchored,
+    // clamped one is applied in its place. A `setBounds` here does not re-enter
+    // `will-resize`, which only fires for the user's own drag.
+    next.on('will-resize', (event, requested) => {
+      event.preventDefault()
+      applySize(requested)
+    })
+
+    let resizeTimer: null | ReturnType<typeof setTimeout> = null
+
+    next.on('resize', () => {
+      announceBounds()
+
+      // The surface is centred, so its offset inside a resized window is stale.
+      // Ask for one fresh measurement when the gesture stops — a remeasure per
+      // frame is a renderer layout, which is exactly what the drag avoids.
+      if (resizeTimer) {
+        clearTimeout(resizeTimer)
+      }
+
+      resizeTimer = setTimeout(() => {
+        resizeTimer = null
+
+        if (!next.isDestroyed() && !next.webContents.isDestroyed()) {
+          next.webContents.send('hermes:island:remeasure')
+        }
+      }, 250)
+    })
+
+    next.once('closed', () => {
+      if (resizeTimer) {
+        clearTimeout(resizeTimer)
+        resizeTimer = null
+      }
+    })
+
     // Shown once the ISLAND says it is painted (see `markReady`), not on
     // `ready-to-show`: the island is a full renderer, and its first paint is the
     // app's boot screen. Then never hidden again — idle is the notch itself (or
@@ -298,6 +390,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
   }
 
   return {
+    announceBounds,
     announceDock,
     announceMainFocus,
     ensureSpawned: spawn,
@@ -333,6 +426,21 @@ export function createIslandWindowController(options: IslandWindowOptions) {
     /** The renderer's measurement of the painted pill: what the drag moves. */
     setSurface(rect: IslandSurfaceRect) {
       surface = rect
+    },
+    /**
+     * The renderer's grip asked for a size.
+     *
+     * The surface is click-through everywhere the pill is not painted, so the
+     * window's own edges are unreachable with the mouse: the grip the renderer
+     * already draws is the way the user resizes, and main applies the floor and
+     * the ceiling to what it asks for.
+     */
+    resizeTo(size: IslandSize) {
+      if (!window || window.isDestroyed()) {
+        return
+      }
+
+      applySize({ ...window.getBounds(), height: size.height, width: size.width })
     },
     /** Move the panel by the pointer's own travel. The renderer is the only side
      *  that sees the press, so the window has to follow it exactly or the
@@ -373,7 +481,9 @@ export function createIslandWindowController(options: IslandWindowOptions) {
 
       const display = displayFor(window, anchorDisplay)
 
-      window.setBounds(islandWindowBounds(display, platform))
+      // The size the user gave the window survives a display change, brought
+      // inside the new display's floor and ceiling; only its home moves.
+      window.setBounds(islandWindowBounds(display, platform, window.getBounds()))
       // Same level as at creation, or a display change drops it back behind the
       // menu bar.
       window.setAlwaysOnTop(true, 'screen-saver')
@@ -384,6 +494,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
         window.webContents.send('hermes:island:remeasure')
       }
 
+      announceBounds()
       announceDock()
     },
     dispose() {
@@ -424,11 +535,31 @@ function readSurfaceRect(raw: unknown): IslandSurfaceRect | null {
   return rect
 }
 
+/**
+ * A requested window size, or nothing.
+ *
+ * It arrives over IPC from the renderer's grip, so a missing or non-numeric
+ * field means the message is not a size: drop it rather than resizing the
+ * window to `NaN`.
+ */
+function readSize(raw: unknown): IslandSize | null {
+  const value = raw as Partial<Record<keyof IslandSize, unknown>> | null
+  const size = { height: Number(value?.height), width: Number(value?.width) }
+
+  if (!Number.isFinite(size.height) || !Number.isFinite(size.width) || size.width <= 0 || size.height <= 0) {
+    return null
+  }
+
+  return size
+}
+
 export function registerIslandIpc(getController: () => IslandWindowController | null) {
   ipcMain.on('hermes:island:ready', () => {
     getController()?.markReady()
-    // The renderer boots with no idea where the window was restored, so the dock
-    // and the app's focus are announced with the first paint.
+    // The renderer boots with no idea where the window was restored, so the
+    // bounds, the dock and the app's focus are announced with the first paint. A
+    // send before this point has no listener to arrive at.
+    getController()?.announceBounds()
     getController()?.announceDock()
     getController()?.announceMainFocus()
   })
@@ -455,6 +586,14 @@ export function registerIslandIpc(getController: () => IslandWindowController | 
 
     if (Number.isFinite(dx) && Number.isFinite(dy)) {
       getController()?.dragBy({ dx, dy })
+    }
+  })
+
+  ipcMain.on('hermes:island:resize', (_event, raw) => {
+    const size = readSize(raw)
+
+    if (size) {
+      getController()?.resizeTo(size)
     }
   })
 
