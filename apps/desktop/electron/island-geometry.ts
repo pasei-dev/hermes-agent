@@ -262,6 +262,19 @@ function isSeam(displays: IslandDisplay[], display: IslandDisplay, side: 'left' 
 /** The surface origin at the top of a display: centred, and flush with the
  *  housing on a notched panel (that is the notch itself) or just under the menu
  *  bar where there is none. */
+/**
+ * The housing's width in points, from its height.
+ *
+ * The cutout is a fixed number of panel pixels (~370 x 64), so its size in
+ * points follows the display's scale: measured 185 x 32 at 1728-wide and
+ * 220 x 38 at 2056-wide (crestnotch.app, notchbay.com) — a width:height ratio of
+ * 5.78 in both. Electron exposes no safeAreaInsets, so the menu bar height is the
+ * only measurement available and this converts it to the width beside it.
+ */
+export function islandNotchWidth(menuBarHeight: number): number {
+  return Number.isFinite(menuBarHeight) && menuBarHeight > 0 ? Math.round(menuBarHeight * 5.785) : 0
+}
+
 export function islandDock(input: { display: IslandDisplay; platform: string; width: number }): { x: number; y: number } {
   const { display, platform, width } = input
 

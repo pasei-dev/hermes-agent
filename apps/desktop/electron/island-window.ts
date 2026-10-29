@@ -32,6 +32,7 @@ import {
   islandDock,
   islandDragTarget,
   islandHasNotch,
+  islandNotchWidth,
   type IslandRect,
   type IslandSurfaceRect,
   islandWindowBounds
@@ -283,6 +284,7 @@ export function createIslandWindowController(options: IslandWindowOptions) {
       buildIslandWindowUrl({
         devServer,
         notchHeight: display.workArea.y - display.bounds.y,
+        notchWidth: islandNotchWidth(display.workArea.y - display.bounds.y),
         notched,
         profile,
         rendererIndexPath: devServer ? undefined : rendererIndex()

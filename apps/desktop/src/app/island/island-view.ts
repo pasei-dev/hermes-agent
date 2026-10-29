@@ -16,12 +16,16 @@
 import type { IslandStage } from './island-model'
 
 /** Matches electron/island-geometry.ts::islandAnchor. */
-export const NOTCH_WIDTH = 208
+// The housing is 185 x 32 pt at a 2x menu bar and 220 x 38 at a wider scaling —
+// a fixed 370 x 64 panel pixels either way (crestnotch.app, notchbay.com). The
+// band DRAWN for it is wider by one fillet on each side, exactly as
+// DynamicNotchKit sizes its shape (minWidth = notchSize.width + topCornerRadius*2).
+export const NOTCH_WIDTH = 185
 export const NOTCH_HEIGHT = 32
 /** The concave corner where the housing's sides meet the screen's top edge.
  *  `border-radius` rounds a corner inward; a notch flares outward, so the
  *  resting surface is clipped to a path instead (see `islandClipPath`). */
-export const NOTCH_FILLET = 10
+export const NOTCH_FILLET = 6
 /** Matches electron/island-geometry.ts::ISLAND_EDGE_SNAP. */
 export const ISLAND_EDGE_SNAP = 30
 /** How far the pointer may travel before the leash is cut, and how hard the
@@ -29,15 +33,13 @@ export const ISLAND_EDGE_SNAP = 30
  *  pointer by a growing distance instead of stopping dead. */
 export const LEASH_BAND = 80
 const LEASH_CURVE = 0.55
-/** The goo neck: blur per pixel of gap, and the ceiling where it dissolves. */
-const GOO_BLUR_PER_PX = 0.18
-const GOO_MAX_BLUR = 6
 
 const EXPANDED_WIDTH = 452
 /** Corner radius of the pill while it rests in the housing: squarer than the
  *  rounded pill it grows out of, so a surface that has settled against the notch
  *  reads as docked rather than as an ordinary floating bubble. */
-export const DOCKED_RADIUS = 10
+export const DOCKED_RADIUS = 14
+
 /** One open session: the app's chat view, so it is a panel — the island window's
  *  own ceiling is 480 × 560, and the surface takes all of it bar the padding. */
 const SESSION_WIDTH = 478
@@ -73,6 +75,8 @@ export function islandShape(input: {
   cardHeight?: number
   /** The housing's own height on this display; the menu bar IS the notch. */
   notchHeight?: number
+  /** The housing's width on this display, when main measured one. */
+  notchWidth?: number
   notched: boolean
   rich?: boolean
   rows: number
@@ -80,7 +84,20 @@ export function islandShape(input: {
   sessionSize?: { height: number; width: number }
   stage: IslandStage
 }): IslandShape {
-  const { cardHeight = ATTENTION_CARD_HEIGHT, notchHeight = NOTCH_HEIGHT, notched, rich = false, rows, sessionSize, stage } = input
+  const {
+    cardHeight = ATTENTION_CARD_HEIGHT,
+    notchHeight = NOTCH_HEIGHT,
+    notchWidth = NOTCH_WIDTH,
+    notched,
+    rich = false,
+    rows,
+    sessionSize,
+    stage
+  } = input
+
+  // What the pill is DRAWN as when it is the housing: the cutout's own width plus
+  // the flare on either side of it.
+  const band = Math.max(0, Math.round(notchWidth)) + NOTCH_FILLET * 2
 
   // Everything that grows out of the housing starts BELOW it on a notched
   // display: the camera housing is physically opaque, so a row painted at the
@@ -96,7 +113,7 @@ export function islandShape(input: {
           opacity: 1,
           radius: DOCKED_RADIUS,
           top: 0,
-          width: NOTCH_WIDTH
+          width: band
         }
       : { bottomOnly: false, height: 30, mode: 'floating', opacity: 0, radius: 15, top: 0, width: 132 }
   }
@@ -116,7 +133,12 @@ export function islandShape(input: {
       opacity: 1,
       radius: notched ? DOCKED_RADIUS : HEADER_HEIGHT / 2,
       top: 0,
-      width: notched ? (rich ? 316 : NOTCH_WIDTH) : rich ? 268 : 190
+      // Wider than the housing even at rest: the camera cutout is opaque, so a
+      // band exactly its width has nowhere to put a dot — the island would say
+      // nothing while a session ran. The wings either side are what is visible.
+      // At rest it is the housing and nothing more; a hover widens it into the
+      // wings, where the line, the tool and the buttons can be read.
+      width: notched ? (rich ? 316 : band) : rich ? 268 : 190
     }
   }
 
@@ -194,7 +216,7 @@ export function islandClipPath(shape: IslandShape): null | string {
   const { height, width } = shape
   // Neither corner may eat the other: the fillet has to leave a body to flare
   // out of, and the bottom radius has to leave a straight side below it.
-  const fillet = Math.max(0, Math.min(NOTCH_FILLET, width / 4, height / 3))
+  const fillet = Math.max(0, Math.min(NOTCH_FILLET, width / 4, height / 2))
   const radius = Math.max(0, Math.min(shape.radius, height - fillet, width / 2 - fillet))
   const body = width - fillet
   const bottom = height - radius
@@ -252,19 +274,10 @@ export function islandLeash(travel: number, bandLength = LEASH_BAND, c = LEASH_C
   return travel < 0 ? -d : d
 }
 
-/**
- * The goo filter's blur, in px, for a gap between the housing band and the
- * surface: a neck fuses while the gap is small and thins out as it opens.
- *
- * Bigger stdDeviation carries the neck further out, so the blur is the one
- * number that tunes how far the surface can reach before it comes apart.
- */
-export function islandGooBlur(gap: number): number {
-  return Math.round(Math.max(0, Math.min(GOO_MAX_BLUR, Math.abs(gap) * GOO_BLUR_PER_PX)) * 100) / 100
-}
-
-/** Off the glass a dragged surface is bigger than the rule it settles into. */
-const DRAG_LIFT = 'scale(1.03, 1.28)'
+/** Off the glass a dragged surface is carried, not stretched: the 28% squash
+ *  that used to live here made every drag read as a rubber band rather than an
+ *  object being picked up. */
+const DRAG_LIFT = 'translateY(1px)'
 
 /**
  * The one transform the surface paints.

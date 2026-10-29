@@ -4,11 +4,11 @@ import {
   DOCKED_RADIUS,
   islandClipPath,
   islandCorners,
-  islandGooBlur,
   islandLeash,
   islandShape,
   islandSurfaceTransform,
   LEASH_BAND,
+  NOTCH_FILLET,
   NOTCH_HEIGHT,
   NOTCH_WIDTH
 } from './island-view'
@@ -22,7 +22,9 @@ describe('islandShape', () => {
       opacity: 1,
       radius: DOCKED_RADIUS,
       top: 0,
-      width: NOTCH_WIDTH
+      // The housing plus the flare on either side of it — the width the band is
+      // DRAWN at, which is wider than the cutout it sits in.
+      width: NOTCH_WIDTH + NOTCH_FILLET * 2
     })
   })
 
@@ -63,9 +65,10 @@ describe('islandShape', () => {
     const rich = islandShape({ notched: true, rich: true, rows: 2, stage: 'pill' })
     const attention = islandShape({ notched: true, rows: 2, stage: 'attention' })
 
-    // Idle is the notch: the housing's own width and height, so nothing is
-    // painted over the menu bar either side of it.
-    expect(bare.width).toBe(NOTCH_WIDTH)
+    // A running session must be visible without a hover, and the housing itself
+    // is opaque: the band is wider than it so the dot lands in a wing, while it
+    // keeps the housing's height so nothing is painted under the menu bar.
+    expect(bare.width).toBeGreaterThan(NOTCH_WIDTH)
     expect(bare.height).toBe(NOTCH_HEIGHT)
 
     // Hover widens SIDEWAYS into those wings and keeps the housing's height.
@@ -129,7 +132,7 @@ describe('islandClipPath', () => {
     // The top edge is the housing's full width, the sides flare in by the fillet
     // as they leave it, and the bottom keeps the resting radius.
     expect(islandClipPath(notch)).toBe(
-      'path("M0 0H208Q198 0 198 10V22Q198 32 188 32H20Q10 32 10 22V10Q10 0 0 0Z")'
+      'path("M0 0H197Q191 0 191 6V18Q191 32 177 32H20Q6 32 6 18V6Q6 0 0 0Z")'
     )
   })
 
@@ -149,12 +152,15 @@ describe('islandClipPath', () => {
     const shallow = islandShape({ notchHeight: 24, notched: true, rows: 0, stage: 'hidden' })
     const path = islandClipPath(shallow)
 
-    // The fillet shrinks with the height (24 / 3), and the bottom radius stays.
-    expect(path).toBe('path("M0 0H208Q200 0 200 8V14Q200 24 190 24H18Q8 24 8 14V8Q8 0 0 0Z")')
-    // A fillet may take a third of the height at most, so a body and a bottom
-    // corner both survive however short the housing is.
+    // The fillet shrinks with the height (24 / 2), and the bottom radius stays.
+    expect(path).toBe('path("M0 0H197Q191 0 191 6V10Q191 24 177 24H20Q6 24 6 10V6Q6 0 0 0Z")')
+    // A fillet may take half the height at most, so a body and a bottom corner
+    // both survive however short the housing is.
     const flat = islandClipPath({ ...shallow, height: 12 }) ?? ''
-    expect(flat).toContain('V4')
+    // The fillet and the bottom radius between them may use all the height:
+    // the sides collapse to a point rather than inverting.
+    expect(flat).toContain('12')
+    expect(flat).not.toContain('-')
     expect(flat).not.toContain('NaN')
   })
 
@@ -172,10 +178,10 @@ describe('islandClipPath', () => {
 describe('islandSurfaceTransform', () => {
   const still = { dragging: false, paint: '', settle: null, visible: true }
 
-  it('lifts a dragged surface, and carries whatever the leash is painting', () => {
-    expect(islandSurfaceTransform({ ...still, dragging: true })).toBe('scale(1.03, 1.28)')
+  it('carries a dragged surface without stretching it', () => {
+    expect(islandSurfaceTransform({ ...still, dragging: true })).toBe('translateY(1px)')
     expect(islandSurfaceTransform({ ...still, dragging: true, paint: 'translateY(12px)' })).toBe(
-      'scale(1.03, 1.28) translateY(12px)'
+      'translateY(1px) translateY(12px)'
     )
   })
 
@@ -184,7 +190,7 @@ describe('islandSurfaceTransform', () => {
     // sent one while the pointer is still down.
     const paused = islandSurfaceTransform({ ...still, dragging: true, settle: 'translate(0px, 0px) scale(0.94)' })
 
-    expect(paused).toBe('scale(1.03, 1.28)')
+    expect(paused).toBe('translateY(1px)')
     expect(paused).not.toContain('0.94')
   })
 
@@ -240,12 +246,4 @@ describe('islandLeash', () => {
   })
 })
 
-describe('islandGooBlur', () => {
-  it('thickens with the gap and dissolves at the ceiling', () => {
-    expect(islandGooBlur(0)).toBe(0)
-    expect(islandGooBlur(10)).toBeLessThan(islandGooBlur(20))
-    // Bigger blur = the neck forms further out; the filter stops paying for it.
-    expect(islandGooBlur(1000)).toBe(6)
-    expect(islandGooBlur(-12)).toBe(islandGooBlur(12))
-  })
-})
+

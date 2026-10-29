@@ -69,7 +69,6 @@ import {
   islandCorners,
   type IslandDockSide,
   islandDockSide,
-  islandGooBlur,
   islandLeash,
   islandShape,
   islandSurfaceTransform,
@@ -113,13 +112,27 @@ function islandNotched(): boolean {
   }
 }
 
+/** The housing's width on this display, as main derived it from the menu bar. */
+function islandNotchWidth(): number | undefined {
+  try {
+    const raw = Number(new URLSearchParams(window.location.search).get('nw'))
+
+    return Number.isFinite(raw) && raw > 0 ? raw : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** The housing's height on this display, as main measured it: the menu bar is the
  *  notch, and its height moves with the display's scaling. */
 function islandNotchHeight(): number {
   try {
     const raw = Number(new URLSearchParams(window.location.search).get('nh'))
 
-    return Number.isFinite(raw) && raw > 0 ? raw : NOTCH_HEIGHT
+    // The housing's point size follows the display's scale (185x32 at a 2x menu
+    // bar, 220x38 at a wider one), so the measured height is used as it is and
+    // only bounded against nonsense.
+    return Number.isFinite(raw) && raw > 0 ? Math.min(40, Math.max(24, raw)) : NOTCH_HEIGHT
   } catch {
     return NOTCH_HEIGHT
   }
@@ -131,6 +144,7 @@ export function IslandShell() {
   const rtl = isRtlLocale(locale)
   const notched = useMemo(islandNotched, [])
   const notchHeight = useMemo(islandNotchHeight, [])
+  const notchWidth = useMemo(islandNotchWidth, [])
   const sessions = useStore($sessions)
   const attentionIds = useStore($attentionSessionIds)
   const workingIds = useStore($workingSessionIds)
@@ -148,6 +162,10 @@ export function IslandShell() {
    *  moving: the leash's own travel, painted inside the window so the anchor
    *  holds. Zero once the leash is cut. */
   const [leash, setLeash] = useState(0)
+  /** Whether the surface is still holding the housing edge, which is what makes
+   *  a drag a pull-away rather than a move. Main re-announces the dock after it
+   *  settles, so this tracks the truth rather than the renderer's guess. */
+  const attachedRef = useRef(true)
   /** The list's own search: the island is also the quickest way back in. */
   const [query, setQuery] = useState('')
 
@@ -511,6 +529,7 @@ export function IslandShell() {
     // surface's own bottom edge.
     cardHeight: question ? 184 : answered ? (answerOpen ? 300 : 120) : 104,
     notchHeight,
+    notchWidth,
     notched,
     // Nothing running, nothing waiting: the pill is the notch itself. Hover
     // widens it into the wings either side of the housing for one line — the
@@ -628,12 +647,26 @@ export function IslandShell() {
     return window.hermesDesktop?.island?.onRemeasure?.(() => reportSurface())
   }, [reportSurface])
 
+  // The gesture's own state, cleared when main settles it.
+  const clearDrag = useCallback(() => {
+    dragRef.current = null
+    setDragging(false)
+    setLeash(0)
+  }, [])
+
   // Main's release message is the correction it applied to the window. The
   // surface paints that correction for one frame and springs to rest, so a
   // snapped window lands instead of teleporting — `island-settle.ts` owns it.
   useEffect(() => {
-    return window.hermesDesktop?.island?.onSettle?.(correction => settle(correction))
-  }, [settle])
+    return window.hermesDesktop?.island?.onSettle?.(correction => {
+      // Main settles a gesture a third of a second after the last move, and the
+      // renderer's own pointerup is lost whenever the window has moved out from
+      // under the cursor. Left open, a gesture keeps its lift and its stretch
+      // painted forever — a pill frozen mid-drag that no longer reacts to shape.
+      clearDrag()
+      settle(correction)
+    })
+  }, [clearDrag, settle])
 
   // Main holds the window hidden until this lands: the island is a full renderer,
   // so its first paint is the app's boot screen.
@@ -878,6 +911,11 @@ export function IslandShell() {
       // keyboard: without this the click activates Hermes and the app window
       // comes forward over whatever the user was doing.
       event.preventDefault()
+      // Whether this press is a pull on the housing edge is a fact about where
+      // the surface sits right now, not about what main last announced: flush
+      // with the top of the screen means attached, anything else is a move.
+      const rect = surfaceRef.current?.getBoundingClientRect()
+      attachedRef.current = rect ? Math.abs(window.screenY + rect.top) <= 1 : true
       dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, travel: 0, x: event.screenX, y: event.screenY }
       event.currentTarget.setPointerCapture(event.pointerId)
       // Main clamps the pill, not the window: it needs the pill's rect before
@@ -923,9 +961,16 @@ export function IslandShell() {
       // (so the place on the glass does not jump), and the surface then tracks the
       // pointer one for one.
       const travel = from.travel + dy
-      const attached = Math.abs(travel) <= LEASH_BAND
-      const cut = !attached && Math.abs(from.travel) <= LEASH_BAND
+      // Only a surface still holding the edge may leashe: once it has been let
+      // go, dragging the parked pill is a plain move of a plain pill, and
+      // replaying the stretch-and-cut on every grab of it is the bug.
+      const attached = attachedRef.current && Math.abs(travel) <= LEASH_BAND
+      const cut = attachedRef.current && !attached
       const held = cut ? islandLeash(from.travel) : 0
+
+      if (cut) {
+        attachedRef.current = false
+      }
 
       from.travel = travel
       from.x = event.screenX
@@ -998,6 +1043,10 @@ export function IslandShell() {
   }, [expanded, focused, query, stage])
 
   const content = stage !== 'hidden'
+  // The leash grows the surface itself: one path with its top fillets pinned to
+  // the screen edge and its body let out downward. The reference notches morph
+  // this shape; a second black layer filtered into a seam is what read as a kink.
+  const drawn = leash > 0.5 ? { ...shape, height: shape.height + leash } : shape
 
   return (
     <div
@@ -1010,22 +1059,6 @@ export function IslandShell() {
         paddingTop: notched || dock === 'top' ? 0 : 8
       }}
     >
-      {/* The neck is a SILHOUETTE layer, never a wrapper: the goo filter's alpha
-          threshold eats glyphs, so the text stays in the crisp surface below and
-          only this black shape is blurred and re-thresholded. */}
-      <svg aria-hidden="true" className="pointer-events-none absolute size-0">
-        <filter colorInterpolationFilters="sRGB" id="island-goo">
-          <feGaussianBlur result="goo" stdDeviation={islandGooBlur(leash)} />
-          <feColorMatrix in="goo" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
-        </filter>
-      </svg>
-      {leash > 0.5 ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 bg-black"
-          style={{ filter: 'url(#island-goo)', height: leash + 2, width: Math.max(96, box.width * 0.5) }}
-        />
-      ) : null}
       <div
         className={cn(
           'group pointer-events-auto select-none overflow-hidden bg-black text-white/90',
@@ -1048,18 +1081,18 @@ export function IslandShell() {
         style={{
           // A notch surface is clipped instead: its top corners flare outward
           // into the screen's edge, which no radius can express.
-          clipPath: islandClipPath(shape) ?? undefined,
+          clipPath: islandClipPath(drawn) ?? undefined,
           // A docked island squares the corners against its edge: a capsule
           // floating 30px from the screen edge is not attached to it.
           borderRadius: islandCorners(box.radius, shape.bottomOnly ? 'top' : dock),
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
-          height: box.height,
+          height: drawn.height,
           // A notched surface is an extrusion of the housing, not a pill below it:
           // flush with the screen's top edge, and the housing's height is taken as
-          // padding inside instead (see the content box).
-          // The leash's lag is painted here, inside the window: the housing keeps
-          // the top edge while the body is let out from it.
-          marginTop: (notched ? 0 : shape.top) + leash,
+          // padding inside instead (see the content box). The leash is that height
+          // growing, not a second shape below it: the silhouette stays ONE path,
+          // which is how the reference notches do it — no filter, no seam.
+          marginTop: notched ? 0 : shape.top,
           opacity: shape.opacity,
           // One transform, in priority order: the drag's lift while the gesture is
           // live, the release's correction on the frame after it, the resting
@@ -1081,7 +1114,14 @@ export function IslandShell() {
           className="flex h-full flex-col px-2.5 pb-2"
           style={{
             opacity: content ? 1 : 0,
-            paddingTop: shape.top + 6,
+            // Hidden means nothing paints, not merely transparent: a status dot
+            // left at zero opacity is still a lit pixel or two in the notch.
+            visibility: content ? 'visible' : 'hidden',
+            // The body rides at the bottom of the stem, so a stretch lets the
+            // content out from the edge instead of leaving it behind. Detached,
+            // there is no housing to sit under: the row is centred, or the pill
+            // wears an empty line above it.
+            paddingTop: notched ? shape.top + 6 + leash : leash + Math.max(0, Math.round((shape.height - 24) / 2)),
             transform: content ? 'none' : 'translateY(-6px)',
             transition: REVEAL
           }}
@@ -1103,8 +1143,13 @@ export function IslandShell() {
                 <ChevronLeft />
               </Button>
             ) : null}
+            {/* The sidebar's 6px dot is a row marker beside a label; alone in a
+                34px band beside an opaque housing it is a speck. Same dot, one
+                size up, so the resting pill still says something is running. */}
             {headSessionId ? (
-              <SessionStatusDot session={sessionsById[headSessionId] ?? null} storedSessionId={headSessionId} />
+              <span className="flex items-center [&_span]:size-2">
+                <SessionStatusDot session={sessionsById[headSessionId] ?? null} storedSessionId={headSessionId} />
+              </span>
             ) : (
               <span className={cn(DOT, 'bg-white/30')} />
             )}

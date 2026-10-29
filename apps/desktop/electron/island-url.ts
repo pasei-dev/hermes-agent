@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url'
 export function buildIslandWindowUrl({
   devServer,
   notchHeight,
+  notchWidth,
   notched,
   profile,
   rendererIndexPath
@@ -21,13 +22,18 @@ export function buildIslandWindowUrl({
   /** The housing's height on this display, in points: the menu bar IS the notch,
    *  and it changes with the display's scaling. */
   notchHeight?: number
+  /** The housing's width in points, derived from its height: the cutout is a
+   *  fixed number of panel pixels, so its size in points moves with the scale. */
+  notchWidth?: number
   notched: boolean
   profile?: null | string
   rendererIndexPath?: string
 }): string {
   const profileKey = typeof profile === 'string' ? profile.trim() : ''
-  const housing = notched && Number.isFinite(notchHeight) && Number(notchHeight) > 0 ? `&nh=${Math.round(Number(notchHeight))}` : ''
-  const query = `?win=island${notched ? '&notch=1' : ''}${housing}${profileKey ? `&profile=${encodeURIComponent(profileKey)}` : ''}`
+  const measured = (value: number | undefined) => notched && Number.isFinite(value) && Number(value) > 0
+  const housing = measured(notchHeight) ? `&nh=${Math.round(Number(notchHeight))}` : ''
+  const width = measured(notchWidth) ? `&nw=${Math.round(Number(notchWidth))}` : ''
+  const query = `?win=island${notched ? '&notch=1' : ''}${housing}${width}${profileKey ? `&profile=${encodeURIComponent(profileKey)}` : ''}`
 
   if (devServer) {
     const base = devServer.endsWith('/') ? devServer.slice(0, -1) : devServer
