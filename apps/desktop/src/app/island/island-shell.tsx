@@ -38,7 +38,7 @@ import { sessionRoute } from '@/app/routes'
 import { MessageTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
 import { isRtlLocale, useI18n } from '@/i18n'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, X } from '@/lib/icons'
+import { AlertTriangle, ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, X } from '@/lib/icons'
 import { sessionProjectLabel } from '@/lib/session-project-label'
 import { cn } from '@/lib/utils'
 import { $busyInputConfig } from '@/store/busy-input-mode'
@@ -65,15 +65,19 @@ import {
 import { islandPrefersReducedMotion, islandSettleTransform, useIslandSettle } from './island-settle'
 import { springShapeKeyframes, springShapeRest } from './island-spring'
 import {
+  GOO_BLEED,
   islandClipPath,
+  islandContentInset,
   islandCorners,
   type IslandDockSide,
   islandDockSide,
+  islandGooLayer,
   islandLeash,
   islandShape,
   islandSurfaceTransform,
   LEASH_BAND,
-  NOTCH_HEIGHT
+  NOTCH_HEIGHT,
+  NOTCH_WIDTH
 } from './island-view'
 import { type IslandApprovalChoice, type IslandApprovalOptions, useIslandApprovals } from './use-island-approvals'
 
@@ -103,6 +107,70 @@ const DRAG_THRESHOLD = 3
  */
 const REST_CHROME =
   'pointer-events-none opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:opacity-100'
+
+/** The gap the neck is replayed at when a surface docks home: taller than the
+ *  housing, so a length of it shows below the notch before it closes. */
+const ABSORB_GAP = 56
+/** How the neck closes over a surface that has just landed in the housing. */
+const GOO_CLOSE = 'height 260ms ease-out, opacity 200ms ease-out, transform 280ms cubic-bezier(0.32, 0.72, 0, 1)'
+
+/**
+ * The bot and the status counts animate themselves.
+ *
+ * A face that blinks while a turn runs says "alive" in a 32 px band, where a
+ * colour cannot; CSS keeps that off the render path, and reduced motion turns all
+ * of it off.
+ */
+const ISLAND_MOTION_CSS = `
+  @keyframes island-bot-bob { 0%, 100% { transform: translateY(0.4px) } 50% { transform: translateY(-0.6px) } }
+  @keyframes island-bot-eyes { 0%, 88%, 100% { transform: scaleY(1) } 92%, 96% { transform: scaleY(0.18) } }
+  @keyframes island-status-ping { 0% { opacity: 0.55; transform: scale(1) } 70%, 100% { opacity: 0; transform: scale(2.6) } }
+  [data-island-bot] svg { animation: island-bot-bob 2.6s ease-in-out infinite }
+  [data-island-bot='attention'] [data-island-eye],
+  [data-island-bot='working'] [data-island-eye] { animation: island-bot-eyes 3.4s ease-in-out infinite; transform-origin: center }
+  [data-island-ping] { animation: island-status-ping 1.8s ease-out infinite }
+  @media (prefers-reduced-motion: reduce) {
+    [data-island-bot] svg, [data-island-bot] [data-island-eye], [data-island-ping] { animation: none }
+    /* The neck closes in one step like everything else the motion setting
+       governs, rather than easing shut. */
+    [data-island-goo] { transition: none !important }
+  }
+`
+
+/**
+ * The bot that carries the pill: a face rather than a dot, because the only thing
+ * that reads at a glance in a 32 px band is that something is alive. Its mood is
+ * the strongest thing waiting — an error outranks a parked question, which
+ * outranks work in flight.
+ */
+function IslandBot({ mood }: { mood: 'attention' | 'error' | 'idle' | 'working' }) {
+  const eyes = mood === 'attention' ? 'fill-amber-300' : mood === 'error' ? 'fill-red-400' : 'fill-white/85'
+
+  return (
+    <span
+      aria-hidden="true"
+      className="relative flex size-4 shrink-0 items-center justify-center"
+      data-island-bot={mood}
+    >
+      <svg className="size-4 overflow-visible" viewBox="0 0 16 16">
+        {/* An aerial, so the face reads as a machine and not as a smiley. */}
+        <path className="stroke-white/40" d="M8 1.4V3.4" strokeLinecap="round" strokeWidth="1" />
+        <circle className="fill-white/55" cx="8" cy="1.2" r="1" />
+        <rect className="fill-white/12 stroke-white/30" height="10.4" rx="3.8" strokeWidth="1" width="13.6" x="1.2" y="3.6" />
+        <circle className={eyes} cx="5.7" cy="8.7" data-island-eye="" r="1.3" />
+        <circle className={eyes} cx="10.3" cy="8.7" data-island-eye="" r="1.3" />
+      </svg>
+    </span>
+  )
+}
+
+/** Whether the window's top edge is on the screen's. A notched island window is
+ *  created flush with it and a drag off the notch moves the window, so this is the
+ *  renderer's own answer to "is the surface still the housing?" — the one fact it
+ *  can read without main telling it. */
+function islandOnEdge(): boolean {
+  return Math.abs(window.screenY) <= 1
+}
 
 function islandNotched(): boolean {
   try {
@@ -158,9 +226,9 @@ export function IslandShell() {
    *  Hover is a widening, never an expansion: it says what is running and offers
    *  the buttons, and the list still waits for a click. */
   const [hovered, setHovered] = useState(false)
-  /** How far the surface has been let out from the notch WITHOUT the window
-   *  moving: the leash's own travel, painted inside the window so the anchor
-   *  holds. Zero once the leash is cut. */
+  /** How far the surface has been let out of the housing WITHOUT the window
+   *  moving: the leash's own lag, painted as a translate on the surface with the
+   *  goo neck bridging the gap it leaves. Zero once the leash is cut. */
   const [leash, setLeash] = useState(0)
   /** Whether the surface is still holding the housing edge, which is what makes
    *  a drag a pull-away rather than a move. Main re-announces the dock after it
@@ -186,20 +254,63 @@ export function IslandShell() {
   // Main owns where the window is; the surface follows it. A docked island
   // squares the corners against that edge and hugs it, so an edge is an edge and
   // not a pill that happens to be nearby.
-  const [dock, setDock] = useState<IslandDockSide>('free')
+  const [dock, setDock] = useState<IslandDockSide>(notched ? 'top' : 'free')
+  /** Whether the surface is the housing at the top of a notched display. Off that
+   *  edge it is a capsule pill, and nothing reserves the cutout's band above its
+   *  content. Seeded from where main creates the window: flush with the top edge
+   *  on a display that has a housing, 8 px under the menu bar where it has none. */
+  const [attached, setAttached] = useState(notched)
+  /** The neck being re-absorbed after the surface docks home, as a gap in px. */
+  const [absorb, setAbsorb] = useState(0)
+  /** Whether the surface has been pulled off the edge since it was last pressed:
+   *  a dock announcement at home then lands a surface that was away, which is the
+   *  one time the neck is replayed. Written from the gesture only. */
+  const tornRef = useRef(false)
   // The app window has the keyboard. The island is a notification, not a HUD:
   // while the user is reading Hermes itself it goes back into the notch.
   const [mainFocused, setMainFocused] = useState(false)
 
+  /** Main's dock announcement follows every settle, so it is also the moment the
+   *  window has finished moving — the only honest instant to ask whether the
+   *  surface landed back on the edge. */
+  const readHome = useCallback(() => {
+    requestAnimationFrame(() => {
+      const home = islandOnEdge()
+      setAttached(home)
+
+      // Coming home: the neck it was pulled out of closes over it, once.
+      if (home && tornRef.current) {
+        tornRef.current = false
+        setAbsorb(ABSORB_GAP)
+      }
+    })
+  }, [])
+
   useEffect(() => {
-    const offDock = window.hermesDesktop?.island?.onDock?.(side => setDock(islandDockSide(side)))
+    const offDock = window.hermesDesktop?.island?.onDock?.(side => {
+      setDock(islandDockSide(side))
+      readHome()
+    })
+
     const offFocus = window.hermesDesktop?.island?.onMainFocus?.(setMainFocused)
 
     return () => {
       offDock?.()
       offFocus?.()
     }
-  }, [])
+  }, [readHome])
+
+  // The neck is one transition, not a frame loop: it is armed here, and closes
+  // the moment this clears — the hold is only long enough to be seen.
+  useEffect(() => {
+    if (!absorb) {
+      return
+    }
+
+    const timer = setTimeout(() => setAbsorb(0), 90)
+
+    return () => clearTimeout(timer)
+  }, [absorb])
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
@@ -523,7 +634,18 @@ export function IslandShell() {
   const gripPending = useRef<{ height: number; width: number } | null>(null)
   const sessionSize = liveSize ?? islandPrefs.sessionSize ?? undefined
 
+  // The surface stops being the housing the moment it is let out of it: below the
+  // housing's own height the shape is a capsule and the neck painted behind it
+  // carries the join, so the pull reads as liquid leaving the notch.
+  const tearing = dragging && leash > 1
+  const housing = notched && attached && !tearing
+  /** How far the surface has been let out of the housing, in px. Only a tear has
+   *  a neck: a detached pill is carried as a plain move, and a surface that has
+   *  just docked home replays it once as it is absorbed. */
+  const gap = tearing ? Math.max(0, leash) : housing ? absorb : 0
+
   const shape = islandShape({
+    attached: attached && !tearing,
     // A card that carries a question is taller: two lines of it, up to three
     // answers, and the field. Sized from the kind, so nothing is drawn past the
     // surface's own bottom edge.
@@ -533,9 +655,11 @@ export function IslandShell() {
     notched,
     // Nothing running, nothing waiting: the pill is the notch itself. Hover
     // widens it into the wings either side of the housing for one line — the
-    // session, its tool and the buttons — so the island stops being a strip of
-    // text on top of whatever the user is doing without ever growing taller.
-    rich: stage === 'pill' && hovered,
+    // session, its tool, the status counts and the buttons — so the island stops
+    // being a strip of text on top of whatever the user is doing without ever
+    // growing taller. A dragged pill does not widen: the pointer is pulling it,
+    // not reading it.
+    rich: stage === 'pill' && hovered && !dragging,
     rows: stage === 'session' ? transcript.length : rows.length,
     sessionSize,
     stage
@@ -549,6 +673,10 @@ export function IslandShell() {
   )
 
   const box = target
+
+  // The neck's numbers are computed from the live gap rather than eased: they
+  // follow the finger, and only the closing one runs through a CSS transition.
+  const goo = islandGooLayer({ gap, notchHeight, surface: box.width })
 
   // The box moves on a spring, not a curve: the whole trajectory is integrated
   // once (island-spring.ts) and painted by one element animation, so a stage
@@ -574,8 +702,30 @@ export function IslandShell() {
   }, [box.radius, target])
 
   // Collapsed with something running and nothing waiting: the pill's only job is
-  // the dot and the line, so its buttons wait for the pointer.
-  const atRest = stage === 'pill'
+  // the dot and the line, so its buttons wait for the pointer. A pill pulled off
+  // the edge of a notched display has no housing over it and keeps its line, and
+  // its buttons, all the time.
+  const carriesLine = stage === 'pill' && notched && !attached
+  const atRest = stage === 'pill' && !carriesLine
+
+  /** The middle of the band is the opaque camera housing, so a row painted there
+   *  is invisible: the wings either side are all a hover has to work with. */
+  const blocked = housing && stage === 'pill'
+  const housingWidth = Math.round(notchWidth ?? NOTCH_WIDTH)
+
+  // What the wings count: work in flight, a session parked on the user, a turn
+  // that finished while they were elsewhere, and anything the island failed to do.
+  const counts = useMemo(
+    () => ({
+      error: error || transcriptError ? 1 : 0,
+      finished: markers.length,
+      running: runningCount,
+      waiting: waitingRows.length
+    }),
+    [error, markers.length, runningCount, transcriptError, waitingRows.length]
+  )
+
+  const mood = counts.error > 0 ? 'error' : counts.waiting > 0 ? 'attention' : counts.running > 0 ? 'working' : 'idle'
 
   useIslandClickThrough(rootRef)
 
@@ -916,6 +1066,10 @@ export function IslandShell() {
       // with the top of the screen means attached, anything else is a move.
       const rect = surfaceRef.current?.getBoundingClientRect()
       attachedRef.current = rect ? Math.abs(window.screenY + rect.top) <= 1 : true
+      // A surface pressed away from the edge has nothing to tear off, and the neck
+      // is only replayed for one that was pulled out of the housing.
+      tornRef.current = !attachedRef.current
+      setAttached(attachedRef.current)
       dragRef.current = { moved: false, startX: event.screenX, startY: event.screenY, travel: 0, x: event.screenX, y: event.screenY }
       event.currentTarget.setPointerCapture(event.pointerId)
       // Main clamps the pill, not the window: it needs the pill's rect before
@@ -955,11 +1109,11 @@ export function IslandShell() {
       }
 
       // The leash: the surface's travel away from the notch is NOT the pointer's.
-      // While it is attached the window HOLDS and the lag is painted inside it, so
-      // the top edge stays on the housing and the body is let out from it. Past
-      // the band the leash is cut, the held lag goes to main with this same move
-      // (so the place on the glass does not jump), and the surface then tracks the
-      // pointer one for one.
+      // While it is attached the window HOLDS and that travel is painted inside it,
+      // so the surface is let out of the housing by the lag — down the goo neck —
+      // instead of the whole window moving. Past the band the leash is cut, the
+      // held lag goes to main with this same move (so the place on the glass does
+      // not jump), and the surface then tracks the pointer one for one.
       const travel = from.travel + dy
       // Only a surface still holding the edge may leashe: once it has been let
       // go, dragging the parked pill is a plain move of a plain pill, and
@@ -970,6 +1124,10 @@ export function IslandShell() {
 
       if (cut) {
         attachedRef.current = false
+        // Torn free: from here the surface is a capsule carried by the pointer,
+        // and the neck it left behind is only replayed when it docks home.
+        tornRef.current = true
+        setAttached(false)
       }
 
       from.travel = travel
@@ -1043,10 +1201,13 @@ export function IslandShell() {
   }, [expanded, focused, query, stage])
 
   const content = stage !== 'hidden'
-  // The leash grows the surface itself: one path with its top fillets pinned to
-  // the screen edge and its body let out downward. The reference notches morph
-  // this shape; a second black layer filtered into a seam is what read as a kink.
-  const drawn = leash > 0.5 ? { ...shape, height: shape.height + leash } : shape
+  // The neck snaps while it is being dragged — it follows the finger — and closes
+  // through one transition on the way back into the housing.
+  const gooSnaps = dragging || absorb === ABSORB_GAP
+  // The edge the corners square against. Only a surface that IS the housing is
+  // flush with the top of the screen: a pill that has been let out of it keeps
+  // all four corners, whatever main last announced.
+  const cornerSide: IslandDockSide = shape.bottomOnly ? 'top' : !housing && dock === 'top' ? 'free' : dock
 
   return (
     <div
@@ -1059,6 +1220,41 @@ export function IslandShell() {
         paddingTop: notched || dock === 'top' ? 0 : 8
       }}
     >
+      <style>{ISLAND_MOTION_CSS}</style>
+      {/* The neck is a SILHOUETTE layer, never a wrapper: the filter's alpha
+          threshold eats glyphs, so the crisp surface and then the content are
+          painted on top of it and only this black shape is blurred and
+          re-thresholded. It is pinned to the screen's top edge, which is where
+          the housing is, and its tapered end is bled under the surface. */}
+      {notched ? (
+        <>
+          <svg aria-hidden="true" className="pointer-events-none absolute size-0">
+            <filter colorInterpolationFilters="sRGB" height="140%" id="island-goo" width="140%" x="-20%" y="-20%">
+              <feGaussianBlur in="SourceGraphic" result="goo" stdDeviation={goo?.blur ?? 0} />
+              <feColorMatrix in="goo" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+            </filter>
+          </svg>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 left-1/2"
+            data-island-goo=""
+            style={{
+              filter: 'url(#island-goo)',
+              height: goo?.height ?? GOO_BLEED,
+              opacity: goo ? 1 : 0,
+              transform: `translateX(-50%) scaleY(${goo ? 1 : 0})`,
+              transformOrigin: 'top center',
+              transition: gooSnaps ? 'none' : GOO_CLOSE,
+              width: goo?.width ?? 0,
+              zIndex: 0
+            }}
+          >
+            {/* Clipped BEFORE the filter: a clip on the filtered element would cut
+                off the fillets the blur just made. */}
+            <div className="size-full bg-black" style={{ clipPath: goo?.clip }} />
+          </div>
+        </>
+      ) : null}
       <div
         className={cn(
           'group pointer-events-auto select-none overflow-hidden bg-black text-white/90',
@@ -1081,17 +1277,15 @@ export function IslandShell() {
         style={{
           // A notch surface is clipped instead: its top corners flare outward
           // into the screen's edge, which no radius can express.
-          clipPath: islandClipPath(drawn) ?? undefined,
+          clipPath: islandClipPath(shape) ?? undefined,
           // A docked island squares the corners against its edge: a capsule
           // floating 30px from the screen edge is not attached to it.
-          borderRadius: islandCorners(box.radius, shape.bottomOnly ? 'top' : dock),
+          borderRadius: islandCorners(box.radius, cornerSide),
           cursor: focused ? undefined : notched ? 'pointer' : 'grab',
-          height: drawn.height,
+          height: shape.height,
           // A notched surface is an extrusion of the housing, not a pill below it:
           // flush with the screen's top edge, and the housing's height is taken as
-          // padding inside instead (see the content box). The leash is that height
-          // growing, not a second shape below it: the silhouette stays ONE path,
-          // which is how the reference notches do it — no filter, no seam.
+          // padding inside instead (see the content box).
           marginTop: notched ? 0 : shape.top,
           opacity: shape.opacity,
           // One transform, in priority order: the drag's lift while the gesture is
@@ -1100,14 +1294,21 @@ export function IslandShell() {
           // as a retreat.
           transform: islandSurfaceTransform({
             dragging,
-            paint: '',
+            // The tear, as the surface's own travel out of the housing. A
+            // transform rather than a layout offset: `reportSurface` measures
+            // layout, and a pill that moved its own box would hand main a phantom
+            // rect to clamp against.
+            paint: dragging && gap > 0 ? `translateY(${Math.round(gap)}px)` : '',
             settle: settleOffset ? islandSettleTransform(settleOffset) : null,
             visible: shape.opacity !== 0
           }),
           transformOrigin: 'top center',
           // Size is the spring's; only colour and opacity keep a CSS transition.
           transition: settleOffset || dragging ? 'none' : REVEAL,
-          width: box.width
+          width: box.width,
+          // The silhouette paints under the surface, whatever the surface's own
+          // transform does to its stacking context.
+          zIndex: 1
         }}
       >
         <div
@@ -1117,16 +1318,14 @@ export function IslandShell() {
             // Hidden means nothing paints, not merely transparent: a status dot
             // left at zero opacity is still a lit pixel or two in the notch.
             visibility: content ? 'visible' : 'hidden',
-            // The body rides at the bottom of the stem, so a stretch lets the
-            // content out from the edge instead of leaving it behind. Detached,
-            // there is no housing to sit under: the row is centred, or the pill
-            // wears an empty line above it.
-            paddingTop: notched ? shape.top + 6 + leash : leash + Math.max(0, Math.round((shape.height - 24) / 2)),
+            // Under the housing the content starts below it; off that edge it
+            // starts at the surface's own padding, with no blank line above it.
+            paddingTop: islandContentInset(shape),
             transform: content ? 'none' : 'translateY(-6px)',
             transition: REVEAL
           }}
         >
-          <div className="flex h-6 shrink-0 items-center gap-2">
+          <div className="flex h-6 shrink-0 items-center gap-1.5">
             {focused ? (
               <Button
                 aria-label={t.island.collapse}
@@ -1143,9 +1342,11 @@ export function IslandShell() {
                 <ChevronLeft />
               </Button>
             ) : null}
+            <IslandBot mood={mood} />
             {/* The sidebar's 6px dot is a row marker beside a label; alone in a
-                34px band beside an opaque housing it is a speck. Same dot, one
-                size up, so the resting pill still says something is running. */}
+                32px band beside an opaque housing it is a speck. Same dot, one
+                size up, so the resting pill still says something is running —
+                and it is the only mark that names the lead session's own state. */}
             {headSessionId ? (
               <span className="flex items-center [&_span]:size-2">
                 <SessionStatusDot session={sessionsById[headSessionId] ?? null} storedSessionId={headSessionId} />
@@ -1164,6 +1365,52 @@ export function IslandShell() {
                       [lead ? titles[lead.id] : '', ...activityParts].filter(Boolean).join(' · ')
                     : t.island.running(runningCount)}
             </span>
+            {/* The middle of the band is the opaque camera housing, so the wings
+                either side are all a hover has to work with: reserving its width
+                keeps nothing the user must read behind the cutout. */}
+            {blocked ? <span aria-hidden="true" className="shrink-0" style={{ width: housingWidth }} /> : null}
+            {/* What is running, what is parked on the user, what finished while
+                they were elsewhere, and what failed: totals, in the right wing. */}
+            <div className="flex shrink-0 items-center gap-1.5" data-island-counts="">
+              {counts.waiting > 0 ? (
+                <span
+                  className="flex shrink-0 items-center gap-0.5 text-[0.6rem] tabular-nums text-amber-300/90"
+                  title={t.island.waiting(counts.waiting)}
+                >
+                  <span className="size-1.5 rounded-full bg-amber-400" />
+                  {counts.waiting}
+                </span>
+              ) : null}
+              {counts.running > 0 ? (
+                <span
+                  className="flex shrink-0 items-center gap-0.5 text-[0.6rem] tabular-nums text-white/65"
+                  title={t.island.running(counts.running)}
+                >
+                  <span className="relative flex size-1.5 items-center justify-center">
+                    <span className="absolute inset-0 rounded-full bg-(--ui-accent)" data-island-ping="" />
+                    <span className="size-1.5 rounded-full bg-(--ui-accent)" />
+                  </span>
+                  {counts.running}
+                </span>
+              ) : null}
+              {counts.finished > 0 ? (
+                <span
+                  className="flex shrink-0 items-center gap-0.5 text-[0.6rem] tabular-nums text-emerald-300/90"
+                  title={t.island.finished}
+                >
+                  <Check className="size-3" />
+                  {counts.finished}
+                </span>
+              ) : null}
+              {counts.error > 0 ? (
+                <span
+                  className="flex shrink-0 items-center text-red-400"
+                  title={error ?? transcriptError ?? t.island.needsInput}
+                >
+                  <AlertTriangle className="size-3" />
+                </span>
+              ) : null}
+            </div>
             <div className={cn('flex shrink-0 items-center gap-1', atRest && REST_CHROME)}>
               {queued && !focused ? (
                 <span className="shrink-0 text-[0.65rem] text-white/35" title={queued.next}>
