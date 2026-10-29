@@ -273,9 +273,15 @@ export function IslandShell() {
   /** Main's dock announcement follows every settle, so it is also the moment the
    *  window has finished moving — the only honest instant to ask whether the
    *  surface landed back on the edge. */
-  const readHome = useCallback(() => {
+  const readHome = useCallback((side?: IslandDockSide) => {
     requestAnimationFrame(() => {
-      const home = islandOnEdge()
+      // Main names the edge the surface settled on, so the answer comes from the
+      // window's own dock rather than from where its top happens to be: a
+      // notched display that is not the main one sits at bounds.y > 0, and the
+      // screen-edge test reads that as detached while the surface is in the
+      // housing. The test is only the fallback for a paint that beat the first
+      // announcement.
+      const home = side ? side === 'top' : islandOnEdge()
       setAttached(home)
 
       // Coming home: the neck it was pulled out of closes over it, once.
@@ -287,9 +293,10 @@ export function IslandShell() {
   }, [])
 
   useEffect(() => {
-    const offDock = window.hermesDesktop?.island?.onDock?.(side => {
-      setDock(islandDockSide(side))
-      readHome()
+    const offDock = window.hermesDesktop?.island?.onDock?.(raw => {
+      const side = islandDockSide(raw)
+      setDock(side)
+      readHome(side)
     })
 
     const offFocus = window.hermesDesktop?.island?.onMainFocus?.(setMainFocused)
