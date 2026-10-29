@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   DOCKED_RADIUS,
+  GOO_BLEED,
+  HOVER_WIDTH,
   islandClipPath,
+  islandContentInset,
   islandCorners,
+  islandGooLayer,
   islandLeash,
   islandShape,
   islandSurfaceTransform,
@@ -63,7 +67,6 @@ describe('islandShape', () => {
   it('rests as the housing exactly while something runs, and widens only on hover', () => {
     const bare = islandShape({ notched: true, rows: 2, stage: 'pill' })
     const rich = islandShape({ notched: true, rich: true, rows: 2, stage: 'pill' })
-    const attention = islandShape({ notched: true, rows: 2, stage: 'attention' })
 
     // A running session must be visible without a hover, and the housing itself
     // is opaque: the band is wider than it so the dot lands in a wing, while it
@@ -71,10 +74,45 @@ describe('islandShape', () => {
     expect(bare.width).toBeGreaterThan(NOTCH_WIDTH)
     expect(bare.height).toBe(NOTCH_HEIGHT)
 
-    // Hover widens SIDEWAYS into those wings and keeps the housing's height.
+    // Hover widens SIDEWAYS into those wings and keeps the housing's height. Each
+    // wing has to be wide enough to read a title and a status count in, and the
+    // whole band still has to fit the island window.
     expect(rich.width).toBeGreaterThan(bare.width)
-    expect(rich.width).toBeLessThan(attention.width)
+    expect((rich.width - NOTCH_WIDTH) / 2).toBeGreaterThanOrEqual(120)
+    expect(rich.width).toBe(HOVER_WIDTH)
+    expect(rich.width).toBeLessThanOrEqual(480)
     expect(rich.height).toBe(bare.height)
+  })
+
+  it('drops the housing shape the moment the surface leaves the edge', () => {
+    const docked = islandShape({ notched: true, rows: 2, stage: 'pill' })
+    const detached = islandShape({ attached: false, notched: true, rows: 2, stage: 'pill' })
+
+    // The housing is not over the surface any more: a capsule, not an extrusion
+    // of a cutout that is somewhere else on the screen.
+    expect(docked.mode).toBe('notch')
+    expect(detached.mode).toBe('floating')
+    expect(islandClipPath(detached)).toBeNull()
+    expect(detached.bottomOnly).toBe(false)
+    expect(detached.radius).toBe(detached.height / 2)
+    // It keeps the housing's height, so detaching does not resize it under the
+    // pointer — and it widens, because nothing hides the middle of the band now.
+    expect(detached.height).toBe(docked.height)
+    expect(detached.width).toBeGreaterThan(docked.width)
+  })
+
+  it('never reserves the housing band above a detached surface', () => {
+    for (const stage of ['attention', 'expanded', 'session'] as const) {
+      const docked = islandShape({ notched: true, rows: 2, stage })
+      const detached = islandShape({ attached: false, notched: true, rows: 2, stage })
+
+      // The blank line the user saw: the housing's height taken out of the top
+      // of a card that has no housing over it.
+      expect(detached.top, stage).toBe(0)
+      expect(detached.height, stage).toBe(docked.height - NOTCH_HEIGHT)
+      expect(detached.bottomOnly, stage).toBe(false)
+      expect(detached.radius, stage).toBeLessThan(NOTCH_HEIGHT)
+    }
   })
 
   it('grows out of the notch as the stage rises, and never shrinks back', () => {
@@ -125,6 +163,83 @@ describe('islandShape', () => {
   })
 })
 
+describe('islandContentInset', () => {
+  it('starts the content below the housing, and nowhere else', () => {
+    // Under the housing the camera cutout is opaque, so the row goes under it.
+    expect(islandContentInset(islandShape({ notched: true, rows: 0, stage: 'hidden' }))).toBe(6)
+    expect(islandContentInset(islandShape({ notched: true, rows: 2, stage: 'attention' }))).toBe(NOTCH_HEIGHT + 6)
+    expect(islandContentInset(islandShape({ notched: true, rows: 8, stage: 'expanded' }))).toBe(NOTCH_HEIGHT + 6)
+
+    // A detached card starts at its own padding: no blank line above it.
+    for (const stage of ['attention', 'expanded', 'session'] as const) {
+      expect(islandContentInset(islandShape({ attached: false, notched: true, rows: 8, stage })), stage).toBe(6)
+    }
+  })
+
+  it('centres the one row of a capsule, whatever height the capsule is', () => {
+    const detached = islandShape({ attached: false, notched: true, rows: 2, stage: 'pill' })
+
+    expect(islandContentInset(detached)).toBe((detached.height - 24) / 2)
+    // Taller than its row by exactly the two paddings: the row is inside it.
+    expect(islandContentInset(detached) * 2 + 24).toBe(detached.height)
+  })
+})
+
+describe('islandGooLayer', () => {
+  it('bridges nothing while the surface is fused to the housing', () => {
+    expect(islandGooLayer({ gap: 0, surface: 197 })).toBeNull()
+    expect(islandGooLayer({ gap: 0.4, surface: 197 })).toBeNull()
+    // Torn free: the neck is gone, and the surface is a plain move from here.
+    expect(islandGooLayer({ gap: LEASH_BAND + 1, surface: 197 })).toBeNull()
+  })
+
+  it('is never narrower than the surface it hangs from', () => {
+    // A neck narrower than the bar meets it in a step the alpha threshold cannot
+    // smooth away, which is what made the last attempt read as a block.
+    for (const gap of [2, 20, 40, LEASH_BAND]) {
+      expect(islandGooLayer({ gap, surface: 197 })?.width, String(gap)).toBe(197)
+    }
+  })
+
+  it('is one tapered silhouette, bled under the surface', () => {
+    const layer = islandGooLayer({ gap: 60, surface: 197 })
+
+    expect(layer).toEqual({
+      // Capped: past ~6 px of blur the threshold rounds the shape's own corners.
+      blur: 5.5,
+      // Full width where it leaves the housing, pulled in at the end that is
+      // painted under the surface, so the join is never on screen.
+      clip: 'polygon(0px 0px, 197px 0px, 190.84px 66px, 6.16px 66px)',
+      height: 60 + GOO_BLEED,
+      width: 197
+    })
+  })
+
+  it('thins the neck as the gap opens, and stops before it pinches off', () => {
+    // The left inset of the silhouette's far edge: the neck's waist.
+    const waist = (gap: number) => {
+      const points = islandGooLayer({ gap, surface: 197 })?.clip.slice('polygon('.length, -1).split(',') ?? []
+
+      return Number(points[points.length - 1].trim().split('px')[0])
+    }
+
+    // Still inside the housing: nothing tapers, because nothing is on screen.
+    expect(waist(NOTCH_HEIGHT)).toBe(0)
+    expect(waist(40)).toBeGreaterThan(waist(NOTCH_HEIGHT))
+    expect(waist(LEASH_BAND)).toBeGreaterThan(waist(40))
+    // A neck that thins to a point is a shape no blur can smooth back.
+    expect(197 - waist(LEASH_BAND) * 2).toBeGreaterThan(197 / 2)
+  })
+
+  it('blurs the silhouette with the gap it has to span, never past the cap', () => {
+    expect(islandGooLayer({ gap: 2, surface: 197 })?.blur).toBeLessThan(1)
+    expect(islandGooLayer({ gap: 20, surface: 197 })?.blur).toBeGreaterThan(
+      islandGooLayer({ gap: 10, surface: 197 })?.blur ?? 0
+    )
+    expect(islandGooLayer({ gap: LEASH_BAND, surface: 197 })?.blur).toBe(5.5)
+  })
+})
+
 describe('islandClipPath', () => {
   it('clips the notch surface to the housing, with a concave top fillet', () => {
     const notch = islandShape({ notched: true, rows: 0, stage: 'hidden' })
@@ -143,6 +258,10 @@ describe('islandClipPath', () => {
     expect(islandClipPath(islandShape({ notched: true, rich: true, rows: 0, stage: 'pill' }))).toBeNull()
     expect(islandClipPath(islandShape({ notched: true, rows: 2, stage: 'attention' }))).toBeNull()
     expect(islandClipPath(islandShape({ notched: true, rows: 0, stage: 'session' }))).toBeNull()
+    // Pulled off the edge the surface is a capsule: the flare belongs to the
+    // housing it is no longer in.
+    expect(islandClipPath(islandShape({ attached: false, notched: true, rows: 0, stage: 'pill' }))).toBeNull()
+    expect(islandClipPath(islandShape({ attached: false, notched: true, rows: 0, stage: 'hidden' }))).toBeNull()
     // No housing, no notch: a floating pill is an ordinary rounded corner.
     expect(islandClipPath(islandShape({ notched: false, rows: 0, stage: 'hidden' }))).toBeNull()
     expect(islandClipPath(islandShape({ notched: false, rows: 3, stage: 'expanded' }))).toBeNull()
@@ -217,10 +336,18 @@ describe('islandLeash', () => {
   it('starts at the anchor and never runs away from it', () => {
     expect(islandLeash(0)).toBe(0)
     // The rubber band flattens toward c·L rather than following the pointer 1:1.
-    expect(islandLeash(80)).toBeLessThan(80)
-    expect(islandLeash(80)).toBeCloseTo((80 * 0.55 * 80) / (80 + 0.55 * 80), 6)
+    expect(islandLeash(80, 80)).toBeLessThan(80)
+    expect(islandLeash(80, 80)).toBeCloseTo((80 * 0.55 * 80) / (80 + 0.55 * 80), 6)
     // The rubber-band part alone never reaches c·L + L: the leash holds.
     expect(islandLeash(LEASH_BAND)).toBeLessThan(0.55 * LEASH_BAND + 1)
+  })
+
+  it('stretches further than the housing is tall, or the neck would stay hidden', () => {
+    // The surface only comes out from under an opaque cutout once the lag passes
+    // the housing's own height; below that there is nothing for a neck to bridge.
+    expect(islandLeash(LEASH_BAND)).toBeGreaterThan(NOTCH_HEIGHT + NOTCH_FILLET)
+    // And it is still a leash rather than a follower: the surface trails the hand.
+    expect(islandLeash(LEASH_BAND)).toBeLessThan(LEASH_BAND / 2)
   })
 
   it('is monotone, and takes a negative travel as a negative lag', () => {
@@ -245,5 +372,3 @@ describe('islandLeash', () => {
     expect((islandLeash(LEASH_BAND + 10) - islandLeash(LEASH_BAND + 9)) / 1).toBeCloseTo(1, 6)
   })
 })
-
-
