@@ -12764,7 +12764,10 @@ const islandController = createIslandWindowController({
   rendererIndex: resolveRendererIndex,
   webPreferences: chatWindowWebPreferences,
   writeOrigin: origin => parkIslandAt(origin),
-  wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('chat'))
+  // The island is a point-designed shape, so it opts out of the app's UI zoom:
+  // nothing installs the restore or the re-assert on it, and island-window.ts
+  // pins the level as well (see ZOOM_WINDOW_CONFIG).
+  wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('island'))
 })
 
 registerIslandIpc(() => islandController)
