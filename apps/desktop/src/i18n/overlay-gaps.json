@@ -2025,7 +2025,6 @@
   "sidebar.projects.staleBackend": ["ar"],
   "sidebar.projects.subprojectOf": ["ar","ja","ru","zh-hant"],
   "sidebar.projects.toggle": ["ja","zh-hant"],
-  "sidebar.row.continuationOrigin": ["ja","ru","zh-hant"],
   "sidebar.row.hideTabBar": ["ja","zh-hant"],
   "sidebar.row.messageCount": ["ar","ja","zh-hant"],
   "sidebar.row.openInNewTab": ["ja","zh-hant"],
