@@ -1,5 +1,6 @@
 // Public surface of the project/worktree sidebar, consumed by the sidebar root.
 export { EnteredProjectContent } from './entered-content'
+export { enteredProjectLiveRows } from './gateway-project-rows'
 export {
   nestProjectsByParent,
   orderProjectsByIds,
@@ -12,6 +13,7 @@ export {
 } from './model'
 export { ProjectBackRow, ProjectOverviewRow } from './overview-row'
 export { ProjectMenu } from './project-menu'
+export { useGatewayProjectTree } from './use-gateway-project-tree'
 export { useProjectRowData } from './row-data'
 export { SidebarWorkspaceGroup } from './workspace-group'
 export {

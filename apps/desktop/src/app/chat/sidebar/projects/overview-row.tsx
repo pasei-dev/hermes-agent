@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { $sidebarShowAllSessions } from '@/store/layout'
 import { $projectScope } from '@/store/project-scope'
+import type { AgentProfileRoute } from '@/store/profile'
 import { $projectTree, enterProject, fetchProjectSessions, projectProfile } from '@/store/projects'
 import type { SessionDotState } from '@/store/session-dot-state'
 
@@ -28,6 +29,7 @@ import {
 } from '../chrome'
 import { shellOwnsPress } from '../reorderable-list'
 
+import { ownedNewSessionHandlers } from './gateway-project-rows'
 import {
   expandedProjectSessions,
   latestProjectSessions,
@@ -124,7 +126,8 @@ export function ProjectBackRow({ label, onExit }: { label: string; onExit: () =>
 interface ProjectOverviewRowProps {
   project: SidebarProjectTree
   onEnter?: (id: string) => void
-  onNewSession?: (path: null | string) => void
+  /** `owner` is set for a project another gateway owns: the session starts there. */
+  onNewSession?: (path: null | string, owner?: AgentProfileRoute) => void
   /** Drag the project's "+" onto a chat zone: create a new session pinned to
    *  this project's cwd, placed exactly where it's dropped. */
   onNewSessionSplit?: NewSessionSplitHandler
@@ -256,8 +259,8 @@ function ProjectRowActions({
 export function ProjectOverviewRow({
   project,
   onEnter,
-  onNewSession,
-  onNewSessionSplit,
+  onNewSession: onNewSessionIn,
+  onNewSessionSplit: onNewSessionSplitIn,
   renderRows,
   activeProjectId,
   previewSessions,
@@ -280,6 +283,7 @@ export function ProjectOverviewRow({
   // row rendered without one (a lone preview, a test) still indents for its `parentId`, so the indent
   // cannot silently disappear.
   const nestDepth = depth ?? (project.parentId ? 1 : 0)
+  const { onNewSession, onNewSessionSplit } = ownedNewSessionHandlers(project, onNewSessionIn, onNewSessionSplitIn)
   const [open, toggleOpen] = useWorkspaceNodeOpen(project.id)
   // The subtree's loudest status, shown whether the row is open or closed: a session that wants an
   // answer inside a subproject must be visible without folding anything open.

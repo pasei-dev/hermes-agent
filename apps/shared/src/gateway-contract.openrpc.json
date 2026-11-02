@@ -10008,6 +10008,17 @@
             "default": null,
             "title": "Unknown Toolsets"
           },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -10762,6 +10773,17 @@
             ],
             "default": null,
             "title": "Unknown Toolsets"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "desktop_protocol": {
             "const": "hermes-gateway-v1",
