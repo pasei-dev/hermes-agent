@@ -9,7 +9,7 @@ import { $removedSessionIds } from '@/store/session-removal'
 import { $sidebarSessionRankIds } from '@/store/sidebar-sort'
 
 import { PROJECT_PREVIEW_COUNT } from './model'
-import { overlayLivePreviews, sessionBucketId, type SidebarProjectTree } from './workspace-groups'
+import { overlayLivePreviews, sessionBucketId, type SessionOwnerKey, type SidebarProjectTree } from './workspace-groups'
 
 /** What the project rows drop: pins (they live in their own section) and anything the active filters
  *  exclude — the same predicate the previews below were built with, so a "Show all" hydration can't
@@ -36,12 +36,16 @@ export interface ProjectRowData {
 export function useProjectRowData({
   isHiddenFromProjects,
   liveSessions,
+  ownerKey,
   tree
 }: {
   isHiddenFromProjects: (session: SessionInfo) => boolean
   /** Live `$sessions` of the profile on screen; a session the snapshot hasn't folded in yet still
    *  shows under its project (and carries its working arc). */
   liveSessions: SessionInfo[]
+  /** The gateway the tree belongs to: another gateway's projects only take its own rows, so a
+   *  same-path project on the local machine cannot borrow them. */
+  ownerKey?: SessionOwnerKey
   /** The whole project tree; the entered view draws the projects nested under the one you are in. */
   tree?: SidebarProjectTree[]
 }): ProjectRowData {
@@ -55,11 +59,12 @@ export function useProjectRowData({
   const previews = useMemo<Record<string, SessionInfo[]>>(
     () =>
       overlayLivePreviews(tree ?? [], liveSessions, projects, showAllSessions ? Infinity : PROJECT_PREVIEW_COUNT, {
+        ownerKey,
         removed: removedSessionIds,
         // Rank before the trim, so "3 priciest in this project" isn't "3 most recent, priciest first".
         rankIds: sortOrderIds
       }),
-    [tree, liveSessions, projects, removedSessionIds, sortOrderIds, showAllSessions]
+    [tree, liveSessions, projects, ownerKey, removedSessionIds, sortOrderIds, showAllSessions]
   )
 
   const hidden = useMemo<ProjectRowHidden>(() => {
