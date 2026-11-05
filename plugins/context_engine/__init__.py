@@ -23,7 +23,9 @@ def _is_context_engine_dir(path: Path) -> bool:
     """Cheap text heuristic: ``__init__.py`` mentions the context engine contract."""
     init_file = path / "__init__.py"
     try:
-        source = init_file.read_text(errors="replace", encoding="utf-8-sig")[:8192]
+        # The whole file: a plugin's registration call can sit well past the first 8 KB
+        # (hermes-lcm's is at ~15 KB), and a truncated read silently hides the engine.
+        source = init_file.read_text(errors="replace", encoding="utf-8-sig")
     except OSError:
         return False
     return "register_context_engine" in source or "ContextEngine" in source
@@ -48,13 +50,43 @@ def discover_context_engines() -> list[tuple[str, str, bool]]:
 
 
 def find_engine_dir(name: str) -> Optional[Path]:
-    """Resolve an engine name to its directory (bundled first, then user-installed)."""
+    """Resolve an engine name to its directory (bundled first, then user-installed).
+
+    A plugin's directory is not always named after the engine it registers (``hermes-lcm``
+    registers ``lcm``), and the manifest carries only the install name, so a candidate is
+    resolved by asking the engine it actually loads. A direct hit is tried first and costs
+    no load.
+    """
     bundled = _CONTEXT_ENGINE_PLUGINS_DIR / name
     if bundled.is_dir():
         return bundled
     user_dir = _loader.user_plugins_dir()
-    user = user_dir / name if user_dir else None
-    return user if user and user.is_dir() and _is_context_engine_dir(user) else None
+    if not user_dir:
+        return None
+    direct = user_dir / name
+    if direct.is_dir() and _is_context_engine_dir(direct):
+        return direct
+    for child in _loader.iter_plugin_dirs(user_dir):
+        if child.name != name and _engine_name_of(child) == name:
+            return child
+    return None
+
+
+def _engine_name_of(path: Path) -> Optional[str]:
+    """The name the engine in *path* answers to, or None when it is not an engine.
+
+    Loading is the only honest source: ``plugin.yaml`` holds the install name, which need not
+    match the engine's own ``name``. A candidate that fails to load is not an engine, and
+    returning "any engine directory" would load the wrong one for a typo instead of reporting
+    it missing.
+    """
+    if not _is_context_engine_dir(path):
+        return None
+    try:
+        engine = _load_engine_from_dir(path)
+    except Exception:
+        return None
+    return getattr(engine, "name", None) or None
 
 
 def load_context_engine(name: str) -> Optional[ContextEngine]:
