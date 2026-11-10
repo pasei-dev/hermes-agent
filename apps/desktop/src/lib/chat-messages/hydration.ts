@@ -185,7 +185,13 @@ const NOTICE_DISPLAY_KINDS = [
   'failed_turn',
   // A safety-refused turn retained for display: the user's own message, shown
   // greyed with a notice. Rendered through the system path, never a user bubble.
-  'content_refused'
+  'content_refused',
+  // A cron result delivered into a local chat (gateway/session_completion_notes.py
+  // note_if_unviewed → append_completion_note, display_kind 'internal_notification').
+  // It is finished text the gateway wrote, not something the user typed, so it must
+  // render as a notice: without this it fell through to the row's own `user` role and
+  // every nightly report looked like the user had pasted it into their own chat.
+  'internal_notification'
 ] as const
 
 // agent/turn_failure_copy.py::CONTENT_REFUSED_DISPLAY_KIND. The retained turn
