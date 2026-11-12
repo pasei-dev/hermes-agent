@@ -4,6 +4,15 @@ export const TITLEBAR_HEIGHT = 34
 /** Browser touch chrome: the band (and the controls flush in it) are 44px
  *  touch targets, not Electron's compact band. */
 export const TOUCH_TITLEBAR_HEIGHT = 44
+/** The redesign's band: Figma's 60px header (906:19463). Electron seats its
+ *  native controls in the same band (electron/window-chrome.ts). */
+export const PORTAL_TITLEBAR_HEIGHT = 60
+
+/** The window's titlebar band height for a shell. */
+export function titlebarBandHeight({ portal, touch }: { portal: boolean; touch: boolean }): number {
+  return portal ? PORTAL_TITLEBAR_HEIGHT : touch ? TOUCH_TITLEBAR_HEIGHT : TITLEBAR_HEIGHT
+}
+
 /** Permanent native drag target beside a top-edge tab strip. */
 export const TITLEBAR_DRAG_HANDLE_WIDTH = 48
 export const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -77,13 +86,16 @@ export function titlebarToolsRightCss(
 export const titlebarButtonClass =
   'text-muted-foreground/85 hover:bg-(--ui-control-hover-background) hover:text-foreground'
 
-/** Shared flex shell for left/right/pane titlebar tool rows — no gap; 24px buttons abut. */
+/** Shared flex shell for left/right/pane titlebar tool rows. Classic leaves
+ *  `--titlebar-control-gap` unset, so its 24px buttons abut; the redesign
+ *  spaces its 30px chrome buttons. */
 export const titlebarToolClusterClass =
-  'fixed z-70 flex flex-row items-center pointer-events-auto select-none [-webkit-app-region:no-drag]'
+  'fixed z-70 flex flex-row items-center gap-(--titlebar-control-gap) pointer-events-auto select-none [-webkit-app-region:no-drag]'
 
-/** Width reserved for N abutting titlebar tool buttons. */
+/** Width reserved for N titlebar tool buttons, each with its trailing gap (so
+ *  a cluster laid beside another keeps the same spacing between them). */
 export function titlebarToolsWidthCss(toolCount: number): string {
-  return `calc(${toolCount} * var(--titlebar-control-size))`
+  return `calc(${toolCount} * (var(--titlebar-control-size) + var(--titlebar-control-gap, 0px)))`
 }
 
 export const titlebarHeaderBaseClass =
@@ -120,3 +132,27 @@ export function titlebarControlsPosition(
 
 /** Rebind panel measurements after titlebar nodes or their positions change. */
 export const TITLEBAR_CHROME_CHANGED_EVENT = 'hermes:titlebar-chrome-changed'
+
+/** Width of the redesign's left rail column (Figma 906:19409). */
+export const PORTAL_RAIL_WIDTH = 60
+/** Band controls clear macOS traffic lights (906:19415, in the rail column): Figma's header pads
+ *  them 70px past the rail (906:19463, x = 130). */
+export const PORTAL_BAND_LEAD_MAC = PORTAL_RAIL_WIDTH + 70
+/** With no native lights on the left (Windows/Linux and the browser report no position, macOS
+ *  fullscreen hides them), controls align with the sidebar and page-nav text inset (x = 80). */
+export const PORTAL_BAND_LEAD_PLAIN = PORTAL_RAIL_WIDTH + 20
+
+/** Where the redesign band's left control cluster starts, in window px. Every left-cluster control
+ *  (page Back, sidebar toggle, …) starts here via `--portal-band-start`; nothing positions itself
+ *  per page. A connection not yet reported falls back by platform, as titlebarControlsPosition does. */
+export function portalBandLeadingInset(
+  windowButtonPosition: HermesConnection['windowButtonPosition'] | undefined,
+  isFullscreen = false,
+  isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
+): number {
+  if (isFullscreen || windowButtonPosition === null) {
+    return PORTAL_BAND_LEAD_PLAIN
+  }
+
+  return windowButtonPosition || isMac ? PORTAL_BAND_LEAD_MAC : PORTAL_BAND_LEAD_PLAIN
+}

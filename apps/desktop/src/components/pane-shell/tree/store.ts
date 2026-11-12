@@ -49,6 +49,7 @@ import {
 import { isTreePaneParked } from './parked-panes'
 import { FLOATING_PLACEMENT } from './renderer/floating-rect'
 import { tabStripVisibleForZone } from './renderer/strip-visibility'
+import { $routeCollapsedPanes, toggledSet } from './store-route-collapse'
 
 // v2: v1 trees were saved against placeholder panes with index-order zone
 // assignment (chat could land in a corner cell). Retire them wholesale.
@@ -118,24 +119,6 @@ export const NEW_SESSION_DRAG = '__new-session-drag__'
  * Not persisted here — each binding's store owns persistence.
  */
 export const $hiddenTreePanes = atom<ReadonlySet<string>>(new Set())
-
-/** Add/remove `item` in a readonly set, returning a fresh set — or null when
- *  membership already matches `present` (so callers can early-out on a no-op). */
-function toggledSet<T>(set: ReadonlySet<T>, item: T, present: boolean): Set<T> | null {
-  if (set.has(item) === present) {
-    return null
-  }
-
-  const next = new Set(set)
-
-  if (present) {
-    next.add(item)
-  } else {
-    next.delete(item)
-  }
-
-  return next
-}
 
 export function setTreePaneHidden(paneId: string, hidden: boolean) {
   const next = toggledSet($hiddenTreePanes.get(), paneId, hidden)
@@ -851,6 +834,7 @@ export const $newSessionTabAction = atom<(() => void) | null>(null)
  */
 export function shownPanesInGroup(group: { panes: readonly string[] }): string[] {
   const hidden = $hiddenTreePanes.get()
+  const routeCollapsed = $routeCollapsedPanes.get()
   const registered = registry.getArea('panes')
   const paneFor = (id: string) => registered.find(c => c.id === id)
 
@@ -861,7 +845,7 @@ export function shownPanesInGroup(group: { panes: readonly string[] }): string[]
       return false
     }
 
-    if (hidden.has(id)) {
+    if (hidden.has(id) || routeCollapsed.has(id)) {
       return false
     }
 
@@ -1892,6 +1876,7 @@ export function activateTreePane(groupId: string, paneId: string) {
 
   if (tree) {
     commit(setActivePaneOp(tree, groupId, paneId))
+    paneOpeners[paneId]?.()
   }
 }
 

@@ -52,6 +52,13 @@
 .catalog-featured-slide > [data-catalog-card] { flex: 1; }
 .catalog-featured-controls { display: flex; align-items: center; justify-content: center; gap: var(--capabilities-gap-sticky); padding-top: var(--capabilities-gap-sticky); }
 .catalog-featured-dots { display: flex; align-items: center; gap: 6px; }
+/* The feed's first paint (CatalogSkeleton): the slots of the hero (its one-line copy at 1280), the
+   slider row's 24px controls and one shelf, so the loaded page lands on the same lines. */
+[data-catalog-skeleton] .catalog-skeleton-hero { height: 11.25rem; border-radius: var(--radius-lg); }
+[data-catalog-skeleton] .catalog-skeleton-dots { width: 7.5rem; height: 1.5rem; }
+[data-catalog-skeleton] .catalog-skeleton-title { width: 10rem; height: 1.4rem; margin-block: .2rem; }
+[data-catalog-skeleton] .catalog-skeleton-blurb { width: 14rem; height: .8125rem; margin-top: 10px; }
+[data-catalog-skeleton] .catalog-skeleton-card { height: 15.5rem; border-radius: var(--radius-lg); }
 .catalog-featured-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--ui-text-quaternary); transition: width 200ms ease, background-color 200ms ease; }
 .catalog-featured-dot:hover { background: var(--ui-text-tertiary); transition: none; }
 .catalog-featured-dot.is-active { width: 18px; background: var(--ui-text-primary); }
@@ -100,3 +107,24 @@
 @container (max-width: 960px) { .catalog-bento, .catalog-feature-row, .catalog-filtered-results > :is(.masonry, .catalog-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); } .catalog-bento { grid-auto-flow: row dense; } .catalog-bento > [data-catalog-card] { grid-column: auto / span var(--bento-w, 1); grid-row: auto / span var(--bento-h, 1); } }
 @container (max-width: 720px) { .catalog-bento, .catalog-filtered-results > :is(.masonry, .catalog-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); } .catalog-banner-list { grid-template-columns: minmax(0, 1fr); } .catalog-section-heading { padding-top: 32px; } .catalog-filter-bar > div:first-child { flex-wrap: wrap; } }
 @container (max-width: 440px) { .catalog-bento, .catalog-feature-row, .catalog-filtered-results > :is(.masonry, .catalog-grid) { grid-template-columns: minmax(0, 1fr); } .catalog-bento > [data-catalog-card] { grid-column: auto; grid-row: auto; } [data-catalog-variant=hero] .catalog-card-copy { max-width: 100%; } }
+
+/* In V2's narrow catalog, artwork gets its own space instead of sitting under copy. */
+@container (max-width: 440px) {
+  [data-capabilities-v2] [data-catalog-card][data-catalog-variant=hero] .catalog-card-image {
+    position: static;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 1;
+    border-radius: var(--radius-md);
+    mask-image: none;
+    z-index: auto;
+  }
+
+  [data-capabilities-v2] [data-catalog-variant=hero] .catalog-card-footer {
+    max-width: 100%;
+  }
+
+  [data-capabilities-v2] [data-catalog-variant=hero] .catalog-card-copy button > span {
+    font-size: 1.5rem;
+  }
+}

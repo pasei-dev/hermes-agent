@@ -21,6 +21,7 @@ import { $slashCompletionsEpoch, cachedSlashCompletion, hasCachedSlashCompletion
 import { normalize } from '@/lib/text'
 import { onboardingChatStore } from '@/store/onboarding-session'
 import { $sessions } from '@/store/session'
+import { $setupGuideOnboarding } from '@/store/shell-policy'
 
 import { completionOwner, completionOwnerKey, requestCompletion } from './completion-route'
 import type { CompletionEntry, CompletionPayload } from './use-live-completion-adapter'
@@ -357,6 +358,7 @@ export function useSlashCompletions(options: {
   const live = useLiveCompletionAdapter({ enabled, epoch: `${epoch}:${locale}`, fetcher, isCached, toItem })
   // Slash commands come after setup: none in the onboarding chat until its run ends.
   const off = useStore(useMemo(() => onboardingChatStore(sessionId ?? null), [sessionId]))
+  const setupGuide = useStore($setupGuideOnboarding)
 
-  return off ? { adapter: null, loading: false } : live
+  return off && !setupGuide ? { adapter: null, loading: false } : live
 }

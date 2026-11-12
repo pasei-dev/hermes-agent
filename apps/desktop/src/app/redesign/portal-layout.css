@@ -1,0 +1,50 @@
+/* The page frame (tokens/space.css): beside a sidebar panel the column starts at the frame inset,
+   without one at the stage inset; both hold the form width. */
+:root[data-shell='portal'] [data-page-surface] [data-slot='overlay-main'] {
+  /* The form column at the panel inset. */
+  max-width: calc(var(--page-panel-inset) + var(--page-form-max-width) + var(--page-panel-inset));
+  margin-inline: 0;
+  padding: 1.125rem var(--page-panel-inset) 0;
+}
+
+/* Navigation folded away: the column spans the whole stage (not the empty nav track) and starts at
+   the stage inset, as a page without a panel does (919). */
+@media (min-width: 47.5rem) {
+  :root[data-shell='portal'] [data-page-surface] [data-tour='overlay-nav'].hidden ~ [data-slot='overlay-main'] {
+    grid-column: 1 / -1;
+    max-width: calc(var(--page-stage-inset) + var(--page-form-max-width) + var(--page-panel-inset));
+    padding-inline-start: var(--page-stage-inset);
+  }
+}
+
+/* The column owns the inset; the heading and sections inside it sit flush on it. */
+:root[data-shell='portal']
+  [data-page-surface]
+  [data-slot='overlay-main']
+  :is([data-slot='page-heading'], [data-slot='settings-content'] > div) {
+  padding-inline: 0;
+}
+
+.page-nav-title {
+  margin: 0 0 1.875rem;
+  color: var(--ui-text-primary);
+  font: 300 var(--portal-type-display-lg-size)/1.1 var(--portal-font-display);
+  letter-spacing: var(--portal-tracking-display);
+}
+
+:root[data-shell='portal'] [data-page-surface] [data-slot='page-heading']:not(:has(nav:not(.hidden))) > div:last-child {
+  margin-top: 0;
+}
+
+:root[data-shell='portal']
+  :is([data-page-surface], [data-slot='dialog-content'])
+  [data-slot='button'][data-variant='default'] {
+  background: var(--portal-brand-fill);
+  color: var(--portal-on-brand);
+}
+
+@media (max-width: 47.5rem) {
+  :root[data-shell='portal'] [data-page-surface] [data-slot='overlay-main'] {
+    padding-top: 0.75rem;
+  }
+}

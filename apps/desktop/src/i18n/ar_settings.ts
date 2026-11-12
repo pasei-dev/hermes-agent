@@ -2,6 +2,7 @@ import { arDelegationRouting } from './ar_delegation_routing'
 import { arMemoryLayers } from './ar_memory_layers'
 import { arUpdateChannel } from './ar_update_channel'
 import type { TranslationOverrides } from './define-locale'
+import { desktopTerms } from './desktop-terms'
 
 export const arSettings = {
   language: {
@@ -77,7 +78,7 @@ export const arSettings = {
       advancedOutput: 'حدود المخرجات',
       advancedDelegation: 'الوكلاء الفرعيون',
       advancedDesktop: 'سطح المكتب وبدء التشغيل',
-      gatewayConnection: 'البوابة الأساسية',
+      gatewayConnection: 'الجهاز الأساسي',
       gatewayDevices: 'الاتصالات المحفوظة',
       gatewayManagedUpdates: 'التحديثات البعيدة',
       gatewayManagedUpdatesUnavailable: 'تتطلب التحديثات البعيدة إصدار سطح مكتب يدعم تحديثات SSH المُدارة.',
@@ -115,7 +116,7 @@ export const arSettings = {
       providers: 'المزودون',
       providerAccounts: 'الحسابات',
       providerApiKeys: 'مفاتيح API',
-      gateway: 'البوابة',
+      gateway: desktopTerms.ar.machines,
       apiKeys: 'الأدوات والمفاتيح',
       keysTools: 'الأدوات',
       keysSettings: 'الإعدادات',
@@ -219,8 +220,8 @@ export const arSettings = {
         verified: 'موثّق',
         unverified: 'غير موثّق',
         reviewedByNous: 'راجعته Nous.',
-        installsAndEnables: profile => `يُثبَّت لملف ${profile} ويعمل فورًا.`,
-        installsOnly: profile => `يُثبَّت لملف ${profile}.`,
+        installsAndEnables: profile => `يُثبَّت للوكيل ${profile} ويعمل فورًا.`,
+        installsOnly: profile => `يُثبَّت للوكيل ${profile}.`,
         advanced: 'متقدم',
         versionLabel: 'الإصدار',
         reviewedPin: sha => (sha ? `الإصدار المثبّت المراجَع ${sha}` : 'الإصدار المثبّت المراجَع'),
@@ -272,7 +273,8 @@ export const arSettings = {
         title: 'إشعارات المتصفح',
         allow: 'السماح',
         states: {
-          default: 'يعرض هذا المتصفح التنبيهات عندما تكون علامة التبويب في الخلفية. إلى أن تسمح بذلك، يومض عنوان علامة التبويب فقط.',
+          default:
+            'يعرض هذا المتصفح التنبيهات عندما تكون علامة التبويب في الخلفية. إلى أن تسمح بذلك، يومض عنوان علامة التبويب فقط.',
           granted: 'مسموح. تظهر التنبيهات عندما تكون علامة التبويب هذه في الخلفية، ويومض عنوانها أيضًا.',
           denied: 'محظور في إعدادات الموقع لهذا المتصفح. سيظل عنوان علامة التبويب يومض.',
           insecure: 'يتطلب HTTPS، مثل Tailscale serve. عبر HTTP العادي يومض عنوان علامة التبويب فقط.',
@@ -304,7 +306,7 @@ export const arSettings = {
     searchPlaceholder: {
       about: 'حول Hermes Desktop',
       config: 'ابحث في الإعدادات...',
-      gateway: 'اتصال البوابة...',
+      gateway: 'اتصال الجهاز...',
       keys: 'ابحث في مفاتيح API...',
       mcp: 'ابحث في خوادم MCP...',
       sessions: 'ابحث في المحادثات المؤرشفة...'
@@ -324,6 +326,13 @@ export const arSettings = {
       }
     },
     appearance: {
+      redesign: {
+        toolViewTitle: 'استدعاءات الأدوات',
+        toolViewDesc: 'يخفي الوضع المبسط بيانات الأدوات الخام؛ ويعرض الوضع التقني المدخلات والمخرجات كاملة.',
+        product: 'مبسط',
+        introSplashTitle: 'شاشة الترحيب',
+        embedsTitle: 'معاينات الروابط'
+      },
       chatTextScaleTitle: 'حجم نص المحادثة',
       chatTextScaleDesc:
         'يضبط حجم نص المحادثة ومحرر الرسائل نسبةً إلى مقياس الواجهة. يبقى حجم الأشرطة الجانبية وعناصر التحكم كما هو.',
@@ -400,7 +409,7 @@ export const arSettings = {
       technicalDesc: 'يعرض تفاصيل أكثر عن الأدوات والتنفيذ.',
       themeTitle: 'الثيم',
       themeDesc: 'اختر ثيم سطح المكتب.',
-      themeProfileNote: profile => `سيطبق هذا الثيم على الملف الشخصي ${profile}.`,
+      themeProfileNote: profile => `سيطبق هذا الثيم على الوكيل ${profile}.`,
       installTitle: 'تثبيت ثيم',
       installDesc: 'ألصق رابط ثيم أو اسمه لتثبيته.',
       installPlaceholder: 'رابط أو اسم الثيم',
@@ -667,43 +676,44 @@ export const arSettings = {
       clear: 'مسح'
     },
     gateway: {
-      loading: 'جار تحميل إعدادات البوابة...',
-      unavailableTitle: 'إعدادات البوابة غير متاحة',
-      unavailableDesc: 'جسر IPC في سطح المكتب لا يوفّر إعدادات البوابة.',
+      loading: 'جار تحميل إعدادات الأجهزة...',
+      unavailableTitle: 'إعدادات الأجهزة غير متاحة',
+      unavailableDesc: 'جسر IPC في سطح المكتب لا يوفّر إعدادات الأجهزة.',
       webappHostTitle: 'مضيف Hermes',
       webappHostDesc:
-        'يعمل Webapp دائمًا على مضيف Hermes الذي يقدّمه. الاتصالات المحفوظة أدناه هي قائمة هذا الجهاز، مشتركة مع تطبيق Hermes Desktop؛ ويتم الوصول إلى البوابات الأخرى عبر هذا المضيف.',
+        'يعمل Webapp دائمًا على مضيف Hermes الذي يقدّمه. الاتصالات المحفوظة أدناه هي قائمة هذا الجهاز، مشتركة مع تطبيق Hermes Desktop؛ ويتم الوصول إلى الأجهزة الأخرى عبر هذا المضيف.',
       webappOauthPaste: {
         title: 'إكمال تسجيل الدخول',
-        description: 'إذا انتهت علامة تبويب تسجيل الدخول على عنوان لا يُحمَّل (هذا المتصفح ليس على جهاز البوابة)، فالصق ذلك العنوان هنا.',
+        description:
+          'إذا انتهت علامة تبويب تسجيل الدخول على عنوان لا يُحمَّل (هذا المتصفح ليس على الجهاز المتصل)، فالصق ذلك العنوان هنا.',
         placeholder: 'http://127.0.0.1:…/webapp/gateway-connections/oauth/callback?…',
         finish: 'إكمال',
         failed: 'تعذّر إكمال تسجيل الدخول'
       },
-      title: 'اتصال البوابة',
+      title: 'اتصال الجهاز',
       envOverride: 'تجاوز من البيئة',
       intro:
-        'يشغّل Hermes Desktop بوابة محلية خاصة افتراضياً. استخدم بوابة بعيدة عندما تريد أن يتحكم هذا التطبيق بخلفية Hermes تعمل مسبقاً على جهاز آخر أو خلف وكيل موثوق. اتصالات البوابة إعداد على مستوى الجهاز؛ ويتم اكتشاف الملفات الشخصية من البوابات المتصلة.',
+        'يتصل Hermes Desktop افتراضياً بـ Hermes على هذا الجهاز. اتصل بجهاز بعيد لاستخدام Hermes يعمل على جهاز آخر أو خلف وكيل موثوق. تُحفظ اتصالات الأجهزة على هذا الجهاز؛ ويتم اكتشاف الوكلاء من الأجهزة المتصلة.',
       envOverrideTitle: 'متغيرات البيئة تتحكم في جلسة سطح المكتب هذه.',
       envOverrideDesc: 'أزل HERMES_DESKTOP_REMOTE_URL و HERMES_DESKTOP_REMOTE_TOKEN لاستخدام الإعداد المحفوظ أدناه.',
-      localTitle: 'بوابة محلية',
+      localTitle: 'جهاز محلي',
       localDesc: 'تشغيل خلفية Hermes خاصة على localhost. هذا هو الافتراضي ويعمل دون اتصال.',
-      remoteTitle: 'بوابة بعيدة',
+      remoteTitle: 'جهاز بعيد',
       remoteDesc:
-        'صل واجهة سطح المكتب هذه بخلفية Hermes بعيدة. البوابات المستضافة تستخدم OAuth أو اسم مستخدم وكلمة مرور، والبوابات الذاتية قد تستخدم رمز جلسة.',
-      remoteUrlTitle: 'رابط البوابة البعيدة',
+        'صل واجهة سطح المكتب هذه بخلفية Hermes بعيدة. الأجهزة المستضافة تستخدم OAuth أو اسم مستخدم وكلمة مرور، والأجهزة ذاتية الاستضافة قد تستخدم رمز جلسة.',
+      remoteUrlTitle: 'رابط الجهاز البعيد',
       remoteUrlDesc: 'الرابط الأساسي لخلفية لوحة التحكم البعيدة. يمكن استخدام بادئات مسار مثل /hermes.',
-      probing: 'جار فحص طريقة مصادقة هذه البوابة...',
-      probeError: 'تعذر الوصول إلى هذه البوابة الآن. تحقق من الرابط وستظهر طريقة المصادقة عند الاستجابة.',
+      probing: 'جار فحص طريقة مصادقة هذا الجهاز...',
+      probeError: 'تعذر الوصول إلى هذا الجهاز الآن. تحقق من الرابط وستظهر طريقة المصادقة عند الاستجابة.',
       signedIn: 'تم تسجيل الدخول',
       signIn: 'تسجيل الدخول',
       signOut: 'تسجيل الخروج',
       signInWith: provider => `تسجيل الدخول عبر ${provider}`,
       authTitle: 'المصادقة',
-      authSignedInPassword: 'هذه البوابة تستخدم اسم مستخدم وكلمة مرور. أنت مسجل الدخول والجلسة تتجدد تلقائياً.',
-      authSignedInOauth: 'هذه البوابة تستخدم OAuth. أنت مسجل الدخول والجلسة تتجدد تلقائياً.',
-      authNeedsPassword: 'هذه البوابة تستخدم اسم مستخدم وكلمة مرور. سجل الدخول لتفويض تطبيق سطح المكتب.',
-      authNeedsOauth: provider => `هذه البوابة تستخدم OAuth. سجل الدخول عبر ${provider} لتفويض تطبيق سطح المكتب.`,
+      authSignedInPassword: 'يستخدم هذا الجهاز اسم مستخدم وكلمة مرور. أنت مسجل الدخول والجلسة تتجدد تلقائياً.',
+      authSignedInOauth: 'يستخدم هذا الجهاز OAuth. أنت مسجل الدخول والجلسة تتجدد تلقائياً.',
+      authNeedsPassword: 'يستخدم هذا الجهاز اسم مستخدم وكلمة مرور. سجل الدخول لتفويض تطبيق سطح المكتب.',
+      authNeedsOauth: provider => `يستخدم هذا الجهاز OAuth. سجل الدخول عبر ${provider} لتفويض تطبيق سطح المكتب.`,
       tokenTitle: 'رمز الجلسة',
       tokenDesc: 'رمز جلسة لوحة التحكم المستخدم لطلبات REST و WebSocket. اتركه فارغاً للإبقاء على الرمز المحفوظ.',
       existingToken: value => `رمز موجود ${value}`,
@@ -711,37 +721,38 @@ export const arSettings = {
       pasteSessionToken: 'ألصق رمز الجلسة',
       keychainEncryptionTitle: 'تشفير الأسرار المحفوظة باستخدام سلسلة مفاتيح النظام',
       keychainEncryptionDesc:
-        'معطّل افتراضياً. عند التفعيل، تُشفَّر رموز البوابة وبيانات تسجيل الدخول باستخدام سلسلة مفاتيح النظام (Keychain Access أو GNOME Keyring أو Windows DPAPI) — وقد يطلب النظام إذناً أو كلمة مرور. عند التعطيل، تُخزَّن كملفات عادية لا يقرؤها سوى حساب المستخدم الحالي.',
+        'معطّل افتراضياً. عند التفعيل، تُشفَّر رموز الجهاز وبيانات تسجيل الدخول باستخدام سلسلة مفاتيح النظام (Keychain Access أو GNOME Keyring أو Windows DPAPI) — وقد يطلب النظام إذناً أو كلمة مرور. عند التعطيل، تُخزَّن كملفات عادية لا يقرؤها سوى حساب المستخدم الحالي.',
       keychainEncryptionFailed: 'تعذّر تغيير إعداد تشفير الأسرار',
       testRemote: 'اختبار البعيد',
       saveForRestart: 'حفظ للتشغيل القادم',
       saveAndReconnect: 'حفظ وإعادة الاتصال',
       diagnostics: 'التشخيصات',
-      diagnosticsDesc: 'اعرض desktop.log في مدير الملفات، وهذا مفيد عند فشل تشغيل البوابة.',
+      diagnosticsDesc: 'اعرض desktop.log في مدير الملفات، وهذا مفيد عند فشل تشغيل Hermes.',
       openLogs: 'فتح السجلات',
-      incompleteTitle: 'إعداد البوابة البعيدة غير مكتمل',
-      incompleteSignIn: 'أدخل رابط البوابة البعيدة وسجل الدخول قبل التبديل إلى البعيد.',
-      incompleteToken: 'أدخل رابط البوابة البعيدة ورمز الجلسة قبل التبديل إلى البعيد.',
-      incompleteSignInTest: 'أدخل رابط البوابة البعيدة وسجل الدخول قبل الاختبار.',
-      incompleteTokenTest: 'أدخل رابط البوابة البعيدة ورمز الجلسة قبل الاختبار.',
-      enterUrlFirst: 'أدخل رابط البوابة البعيدة أولاً.',
-      restartingTitle: 'جار إعادة تشغيل اتصال البوابة',
-      savedTitle: 'تم حفظ إعدادات البوابة',
+      incompleteTitle: 'إعداد الجهاز البعيد غير مكتمل',
+      incompleteSignIn: 'أدخل رابط الجهاز البعيد وسجل الدخول قبل التبديل إلى البعيد.',
+      incompleteToken: 'أدخل رابط الجهاز البعيد ورمز الجلسة قبل التبديل إلى البعيد.',
+      incompleteSignInTest: 'أدخل رابط الجهاز البعيد وسجل الدخول قبل الاختبار.',
+      incompleteTokenTest: 'أدخل رابط الجهاز البعيد ورمز الجلسة قبل الاختبار.',
+      enterUrlFirst: 'أدخل رابط الجهاز البعيد أولاً.',
+      restartingTitle: 'جار إعادة الاتصال بالجهاز',
+      savedTitle: 'تم حفظ إعدادات الجهاز',
       restartingMessage: 'سيعيد Hermes Desktop الاتصال باستخدام الإعدادات المحفوظة.',
       savedMessage: 'تم الحفظ للتشغيل القادم.',
       connectedTo: (baseUrl, version) => `متصل بـ ${baseUrl}${version ? ` · Hermes ${version}` : ''}`,
-      reachableTitle: 'البوابة البعيدة قابلة للوصول',
+      reachableTitle: 'يمكن الوصول إلى الجهاز البعيد',
       signedOutTitle: 'تم تسجيل الخروج',
-      signedOutMessage: 'تم مسح جلسة البوابة البعيدة.',
-      failedLoad: 'فشل تحميل إعدادات البوابة',
+      signedOutMessage: 'تم مسح جلسة الجهاز البعيد.',
+      failedLoad: 'فشل تحميل إعدادات الجهاز',
       signInFailed: 'فشل تسجيل الدخول',
       signOutFailed: 'فشل تسجيل الخروج',
-      testFailed: 'فشل اختبار البوابة البعيدة',
-      applyFailed: 'تعذر تطبيق إعدادات البوابة',
-      saveFailed: 'تعذر حفظ إعدادات البوابة',
+      testFailed: 'فشل اختبار الجهاز البعيد',
+      applyFailed: 'تعذر تطبيق إعدادات الجهاز',
+      saveFailed: 'تعذر حفظ إعدادات الجهاز',
       webAccess: {
         title: 'الوصول عبر الويب',
-        intro: 'افتح Hermes الموجود على هذا الحاسوب من هاتفك أو من حاسوب آخر، مع تسجيل الدخول بحساب Nous. من يسجّل الدخول يمكنه تشغيل الأوامر على هذا الحاسوب.',
+        intro:
+          'افتح Hermes الموجود على هذا الحاسوب من هاتفك أو من حاسوب آخر، مع تسجيل الدخول بحساب Nous. من يسجّل الدخول يمكنه تشغيل الأوامر على هذا الحاسوب.',
         failed: 'تعذّر تغيير الوصول عبر الويب',
         running: 'قيد التشغيل',
         stopped: 'متوقف',
@@ -754,30 +765,32 @@ export const arSettings = {
         runningLan: 'افتح هذا العنوان على جهاز في الشبكة نفسها.',
         runningPublic: 'يُقدَّم عبر عنوانك.',
         runningLocal: 'يمكن فتحه من هذا الحاسوب فقط. أوقفه ثم شغّله من جديد لفتحه من أجهزة أخرى.',
-        pendingOn: 'تم الحفظ. ستقدّم البوابة تطبيق الويب بعد إعادة تشغيلها.',
-        pendingOff: 'تم الإيقاف، لكن البوابة تواصل تقديم تطبيق الويب حتى إعادة تشغيلها.',
-        unavailableDetail: reason => `تعذّر على البوابة تقديم تطبيق الويب: ${reason}`,
-        restartBusy: 'تم الحفظ. توجد محادثة قيد التشغيل، لذا لم تُعَد تشغيل البوابة. اختر «إعادة تشغيل البوابة» عند انتهائها.',
-        restartFailed: 'تم الحفظ، لكن تعذّرت إعادة تشغيل البوابة. اختر «إعادة تشغيل البوابة» للمحاولة مجددًا.',
-        restartFailedBecause: reason => `تعذّرت إعادة تشغيل البوابة: ${reason}`,
-        startTimedOut: 'لم تقدّم البوابة تطبيق الويب خلال 90 ثانية.',
-        stopTimedOut: 'لم تتوقف البوابة عن تقديم تطبيق الويب خلال 90 ثانية.',
+        pendingOn: 'تم الحفظ. سيقدّم Hermes تطبيق الويب بعد إعادة تشغيله.',
+        pendingOff: 'تم الإيقاف، لكن Hermes يواصل تقديم تطبيق الويب حتى إعادة تشغيله.',
+        unavailableDetail: reason => `تعذّر على Hermes تقديم تطبيق الويب: ${reason}`,
+        restartBusy:
+          'تم الحفظ. توجد محادثة قيد التشغيل، لذا لم تتم إعادة تشغيل Hermes. اختر «إعادة تشغيل Hermes» عند انتهائها.',
+        restartFailed: 'تم الحفظ، لكن تعذّرت إعادة تشغيل Hermes. اختر «إعادة تشغيل Hermes» للمحاولة مجددًا.',
+        restartFailedBecause: reason => `تعذّرت إعادة تشغيل Hermes: ${reason}`,
+        startTimedOut: 'لم يقدّم Hermes تطبيق الويب خلال 90 ثانية.',
+        stopTimedOut: 'لم يتوقف Hermes عن تقديم تطبيق الويب خلال 90 ثانية.',
         startStages: {
           preparing: 'جارٍ تجهيز تطبيق الويب. قد يستغرق إنشاؤه بضع دقائق.',
           building: 'جارٍ إنشاء تطبيق الويب. قد يستغرق ذلك بضع دقائق.',
           registering: 'جارٍ إعداد تسجيل الدخول عبر Nous لهذا العنوان.',
-          restarting: 'جارٍ إعادة تشغيل البوابة لتقديم تطبيق الويب.'
+          restarting: 'جارٍ إعادة تشغيل Hermes لتقديم تطبيق الويب.'
         },
         startElapsed: time => `الوقت المنقضي: ${time}`,
         start: 'تشغيل',
         stop: 'إيقاف',
-        restartGateway: 'إعادة تشغيل البوابة',
+        restartGateway: 'إعادة تشغيل Hermes',
         modeLan: 'هذه الشبكة',
         modeLanDetail: url => `تفتح الأجهزة على شبكة Wi-Fi العنوان ${url}. استخدمه على شبكة تثق بها فقط.`,
         lanUnencrypted: 'الاتصال غير مشفّر: يمكن لآخرين على هذه الشبكة قراءة ما ترسله وتستقبله.',
         noLan: 'لا يملك هذا الحاسوب عنوان شبكة يمكن للأجهزة الأخرى الوصول إليه.',
         modePublic: 'عنواني الخاص',
-        modePublicDetail: port => `عنوان HTTPS تديره بالفعل، مثل Tailscale Serve أو نفق، يحوّل إلى http://127.0.0.1:${port}.`
+        modePublicDetail: port =>
+          `عنوان HTTPS تديره بالفعل، مثل Tailscale Serve أو نفق، يحوّل إلى http://127.0.0.1:${port}.`
       }
     },
     keys: {
@@ -787,7 +800,7 @@ export const arSettings = {
     },
     profileScope: {
       appliesTo: 'ينطبق على',
-      editsProfile: profile => `تنطبق التغييرات في هذه الصفحة على الملف الشخصي «${profile}».`
+      editsProfile: profile => `تنطبق التغييرات في هذه الصفحة على الوكيل «${profile}».`
     },
     mcp: {
       loading: 'جار تحميل خوادم MCP...',
@@ -902,8 +915,8 @@ export const arSettings = {
           hint: 'تفكيك المهام'
         },
         profile_describer: {
-          label: 'واصف الملف الشخصي',
-          hint: 'أوصاف ملفات شخصية تلقائية'
+          label: 'واصف الوكيل',
+          hint: 'أوصاف تلقائية للوكلاء'
         },
         curator: {
           label: 'المنسّق',
@@ -988,9 +1001,10 @@ export const arSettings = {
       browserRealProfile: {
         reimportSignins: 'إعادة استيراد تسجيلات الدخول',
         signinsImportedTitle: 'تسجيلات الدخول في المتصفح المدمج',
-        signinsImported: count => `تم تسجيل الدخول إلى المتصفح المدمج باستخدام ${count} من ملفات تعريف الارتباط من ملف متصفحك.`,
+        signinsImported: count =>
+          `تم تسجيل الدخول إلى المتصفح المدمج باستخدام ${count} من ملفات تعريف الارتباط من ملف متصفحك.`,
         signinsRemote: 'تعمل هذه الواجهة الخلفية على جهاز آخر، لذا لا يُستورد ملف متصفحها إلى المتصفح المدمج.',
-        signinsFailed: 'تعذر استيراد تسجيلات الدخول إلى المتصفح المدمج',
+        signinsFailed: 'تعذر استيراد تسجيلات الدخول إلى المتصفح المدمج'
       },
       loadingConfig: 'جار تحميل الإعدادات',
       savedTitle: 'تم حفظ بيانات الاعتماد',

@@ -1,11 +1,12 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
 import { registry } from '@/contrib/registry'
 import { $paneStates, setPaneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
+import { $shellChoice } from '@/store/shell-variant'
 import { stubResizeObserver } from '@/test/jsdom'
 
 import { group, split } from '../model'
@@ -73,6 +74,16 @@ const revealPane = (id: string) => {
 }
 
 const overlayTab = (paneId: string) => document.querySelector<HTMLElement>(`[data-narrow-overlay-tab="${paneId}"]`)
+
+it('reveals a pane unhidden by the same user action before React rerenders', () => {
+  $hiddenTreePanes.set(new Set(['sessions']))
+  render(<NarrowOverlays />)
+  act(() => {
+    $hiddenTreePanes.set(new Set())
+    window.dispatchEvent(new CustomEvent(PANE_TOGGLE_REVEAL_EVENT, { detail: { id: 'sessions', mode: 'open' } }))
+  })
+  expect(document.querySelector('[data-narrow-overlay="sessions"]')).not.toBeNull()
+})
 
 // The page the browser-hosted Desktop serves (its bridge writes this marker).
 const asBrowserHost = () => {
@@ -160,6 +171,9 @@ describe('narrow overlay of a stacked zone', () => {
 
   it('reserves the browser touch titlebar above overlay tabs', () => {
     window.document.documentElement.dataset.hermesDesktopHost = 'browser'
+    // Classic's pointer band is the compact one; the redesign's 60px band already fits touch.
+    $shellChoice.set(false)
+    onTestFinished(() => $shellChoice.set(null))
 
     const overlayInset = (touch: boolean) => {
       vi.stubGlobal(

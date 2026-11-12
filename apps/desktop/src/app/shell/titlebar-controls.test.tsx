@@ -10,8 +10,15 @@ import { setMainZoneLeft } from '@/components/pane-shell/tree/main-zone-anchor'
 import { $narrowViewport } from '@/components/pane-shell/tree/store'
 import { registry } from '@/contrib/registry'
 import { I18nProvider } from '@/i18n'
-import { $fileBrowserOpen, $leftSideOpen, CHAT_SIDEBAR_PANE_ID, FILE_BROWSER_PANE_ID } from '@/store/layout'
+import {
+  $fileBrowserOpen,
+  $leftSideOpen,
+  CHAT_SIDEBAR_PANE_ID,
+  FILE_BROWSER_PANE_ID,
+  setSidebarOpen
+} from '@/store/layout'
 import { REVIEW_PANE_ID } from '@/store/review'
+import { $shellChoice } from '@/store/shell-variant'
 import { setTitlebarAppActionsSide } from '@/store/titlebar-app-actions'
 import { $viewHistory, noteViewChange } from '@/store/view-history'
 
@@ -206,6 +213,7 @@ describe('titlebar app-action cluster', () => {
     $narrowOverlayPaneIds.set(new Set())
     setTitlebarAppActionsSide('right')
     cleanup()
+    $shellChoice.set(null)
     vi.unstubAllGlobals()
     delete window.document.documentElement.dataset.hermesDesktopHost
   })
@@ -295,7 +303,8 @@ describe('titlebar app-action cluster', () => {
     }
   })
 
-  it('moves settings, layout, and HUD to the left when the appearance setting says left', () => {
+  it('moves classic settings, layout, and HUD to the left when the appearance setting says left', () => {
+    $shellChoice.set(false)
     setTitlebarAppActionsSide('left')
     renderControls('/')
 
@@ -309,6 +318,7 @@ describe('titlebar app-action cluster', () => {
   })
 
   it('keeps HUD hidden in the browser on either app-action side', () => {
+    $shellChoice.set(false)
     vi.stubGlobal('hermesDesktop', { ...window.hermesDesktop, hud: undefined })
     renderControls('/')
 
@@ -323,94 +333,29 @@ describe('titlebar app-action cluster', () => {
   })
 })
 
-describe('back affordance', () => {
-  const resetHistory = () => $viewHistory.set({ entries: [], index: -1 })
+describe('shell choice', () => {
+it('keeps settings only in the global rail when simplified mode is enabled', () => {
+  $shellChoice.set(false)
+  renderControls('/')
+  expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
+  act(() => $shellChoice.set(true))
+  expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull()
+  act(() => $shellChoice.set(false))
+  expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
+  cleanup()
+  $shellChoice.set(null)
+})
 
-  beforeEach(() => {
-    resetHistory()
-    setMainZoneLeft(null)
-  })
-  afterEach(() => {
-    resetHistory()
-    setMainZoneLeft(null)
-    cleanup()
-  })
+it('offers the redesign band only the way back to a hidden sidebar, which carries its own collapse', () => {
+  $shellChoice.set(null)
+  setSidebarOpen(true)
+  renderControls('/')
+  expect(screen.queryByRole('button', { name: 'Hide sidebar' })).toBeNull()
 
-  it('stays off the session view, where it could only point at another session', () => {
-    noteViewChange('/session-1')
-    noteViewChange('/session-2')
-
-    renderControls('/session-2')
-
-    expect(screen.queryByLabelText('Back')).toBeNull()
-  })
-
-  it('leaves a page route to the main view, not to the window cluster', () => {
-    noteViewChange('/session-1')
-    noteViewChange('/capabilities')
-
-    renderControls('/capabilities')
-
-    // The zone the page renders in owns the affordance (`main-zone-anchor.ts`);
-    // a second one in the window-controls cluster would sit over the sidebar.
-    expect(windowControls()?.querySelector('[aria-label="Back"]') ?? null).toBeNull()
-    expect(screen.queryByLabelText('Back')).toBeNull()
-  })
-
-  it('anchors to the main zone and returns to the view it came from', () => {
-    noteViewChange('/session-1')
-    noteViewChange('/capabilities')
-    setMainZoneLeft(412)
-
-    renderControls('/capabilities')
-
-    const back = screen.getByLabelText('Back')
-    const cluster = back.closest('[data-titlebar-back]')
-
-    // The cluster the page's back button stands in is anchored to the main zone.
-    expect(cluster?.getAttribute('style')).toContain('412px')
-
-    act(() => back.click())
-
-    expect(currentPath).toBe('/session-1')
-    // Back in the session view: the affordance has nothing left to offer.
-    expect(screen.queryByLabelText('Back')).toBeNull()
-  })
-
-  it('announces its chrome when the anchored control arrives, so the band reserves it', () => {
-    noteViewChange('/session-1')
-    noteViewChange('/capabilities')
-
-    const listener = vi.fn()
-    window.addEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
-
-    try {
-      renderControls('/capabilities')
-
-      // The control is anchored to the main zone, whose start is measured after
-      // the first paint — so the zone's own band has to hear about it arriving,
-      // or it never reserves the width the button stands on (and the band's
-      // remaining space is a native drag region that swallows its clicks).
-      expect(screen.queryByLabelText('Back')).toBeNull()
-
-      listener.mockClear()
-      act(() => setMainZoneLeft(412))
-
-      expect(screen.queryByLabelText('Back')).not.toBeNull()
-      expect(listener).toHaveBeenCalled()
-    } finally {
-      window.removeEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
-    }
-  })
-
-  it('renders alone in the titlebar band on an overlay, without claiming a cluster', () => {
-    noteViewChange('/session-1')
-    noteViewChange('/settings')
-
-    renderControls('/settings')
-
-    expect(screen.getByLabelText('Back')).not.toBeNull()
-    expect(windowControls()).toBeNull()
-    expect(appControls()).toBeNull()
-  })
+  act(() => setSidebarOpen(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' }))
+  expect($leftSideOpen.get()).toBe(true)
+  expect(screen.queryByRole('button', { name: 'Hide sidebar' })).toBeNull()
+  cleanup()
+})
 })

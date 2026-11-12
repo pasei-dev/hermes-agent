@@ -1,0 +1,189 @@
+/* The redesigned chat stage (Figma 906:19804, conversation 491:40634).
+   The transcript and the docked composer share ONE centred column: the
+   composer is the column's full width (640), the transcript insets 20px inside
+   it (600). Both resolve 100cqw against this container, so they measure the
+   same box even though one lives in the scroller and the other overlays it. */
+:root[data-shell='portal'] [data-chat-surface] {
+  --portal-conversation-width: var(--portal-column-conversation);
+  --portal-conversation-inset: 1.25rem;
+  --portal-conversation-gutter: 1rem;
+  --portal-conversation-column: min(var(--portal-conversation-width), 100cqw - 2 * var(--portal-conversation-gutter));
+  --portal-landing-composer-width: var(--portal-column-landing);
+  /* Figma's sizes are the Default text-size preset; other presets scale from it. */
+  --chat-text-scale: var(--chat-text-scale-relative, 1);
+  container: chat-stage / inline-size;
+}
+
+/* The landing also needs the stage height to decide whether the composer can
+   float in the middle. Decoration only; the editor keeps its stable host
+   through the first response. */
+:root[data-shell='portal'] [data-chat-surface][data-chat-landing='true'] {
+  container: chat-stage / size;
+}
+
+/* Docked 30px above the stage floor (491:40634). The band under the card is
+   stage-coloured so the transcript never shows through beneath the edge. */
+:root[data-shell='portal'] [data-slot='composer-dock'][data-redesigned-composer]:not([data-popped-out]) {
+  --portal-composer-dock-floor: 1.875rem;
+  --portal-composer-dock-fade: 1rem;
+  width: calc(var(--portal-conversation-column) + 10px);
+  padding-top: var(--portal-composer-dock-fade);
+  padding-bottom: var(--portal-composer-dock-floor);
+  /* Stage-coloured under the card's floor, and a short fade above its top edge, so a line scrolling
+     under the composer dissolves instead of being cut mid-glyph (short windows show it most). */
+  background:
+    linear-gradient(
+      to top,
+      var(--ui-chat-surface-background) var(--portal-composer-dock-floor),
+      transparent var(--portal-composer-dock-floor)
+    ),
+    linear-gradient(to bottom, transparent, var(--ui-chat-surface-background) var(--portal-composer-dock-fade));
+  background-repeat: no-repeat;
+  background-size:
+    100% 100%,
+    100% var(--portal-composer-dock-fade);
+}
+
+:root[data-shell='portal']
+  [data-chat-landing='true']
+  [data-slot='composer-dock'][data-redesigned-composer]:not([data-popped-out]) {
+  width: calc(min(var(--portal-landing-composer-width), var(--portal-conversation-column)) + 10px);
+}
+
+/* Figma centres the composer in the stage above a 30px bottom pad. A short
+   pane or a software keyboard needs the ordinary bottom dock instead. */
+@container chat-stage (min-height: 34rem) {
+  :root[data-shell='portal']
+    [data-chat-landing='true']
+    [data-slot='composer-dock'][data-redesigned-composer]:not([data-popped-out]) {
+    top: calc(50% - 0.9375rem);
+    bottom: auto;
+    translate: -50% -50%;
+    padding-block: 0;
+    background: none;
+  }
+}
+
+/* Hero photo (906:19874, mask 906:19873). Figma: a 1084px square at
+   (-174.22, -287.71) in the 840px stage, luminosity-blended at .6 under a .6
+   alpha mask that holds to stage y 180.5 and is gone by y 356.8. The photo
+   keeps Figma's size on every stage (Simple's wider stage, a collapsed
+   sidebar, a narrow window) so the hand reads the same everywhere; it stays
+   anchored on the stage centre and its side edges fade out, so a stage wider
+   than the crop never shows where the photo ends. Offsets are fractions of
+   the image itself; the fade stays at the same absolute stage heights from
+   the panel's top edge. Opacity carries layer x mask alpha (.6 x .6). */
+.chat-stage-art {
+  --chat-stage-art-alpha: 0.04;
+  --chat-stage-art-top: 26.542%;
+  /* The photo's paper border (1.5% each side) never shows; the side fades end where Figma's stage
+     edges cut the crop. */
+  --chat-stage-art-border: 2%;
+  --chat-stage-art-fade-start: 16.072%;
+  --chat-stage-art-fade-end: 93.505%;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1084px;
+  max-width: none;
+  height: auto;
+  translate: -54.817% calc(-1 * var(--chat-stage-art-top));
+  opacity: var(--chat-stage-art-alpha);
+  mix-blend-mode: luminosity;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      #000 calc(var(--chat-stage-art-top) + 180.5px),
+      transparent calc(var(--chat-stage-art-top) + 356.8px)
+    ),
+    linear-gradient(
+      to right,
+      transparent var(--chat-stage-art-border),
+      #000 var(--chat-stage-art-fade-start),
+      #000 var(--chat-stage-art-fade-end),
+      transparent calc(100% - var(--chat-stage-art-border))
+    );
+  mask-composite: intersect;
+  pointer-events: none;
+}
+
+/* Landing → conversation: the photo settles to its trace on the slow step, never delaying the
+   transcript (it is decoration under it). */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-shell='portal'] .chat-stage-art {
+    transition: opacity var(--portal-motion-slow) var(--portal-ease);
+  }
+}
+
+:root.dark[data-shell='portal'] .chat-stage-art[data-landing] {
+  --chat-stage-art-alpha: 0.36;
+}
+
+/* Light (491:47539): a 1028px square centred at y -232, .3 x .3 on landing
+   and in a conversation alike. */
+:root[data-shell='portal']:not(.dark) .chat-stage-art {
+  --chat-stage-art-alpha: 0.09;
+  --chat-stage-art-top: 22.573%;
+  --chat-stage-art-fade-start: 9.15%;
+  --chat-stage-art-fade-end: 90.85%;
+  width: 1028.44px;
+  translate: -50% calc(-1 * var(--chat-stage-art-top));
+}
+
+/* Profile wake / sync notices over the stage: flat 6px plates in body type. */
+:root[data-shell='portal'] :is([data-slot='chat-swap-pill'], [data-slot='chat-sync-badge']) {
+  border: 0;
+  border-radius: var(--portal-radius-surface);
+  background: var(--ui-bg-elevated);
+  box-shadow: none;
+  font-family: var(--portal-font-body);
+  letter-spacing: var(--portal-tracking-ui);
+}
+
+:root[data-shell='portal'] [data-slot='chat-swap-pill'] {
+  padding: 0.5rem 0.75rem;
+  font-size: var(--portal-type-meta-size);
+}
+
+/* The stage header (connection label + Agent settings) is a transparent row
+   over the stage's top edge, out of flow: the photo and the transcript start
+   at the panel's top under its rounded corner. Only its controls take the
+   pointer; the transcript reserves the row and fades beneath it. */
+:root[data-shell='portal'] {
+  --portal-stage-header-height: 3rem;
+}
+
+:root[data-shell='portal'] [data-slot='portal-conversation-header'] {
+  position: absolute;
+  z-index: var(--portal-layer-stage-overlay);
+  inset-inline: 0;
+  top: var(--zone-band-height, 0px);
+  display: flex;
+  height: var(--portal-stage-header-height);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-inline: 1.25rem 0.75rem;
+  pointer-events: none;
+}
+
+:root[data-shell='portal'] [data-slot='portal-conversation-header'] > * {
+  pointer-events: auto;
+}
+
+/* Agent settings: a labelled 30px chrome plate (portal-shell.css tones). */
+:root[data-shell='portal'] [data-slot='portal-conversation-header'] button {
+  height: var(--portal-chrome-button-size);
+  gap: 0.375rem;
+  padding-inline: 0.625rem;
+  border-radius: var(--portal-radius-control);
+  background-color: var(--portal-raw-ink-2);
+  color: var(--ui-text-secondary);
+  font-size: var(--portal-type-meta-size);
+  font-weight: 400;
+}
+
+:root[data-shell='portal'] [data-slot='portal-conversation-header'] button:hover:not(:disabled) {
+  background-color: var(--portal-raw-ink-5);
+  color: var(--ui-text-primary);
+}

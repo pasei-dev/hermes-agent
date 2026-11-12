@@ -8,26 +8,35 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, lazy, memo, type ReactNode, Suspense, useEffect, useMemo } from 'react'
+import { type ComponentProps, memo, type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router'
 
 import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
+import { useI18n } from '@/i18n'
 import { ESCAPE_PRIORITY, isTopEscapeLayer, pushEscapeLayer } from '@/lib/escape-layers'
 import { triggerHaptic } from '@/lib/haptics'
 import { isEditableTarget } from '@/lib/keybinds/combo'
 import { $activeConnectionId } from '@/store/connections'
-import { $gateway } from '@/store/gateway'
+import { $gateway, requestGatewayForAgent } from '@/store/gateway'
+import { $showsAdvancedChrome } from '@/store/interface-mode'
 import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $freshDraftReady, $gatewayState } from '@/store/session'
+import { $focusedSessionIsTile } from '@/store/session-focus'
+import { $setupGuideOnboarding } from '@/store/shell-policy'
+import { usePortalShell } from '@/store/shell-variant'
+import { $statusbarVisible } from '@/store/statusbar-prefs'
 import { goBackToPreviousView } from '@/store/view-history'
 
 import { ChatView } from '../chat'
 import { ChatSidebar } from '../chat/sidebar'
+import { PortalSidebar } from '../chat/sidebar/portal/portal-sidebar'
+import { ArtifactsView, CapabilitiesView, MessagingView } from '../page-views'
+import { PortalGatewayMenuPanel } from '../redesign/portal-gateway-menu-panel'
 import { TerminalPaneChrome } from '../right-sidebar/terminal/chrome'
-import { appViewForPath, contributedRoutes, isOverlayView, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
+import { contributedRoutes, isOverlayView, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
 import { useStatusSnapshot } from '../shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from '../shell/hooks/use-statusbar-items'
 import { ModelMenuPanel } from '../shell/model-menu-panel'
@@ -36,14 +45,8 @@ import { StatusbarControls } from '../shell/statusbar-controls'
 
 import { latestChatActions, latestSidebarActions } from './latest-actions'
 import { setStatusbarItemGroup, useStatusbarContributions } from './panes'
+import { KeptChatRoutes } from './route-cover'
 import type { SidebarActions, WiringActions } from './types'
-
-// Same lazy-view split as DesktopController — pages load on demand. The
-// full-page views the workspace route table mounts live here; overlay views
-// (agents/settings/…) are the controller's and stay in wiring.tsx.
-const ArtifactsView = lazy(async () => ({ default: (await import('../artifacts')).ArtifactsView }))
-const MessagingView = lazy(async () => ({ default: (await import('../messaging')).MessagingView }))
-const CapabilitiesView = lazy(async () => ({ default: (await import('../capabilities')).CapabilitiesView }))
 
 export function LegacySessionRedirect() {
   const { sessionId } = useParams()
@@ -115,7 +118,20 @@ export const SidebarSurface = memo(function SidebarSurface({
 }) {
   const latestActions = useMemo(() => latestSidebarActions(actions), [actions])
 
-  return <ChatSidebar currentView={currentView} {...latestActions} />
+  const portal = usePortalShell()
+  const Sidebar = portal ? PortalSidebar : ChatSidebar
+  // Under a route overlay the redesign's sidebar is covered, and beside a page it is collapsed, but
+  // never gone (route-cover.tsx, NavigationWithChatSidebar): it keeps the view it was showing, so moving
+  // between pages and overlays never re-renders it.
+  const focusedTile = useStore($focusedSessionIsTile)
+  const covered = portal && (isOverlayView(currentView) || (currentView !== 'chat' && !focusedTile))
+  const [shownView, setShownView] = useState(currentView)
+
+  if (!covered && shownView !== currentView) {
+    setShownView(currentView)
+  }
+
+  return <Sidebar currentView={covered ? shownView : currentView} {...latestActions} />
 })
 
 export const TerminalSurface = memo(function TerminalSurface() {
@@ -133,20 +149,38 @@ export const StatusbarSurface = memo(function StatusbarSurface({
   actions,
   agentsOpen,
   chatOpen,
-  commandCenterOpen
+  commandCenterOpen,
+  onClose
 }: {
   actions: WiringActions
   agentsOpen: boolean
   chatOpen: boolean
   commandCenterOpen: boolean
+  onClose?: () => void
 }) {
+  const portal = usePortalShell()
+  const { t } = useI18n()
+  const advanced = useStore($showsAdvancedChrome)
+  // The mode-resolved bar visibility: in Simple it is up exactly when the bar carries something
+  // that must stay reachable (the free tier's Sign in, onboarding progress).
+  const statusbarVisible = useStore($statusbarVisible)
   const activeConnectionId = useStore($activeConnectionId)
   const activeGatewayProfile = useStore($activeGatewayProfile)
   const gatewayState = useStore($gatewayState)
-  const demoLayout = useStore($chatOnboardingSolo)
+  const setupGuide = useStore($setupGuideOnboarding)
+  // The classic first run's demo layout hides the bar: behaviour, so it follows the preference.
+  const demoLayout = useStore($chatOnboardingSolo) && !setupGuide
   const freshDraftReady = useStore($freshDraftReady)
   const gatewayScope = `${activeConnectionId ?? ''}\0${activeGatewayProfile}`
-  const { inferenceStatus, statusSnapshot } = useStatusSnapshot(gatewayState, actions.requestGateway, gatewayScope)
+
+  // Status describes the selected gateway/profile, not a focused chat on another owner.
+  const requestStatus = useCallback(
+    <T,>(method: string, params?: Record<string, unknown>) =>
+      requestGatewayForAgent<T>(activeConnectionId, activeGatewayProfile, method, params),
+    [activeConnectionId, activeGatewayProfile]
+  )
+
+  const { inferenceStatus, statusSnapshot } = useStatusSnapshot(gatewayState, requestStatus, gatewayScope)
   const extraLeftItems = useStatusbarContributions('left')
   const extraRightItems = useStatusbarContributions('right')
 
@@ -167,8 +201,38 @@ export const StatusbarSurface = memo(function StatusbarSurface({
     toggleCommandCenter: actions.toggleCommandCenter
   })
 
-  // The demo layout (first-run intro) has no status bar.
-  return demoLayout ? null : <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} />
+  if (demoLayout) {
+    return null
+  }
+
+  if (onClose) {
+    return (
+      <>
+        <PortalGatewayMenuPanel
+          gatewayState={gatewayState}
+          inferenceStatus={inferenceStatus}
+          key={gatewayScope}
+          onClose={onClose}
+          onOpenSystem={() => actions.openCommandCenterSection('system')}
+          statusSnapshot={statusSnapshot}
+        />
+        {(advanced || statusbarVisible) && (
+          <details className="px-3 pb-3">
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              {t.commandCenter.sections.system}
+            </summary>
+            <StatusbarControls
+              items={statusbarItems.filter(item => item.id !== 'gateway-health')}
+              leftItems={leftStatusbarItems}
+              sidebar
+            />
+          </details>
+        )}
+      </>
+    )
+  }
+
+  return <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} sidebar={portal} />
 })
 
 /** The workspace pane: the real route table (chat + full-page views + plugin
@@ -220,6 +284,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
   )
 
   const chatActions = useMemo(() => latestChatActions(actions), [actions])
+  const portal = usePortalShell()
 
   const chatView = (
     <ChatView
@@ -263,42 +328,55 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
     </div>
   )
 
-  // An overlay route (settings/…) owns the window as a card over the shell, so
-  // the workspace pane shows nothing under it — the session view stands only on
-  // chat and page routes.
-  const base = isOverlayView(appViewForPath(location.pathname)) ? null : chatView
-
-  return (
+  // Everything the router reads as a chat location (appViewForPath), redirects included.
+  const chatRoutes = (
     <>
-      {base}
-      <Routes>
-        <Route element={page(<CapabilitiesView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="capabilities" />
-        <Route element={page(<MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="messaging" />
-        <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
-        {/* Registry-contributed pages (core features + plugins) render in the
+      <Route element={chatView} index />
+      <Route element={chatView} path=":sessionId" />
+      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
+      <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
+      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
+    </>
+  )
+
+  const pageRoutes = (
+    <>
+      <Route element={page(<CapabilitiesView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="capabilities" />
+      <Route element={page(<MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="messaging" />
+      <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
+      <Route element={null} path="agents" />
+      <Route element={null} path="command-center" />
+      <Route element={null} path="cron" />
+      <Route element={null} path="profiles" />
+      <Route element={null} path="settings" />
+      <Route element={null} path="starmap" />
+      <Route element={null} path="webhooks" />
+      {/* Registry-contributed pages (core features + plugins) render in the
             workspace pane like any built-in view — behind the same blast wall
             as every other contribution mount. */}
-        {routeContributions.map(route => (
-          <Route
-            element={page(
-              <ContribBoundary id={route.key}>
-                <ContribRender render={route.render} />
-              </ContribBoundary>
-            )}
-            key={route.key}
-            path={route.path.slice(1)}
-          />
-        ))}
-        {/* Session, index, and overlay paths render no layer: the base session
-            view already stands (or nothing, under an overlay card). Overlay
-            paths fall through the `:sessionId` rung — they are reserved, so the
-            session-id parser never mistakes them for a session. */}
-        <Route element={null} index />
-        <Route element={null} path=":sessionId" />
-        <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
-        <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
-        <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
-      </Routes>
+      {routeContributions.map(route => (
+        <Route
+          element={page(
+            <ContribBoundary id={route.key}>
+              <ContribRender render={route.render} />
+            </ContribBoundary>
+          )}
+          key={route.key}
+          path={route.path.slice(1)}
+        />
+      ))}
     </>
+  )
+
+  // The redesign paints pages over a kept chat (route-cover.tsx); classic swaps them in place.
+  if (portal) {
+    return <KeptChatRoutes chat={chatRoutes} pages={pageRoutes} />
+  }
+
+  return (
+    <Routes>
+      {chatRoutes}
+      {pageRoutes}
+    </Routes>
   )
 })

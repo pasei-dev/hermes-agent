@@ -15,6 +15,12 @@ function chromeKey(): string {
   return `${connection?.isFullscreen ? 1 : 0}:${position?.x ?? ''}:${position?.y ?? ''}`
 }
 
+function setReservation(element: HTMLElement, name: string, value: string) {
+  if (element.style.getPropertyValue(name) !== value) {
+    element.style.setProperty(name, value)
+  }
+}
+
 /** Reserve actual chrome intersections, including after a neighbor becomes a rail. */
 export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: boolean, minimized: boolean) {
   const [belowControls, setBelowControls] = useState(true)
@@ -26,22 +32,23 @@ export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: bo
       return
     }
 
+    // Clusters first: during a route overlay there are none, and reading the panel would force a
+    // layout of whatever the route just mounted for nothing. Empty chrome keeps the last reservation.
+    const leftEl = document.querySelector<HTMLElement>('[data-titlebar-cluster="left"]')
+    const rightEl = document.querySelector<HTMLElement>('[data-titlebar-cluster="right"]')
+
+    if (!leftEl || !rightEl) {
+      return
+    }
+
     const rect = element.getBoundingClientRect()
 
     if (!rect.width) {
       return
     }
 
-    const leftControls = document.querySelector<HTMLElement>('[data-titlebar-cluster="left"]')?.getBoundingClientRect()
-
-    const rightControls = document
-      .querySelector<HTMLElement>('[data-titlebar-cluster="right"]')
-      ?.getBoundingClientRect()
-
-    // Empty chrome during a route overlay retains the last safe reservation.
-    if (!leftControls || !rightControls) {
-      return
-    }
+    const leftControls = leftEl.getBoundingClientRect()
+    const rightControls = rightEl.getBoundingClientRect()
 
     // The window-controls cluster and the way back out of a page both stand at
     // the LEFT edge of whatever they cover, so the zone's band has to clear
@@ -70,8 +77,8 @@ export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: bo
     // titlebar tab strip), and a drag region wins hit-testing over anything
     // painted above it — a button inside it is visible and dead.
     const right = Math.min(rect.width - left, Math.max(0, rect.right - rightControls.left))
-    element.style.setProperty('--panel-titlebar-left', `${left}px`)
-    element.style.setProperty('--panel-titlebar-right', `${right}px`)
+    setReservation(element, '--panel-titlebar-left', `${left}px`)
+    setReservation(element, '--panel-titlebar-right', `${right}px`)
     setBelowControls(minimized || rect.width - left - right < 120)
   }, [enabled, minimized, ref])
 
@@ -94,10 +101,10 @@ export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: bo
       }
     }
 
-    const onChromeChanged = () => {
-      observe()
-      measure()
-    }
+    // A route switch mounts a different cluster set. Observing it is enough: the observer's first
+    // delivery for each new element measures after the frame's layout, where the reads are free,
+    // instead of forcing a layout of the page the route just mounted (that cost 20-190ms a click).
+    const onChromeChanged = observe
 
     observe()
     measure()

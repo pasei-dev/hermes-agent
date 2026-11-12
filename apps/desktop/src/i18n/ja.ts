@@ -2,6 +2,7 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
+import { desktopTerms } from './desktop-terms'
 import { introJa } from './intro-ja'
 import { jaBoot } from './ja_boot'
 import { jaCatalog, jaSkillDeepLink } from './ja_catalog'
@@ -28,12 +29,15 @@ import { jaRepoScanDescriptions, jaRepoScanLabels } from './ja_repo_scan'
 import { jaSharedMetrics } from './ja_shared_metrics'
 import { jaThemePicker } from './ja_theme_picker'
 import { jaUpdateChannel } from './ja_update_channel'
+import { simplifiedAgentsCopy } from './simplified-agents'
 
 export const jaOverrides = {
+  simplifiedAgents: simplifiedAgentsCopy['ja'],
+  keybinds: { actions: { 'agents.new': '新しいエージェント（エージェントページ）', 'nav.back': '戻る', 'nav.forward': '進む' } },
   gatewayGroupOpen: {
-    opening: "グループチャットを開いています…",
-    lookupFailed: "ゲートウェイでこのグループを検索できませんでした。もう一度お試しください。",
-    missing: "このグループチャットはもう存在しません。"
+    opening: 'グループチャットを開いています…',
+    lookupFailed: 'マシンでこのグループを検索できませんでした。もう一度お試しください。',
+    missing: 'このグループチャットはもう存在しません。'
   },
   catalog: jaCatalog,
   connectors: jaConnectors.connectors,
@@ -62,7 +66,7 @@ export const jaOverrides = {
     connect: '接続',
     connecting: '接続中',
     continue: '続ける',
-    bots: 'ボット',
+    bots: desktopTerms.ja.agents,
     copied: 'コピーしました',
     copy: 'コピー',
     copyFailed: 'コピーに失敗しました',
@@ -114,7 +118,7 @@ export const jaOverrides = {
 
   notifications: {
     sharedProfileWarning:
-      '別の Hermes インストールがこのプロファイルを使用しています。両方が設定とデータを共有しているため、変更が競合する可能性があります。このまま続けるか、変更する前にもう一方を終了してください。',
+      '別の Hermes インストールがこのエージェントを使用しています。両方が設定とデータを共有しているため、変更が競合する可能性があります。このまま続けるか、変更する前にもう一方を終了してください。',
     region: '通知',
     hide: '非表示',
     show: '表示',
@@ -152,7 +156,7 @@ export const jaOverrides = {
       elevenLabsNeedsKey: 'ElevenLabs STT には ELEVENLABS_API_KEY が必要です。',
       elevenLabsRejectedKey: 'ElevenLabs が API キーを拒否しました (401)。',
       diskFull: 'ディスク容量不足です — 空きを作ってからもう一度お試しください。',
-      gatewayAuthFailed: 'ゲートウェイ認証に失敗しました — API_SERVER_KEY を確認してください。',
+      gatewayAuthFailed: 'マシン認証に失敗しました — API_SERVER_KEY を確認してください。',
       methodNotAllowed:
         'デスクトップバックエンドがそのリクエストを拒否しました (405 Method Not Allowed)。Hermes Desktop を再起動してください。',
       microphonePermission: 'マイクのアクセス許可が拒否されました。',
@@ -205,7 +209,7 @@ export const jaOverrides = {
   sendDiagnostics: {
     title: 'Nous に診断情報を送信',
     privacyNotice:
-      'デバッグバンドルを Nous 内部ストレージにアップロードします（公開ペーストではありません）。システム情報（OS、バージョン、プロバイダー、設定済み API キーの種類 — キー自体は含まれません）と、エージェント/ゲートウェイ/デスクトップの完全なログ（各最大 512 KB。会話内容、ツール出力、ファイルパスを含む可能性が高い）が含まれます。シークレットはアップロード前にマスクされます。閲覧できるのは Nous スタッフと許可された Discord モデレーターのみで、14 日後に自動削除されます。',
+      'デバッグバンドルを Nous 内部ストレージにアップロードします（公開ペーストではありません）。システム情報（OS、バージョン、プロバイダー、設定済み API キーの種類 — キー自体は含まれません）と、エージェント/Hermes サービス/デスクトップの完全なログ（各最大 512 KB。会話内容、ツール出力、ファイルパスを含む可能性が高い）が含まれます。シークレットはアップロード前にマスクされます。閲覧できるのは Nous スタッフと許可された Discord モデレーターのみで、14 日後に自動削除されます。',
     upload: 'アップロード',
     uploading: 'アップロード中…',
     cancel: 'キャンセル',
@@ -312,7 +316,7 @@ export const jaOverrides = {
         full: {
           title: 'すべてアンインストール',
           description:
-            'アプリ、エージェント、すべてのユーザーデータ（設定、チャット、定期ジョブ、シークレット、ログ）を削除します。',
+            'アプリ、エージェント、すべてのユーザーデータ（設定、チャット、スケジュール、シークレット、ログ）を削除します。',
           consequence: 'すべて——Chat GUI、Hermes エージェント、およびすべての設定・チャット・シークレット・ログ'
         }
       }
@@ -349,7 +353,7 @@ export const jaOverrides = {
       advancedOutput: '出力の制限',
       advancedDelegation: 'サブエージェント',
       advancedDesktop: 'デスクトップと起動',
-      gatewayConnection: 'プライマリゲートウェイ',
+      gatewayConnection: 'プライマリマシン',
       gatewayDevices: '保存済みの接続',
       gatewayManagedUpdates: 'リモート更新',
       gatewayManagedUpdatesUnavailable: 'リモート更新には、管理対象 SSH の更新に対応したデスクトップ版が必要です。',
@@ -383,7 +387,7 @@ export const jaOverrides = {
       providerApiKeys: 'API キー',
       providerCustomEndpoints: 'カスタムエンドポイント',
       providerLocalModels: 'ローカルモデル',
-      gateway: 'ゲートウェイ',
+      gateway: desktopTerms.ja.machines,
       apiKeys: 'ツールとキー',
       keybinds: 'キーボードショートカット',
       keysTools: 'ツール',
@@ -487,7 +491,7 @@ export const jaOverrides = {
     searchPlaceholder: {
       about: 'Hermes Desktop について',
       config: '設定を検索…',
-      gateway: 'ゲートウェイ接続…',
+      gateway: 'マシン接続…',
       keys: 'API キーを検索…',
       mcp: 'MCP サーバーを検索…',
       sessions: 'アーカイブ済みセッションを検索…'
@@ -498,6 +502,13 @@ export const jaOverrides = {
       system: { label: 'システム', description: 'OS の外観に合わせる' }
     },
     appearance: {
+      redesign: {
+        toolViewTitle: 'ツール呼び出し',
+        toolViewDesc: 'シンプル表示はツールの生データを隠し、テクニカル表示は入出力をすべて表示します。',
+        product: 'シンプル',
+        introSplashTitle: 'ようこそ画面',
+        embedsTitle: 'リンクプレビュー'
+      },
       chatTextScaleTitle: 'チャットの文字サイズ',
       chatTextScaleDesc:
         'UI スケールを基準に、会話とメッセージ入力欄の文字を拡大縮小します。サイドバーや操作ボタンのサイズは変わりません。',
@@ -595,7 +606,7 @@ export const jaOverrides = {
         'ワークスペースを開いているとき、チャットの横にファイルブラウザを表示します。タイトルバーのボタンでも切り替わります。',
       vibeHeartsTitle: 'バイブハート',
       vibeHeartsDesc:
-        'ありがとう・愛してる・good bot・ハート絵文字のときに浮かぶハート。上のメッセージリアクションとは別です。',
+        '感謝や愛情を伝える言葉、ハート絵文字に反応して浮かぶハート。上のメッセージリアクションとは別です。',
       embedsTitle: 'インライン埋め込み',
       embedsDesc:
         'リッチプレビューは第三者サイト（YouTube、X など）から読み込まれます。確認は許可するまでプレースホルダーを表示し、常には自動で読み込み、オフはリンクのままにします。',
@@ -613,7 +624,7 @@ export const jaOverrides = {
       themeTitle: 'テーマ',
       themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。',
       themeProfileNote: profile =>
-        `「${profile}」プロファイルに保存されます。プロファイルごとに個別のテーマを保持します。`,
+        `エージェント「${profile}」に保存されます。エージェントごとに個別のテーマを保持します。`,
       installTitle: 'VS Code から導入',
       installDesc:
         'Marketplace の拡張機能 ID（例: dracula-theme.theme-dracula）を貼り付けると、その配色テーマをデスクトップ用パレットに変換します。',
@@ -990,46 +1001,45 @@ export const jaOverrides = {
       clear: 'クリア'
     },
     gateway: {
-      loading: 'ゲートウェイ設定を読み込み中...',
+      loading: 'マシン設定を読み込み中...',
       ...jaGatewayHost,
-      title: 'ゲートウェイ接続',
+      title: 'マシン接続',
       envOverride: 'env オーバーライド',
       intro:
-        'Hermes Desktop はデフォルトで独自のローカルゲートウェイを起動します。別のマシンや信頼できるプロキシの背後で既に動作している Hermes バックエンドをこのアプリで制御する場合は、リモートゲートウェイを使用してください。ゲートウェイ接続はマシン単位の設定で、プロファイルは接続したゲートウェイから検出されます。',
+        'Hermes Desktop はデフォルトでこのマシン上の Hermes に接続します。別のマシンや信頼できるプロキシの背後で動作する Hermes を使用する場合は、リモートマシンに接続してください。マシンへの接続はこの端末の設定として保存され、エージェントは接続先のマシンから検出されます。',
       envOverrideTitle: '環境変数がこのデスクトップセッションを制御しています。',
       envOverrideDesc:
         '保存された設定を使用するには HERMES_DESKTOP_REMOTE_URL と HERMES_DESKTOP_REMOTE_TOKEN の設定を解除してください。',
-      localTitle: 'ローカルゲートウェイ',
+      localTitle: 'ローカルマシン',
       localDesc:
         'ローカルホストでプライベートな Hermes バックエンドを起動します。これがデフォルトで、オフラインでも動作します。',
-      remoteTitle: 'リモートゲートウェイ',
+      remoteTitle: 'リモートマシン',
       remoteDesc:
-        'このデスクトップシェルをリモートの Hermes バックエンドに接続します。ホスト型ゲートウェイは OAuth またはユーザー名とパスワードを使用します。自己ホスト型はセッショントークンを使用する場合があります。',
+        'このデスクトップシェルをリモートの Hermes バックエンドに接続します。ホスト型マシンは OAuth またはユーザー名とパスワードを使用します。自己ホスト型はセッショントークンを使用する場合があります。',
       remoteUrlTitle: 'リモート URL',
       remoteUrlDesc:
         'リモートダッシュボードバックエンドのベース URL。/hermes などのパスプレフィックスもサポートしています。',
-      probing: 'このゲートウェイの認証方法を確認中…',
-      probeError: 'このゲートウェイにまだ到達できません。URL を確認してください。応答後に認証方法が表示されます。',
+      probing: 'このマシンの認証方法を確認中…',
+      probeError: 'このマシンにまだ到達できません。URL を確認してください。応答後に認証方法が表示されます。',
       signedIn: 'サインイン済み',
       signIn: 'サインイン',
       signOut: 'サインアウト',
       signInWith: provider => `${provider} でサインイン`,
       authTitle: '認証',
       authSignedInPassword:
-        'このゲートウェイはユーザー名とパスワードを使用します。サインイン済みです。セッションは自動的に更新されます。',
-      authSignedInOauth:
-        'このゲートウェイは OAuth を使用します。サインイン済みです。セッションは自動的に更新されます。',
+        'このマシンはユーザー名とパスワードを使用します。サインイン済みです。セッションは自動的に更新されます。',
+      authSignedInOauth: 'このマシンは OAuth を使用します。サインイン済みです。セッションは自動的に更新されます。',
       authNeedsPassword:
-        'このゲートウェイはユーザー名とパスワードを使用します。このデスクトップアプリを承認するにはサインインしてください。',
+        'このマシンはユーザー名とパスワードを使用します。このデスクトップアプリを承認するにはサインインしてください。',
       authNeedsOauth: provider =>
-        `このゲートウェイは OAuth を使用します。このデスクトップアプリを承認するには ${provider} でサインインしてください。`,
+        `このマシンは OAuth を使用します。このデスクトップアプリを承認するには ${provider} でサインインしてください。`,
       tokenTitle: 'セッショントークン',
       tokenDesc:
         'REST および WebSocket アクセスに使用するダッシュボードセッショントークン。保存済みトークンを維持するには空欄にしてください。',
       existingToken: value => `既存のトークン ${value}`,
       savedToken: '保存済み',
       pasteSessionToken: 'セッショントークンを貼り付け',
-      plainTextConfirmTitle: 'ゲートウェイトークンを平文で保存しますか？',
+      plainTextConfirmTitle: 'マシントークンを平文で保存しますか？',
       plainTextConfirmDesc:
         'このマシンで OS のキーリングサービスが見つからなかったため、トークンはアプリの接続設定ファイルに暗号化されずに保存され、このユーザーとして実行される任意のプロセスから読み取れる状態になります。暗号化して保存するには、システムのキーチェーン（Linux では GNOME Keyring または KWallet）をインストールまたは有効化してください。',
       plainTextConfirmAction: '平文で保存',
@@ -1038,34 +1048,34 @@ export const jaOverrides = {
         'セキュアストレージが利用できないため、保存済みのトークンはこのマシンのアプリの接続設定ファイルに暗号化されずに保存されています。暗号化するには、システムのキーチェーン（Linux では GNOME Keyring または KWallet）をインストールまたは有効化してください。',
       keychainEncryptionTitle: 'OS キーチェーンで保存済みのシークレットを暗号化',
       keychainEncryptionDesc:
-        'デフォルトはオフです。オンにすると、ゲートウェイのトークンとサインイン資格情報がシステムのキーチェーン（Keychain Access、GNOME Keyring、Windows DPAPI）で暗号化されます。システムから許可やパスワードを求められる場合があります。オフの場合は、現在のユーザーのみが読める通常ファイルとして保存されます。',
+        'デフォルトはオフです。オンにすると、マシンのトークンとサインイン資格情報がシステムのキーチェーン（Keychain Access、GNOME Keyring、Windows DPAPI）で暗号化されます。システムから許可やパスワードを求められる場合があります。オフの場合は、現在のユーザーのみが読める通常ファイルとして保存されます。',
       keychainEncryptionFailed: 'シークレット暗号化の設定を変更できませんでした',
       testRemote: 'リモートをテスト',
       saveForRestart: '次回起動時のために保存',
       saveAndReconnect: '保存して再接続',
       diagnostics: '診断',
-      diagnosticsDesc: 'ファイルマネージャーで desktop.log を表示します。ゲートウェイの起動に失敗した際に役立ちます。',
+      diagnosticsDesc: 'ファイルマネージャーで desktop.log を表示します。Hermes の起動に失敗した際に役立ちます。',
       openLogs: 'ログを開く',
-      incompleteTitle: 'リモートゲートウェイの設定が不完全です',
+      incompleteTitle: 'リモートマシンの設定が不完全です',
       incompleteSignIn: 'リモートに切り替える前にリモート URL を入力してサインインしてください。',
       incompleteToken: 'リモートに切り替える前にリモート URL とセッショントークンを入力してください。',
       incompleteSignInTest: 'テストする前にリモート URL を入力してサインインしてください。',
       incompleteTokenTest: 'テストする前にリモート URL とセッショントークンを入力してください。',
       enterUrlFirst: '最初にリモート URL を入力してください。',
-      restartingTitle: 'ゲートウェイ接続を再起動中',
-      savedTitle: 'ゲートウェイ設定を保存しました',
+      restartingTitle: 'マシンに再接続中',
+      savedTitle: 'マシン設定を保存しました',
       restartingMessage: 'Hermes Desktop は保存された設定を使用して再接続します。',
       savedMessage: '次回起動時に保存されます。',
       connectedTo: (baseUrl, version) => `${baseUrl}${version ? ` · Hermes ${version}` : ''} に接続しました`,
-      reachableTitle: 'リモートゲートウェイに到達可能',
+      reachableTitle: 'リモートマシンに到達可能',
       signedOutTitle: 'サインアウトしました',
-      signedOutMessage: 'リモートゲートウェイセッションをクリアしました。',
-      failedLoad: 'ゲートウェイ設定の読み込みに失敗しました',
+      signedOutMessage: 'リモートマシンセッションをクリアしました。',
+      failedLoad: 'マシン設定の読み込みに失敗しました',
       signInFailed: 'サインインに失敗しました',
       signOutFailed: 'サインアウトに失敗しました',
-      testFailed: 'リモートゲートウェイのテストに失敗しました',
-      applyFailed: 'ゲートウェイ設定を適用できませんでした',
-      saveFailed: 'ゲートウェイ設定を保存できませんでした',
+      testFailed: 'リモートマシンのテストに失敗しました',
+      applyFailed: 'マシン設定を適用できませんでした',
+      saveFailed: 'マシン設定を保存できませんでした',
       sshTitle: 'SSH で接続',
       sshDesc:
         'Hermes は SSH 経由でリモート上に起動され、このアプリにトンネルされます。リモート側で何かを起動・公開する必要はありません。ホストへの鍵ベースの SSH アクセスが前提です。',
@@ -1117,7 +1127,7 @@ export const jaOverrides = {
     },
     profileScope: {
       appliesTo: '適用対象',
-      editsProfile: profile => `このページの変更は「${profile}」プロファイルに適用されます。`
+      editsProfile: profile => `このページの変更はエージェント「${profile}」に適用されます。`
     },
     mcp: {
       loading: 'MCP サーバーを読み込み中...',
@@ -1302,12 +1312,14 @@ export const jaOverrides = {
         enabledTitle: '実プロファイルブラウジング：オン',
         enabledMessage: '新しいセッションは既定ブラウザプロファイルのスナップショットでブラウジングします。',
         disabledTitle: '実プロファイルブラウジング：オフ',
-        disabledMessage: 'プロファイルのスナップショットは削除され、アプリ内ブラウザもそのログインから外れます。新しいセッションはクリーンなブラウザを使用します。',
+        disabledMessage:
+          'プロファイルのスナップショットは削除され、アプリ内ブラウザもそのログインから外れます。新しいセッションはクリーンなブラウザを使用します。',
         failedSave: '実プロファイル設定を保存できませんでした',
         reimportSignins: 'ログイン情報を再インポート',
         signinsImportedTitle: 'アプリ内ブラウザのログイン',
         signinsImported: count => `ブラウザプロファイルの Cookie ${count} 件でアプリ内ブラウザにログインしました。`,
-        signinsRemote: 'このバックエンドは別のマシンで動作しているため、そのブラウザプロファイルはアプリ内ブラウザにインポートされません。',
+        signinsRemote:
+          'このバックエンドは別のマシンで動作しているため、そのブラウザプロファイルはアプリ内ブラウザにインポートされません。',
         signinsFailed: 'アプリ内ブラウザにログイン情報をインポートできませんでした',
         prompt: {
           title: 'サイトにログインしたまま利用',
@@ -1325,6 +1337,16 @@ export const jaOverrides = {
 
   skillDeepLink: jaSkillDeepLink,
   skills: {
+    inventoryScopeHint:
+      'インストールは選択したエージェントとマシンに適用されます。エージェントごとのツールの有効化と個別設定はエージェント設定で管理します。ホスト型コネクタのアカウントは、同じ Nous アカウントを使うエージェント間で共有されます。',
+    agentScopeHint: '変更はこのエージェントにのみ適用されます。既存の会話では現在のツールが維持されます。',
+    toolSecretsHint:
+      'このエージェントが使う API キー、エンドポイント、プロバイダー。プロバイダーへのログイン情報はエージェント間で共有される場合があります。ホスト型コネクタのアカウントは、同じ Nous アカウントを使うエージェント間で共有されます。',
+    openAgentSettings: 'エージェント設定',
+    openToolLibrary: 'ツールライブラリを見る',
+    remotePluginHint:
+      'プラグインを管理するには、このエージェントをそのマシンで開いてください。プラグインのインストールには接続中のマシンを使用します。',
+    showAllToolsets: (count: number) => `全 ${count} 件を表示`,
     plugins: { ...jaPluginPreviewAccess, ...jaPluginsTab, ...jaPluginUpdateAll },
     hub: {
       search: '検索',
@@ -1538,7 +1560,7 @@ export const jaOverrides = {
     },
     sectionEntries: {
       sessions: { title: 'セッションパネル', detail: 'セッションの検索、ピン留め、管理' },
-      system: { title: 'システムパネル', detail: 'ゲートウェイのステータス、ログ、再起動/更新' },
+      system: { title: 'システムパネル', detail: 'Hermes のステータス、ログ、再起動/更新' },
       usage: { title: '使用状況パネル', detail: 'トークン、コスト、スキルの活動' }
     },
     providerNavigate: 'ナビゲート',
@@ -1551,16 +1573,16 @@ export const jaOverrides = {
     exportSession: 'セッションをエクスポート',
     deleteSession: 'セッションを削除',
     noSessions: 'セッションはまだありません。',
-    gatewayRunning: 'メッセージングゲートウェイが実行中',
-    gatewayStopped: 'メッセージングゲートウェイが停止中',
+    gatewayRunning: 'メッセージングが実行中',
+    gatewayStopped: 'メッセージングが停止中',
     hermesActiveSessions: (version, count) => `Hermes ${version} · アクティブセッション ${count}`,
-    restartGateway: 'ゲートウェイを再起動',
+    restartGateway: 'Hermes を再起動',
     openBrowser: 'ブラウザを開く',
-    gatewayRestartFailed: 'ゲートウェイの再起動に失敗しました。',
-    sharedGatewayRestartTitle: '共有ゲートウェイを再起動しますか？',
-    sharedGatewayRestartDescription: bots => `このデバイス上のすべてのボットが再接続します: ${bots}`,
+    gatewayRestartFailed: 'Hermes の再起動に失敗しました。',
+    sharedGatewayRestartTitle: '共有 Hermes を再起動しますか？',
+    sharedGatewayRestartDescription: bots => `このデバイス上のすべてのエージェントが再接続します: ${bots}`,
     sharedGatewayRestartConfirm: 'すべて再起動',
-    sharedGatewayRestarted: count => `共有ゲートウェイを再起動しました（${count} ボット）`,
+    sharedGatewayRestarted: count => `共有 Hermes を再起動しました（エージェント ${count} 件）`,
     updateHermes: 'Hermes を更新',
     reloadWindow: 'ウィンドウを再読み込み',
     actionRunning: '実行中',
@@ -1607,24 +1629,25 @@ export const jaOverrides = {
       connecting: '接続中',
       disabled: '無効',
       fatal: 'エラー',
-      gateway_stopped: 'メッセージングゲートウェイが停止中',
+      gateway_stopped: 'メッセージングが停止中',
       not_configured: '設定が必要',
       pending_restart: '再起動が必要',
       retrying: '再試行中',
       startup_failed: '起動失敗'
     },
     unknown: '不明',
-    hintPendingRestart: 'この変更を適用するにはステータスバーからゲートウェイを再起動してください。',
-    sharedListenerUrl: '共有ゲートウェイのリスナーで提供中:',
-    hintGatewayStopped: 'ステータスバーからゲートウェイを起動して接続してください。',
-    restartNeeded: '保存しました。新しい設定を反映するにはメッセージングゲートウェイを再起動してください。',
+    hintPendingRestart: 'この変更を適用するにはステータスバーから Hermes を再起動してください。',
+    sharedListenerUrl: '共有 Hermes のリスナーで提供中:',
+    hintGatewayStopped: 'ステータスバーから Hermes を起動して接続してください。',
+    restartNeeded: '保存しました。新しい設定を反映するには Hermes を再起動してください。',
     restartNow: '今すぐ再起動',
     restarting: '再起動中…',
-    restartFailedManual: 'ゲートウェイの再起動に失敗しました。手動で再起動し、ゲートウェイのログを確認してください。',
+    restartFailedManual: 'Hermes の再起動に失敗しました。手動で再起動し、Hermes のログを確認してください。',
     relayLink: {
       title: 'Team Gateway',
       badge: 'ボットトークン不要',
-      intro: (platform: string) => `${platform} は共有の Hermes ボット経由でこのエージェントに届きます。${platform} アカウントをリンクし、ボットにメッセージを送るとエージェントと話せます。`,
+      intro: (platform: string) =>
+        `${platform} は共有の Hermes ボット経由でこのエージェントに届きます。${platform} アカウントをリンクし、ボットにメッセージを送るとエージェントと話せます。`,
       link: (platform: string) => `${platform} をリンク`,
       linkAnother: (platform: string) => `別の ${platform} アカウントをリンク`,
       linkedAccounts: 'リンク済みアカウント',
@@ -1637,15 +1660,19 @@ export const jaOverrides = {
       copied: 'コピーしました',
       copyFailed: (command: string) => `コピーできませんでした。${command} と入力してください。`,
       waiting: 'ボットがメッセージを受け取るのを待っています。コードは1回だけ使えます。',
-      linked: (platform: string) => `${platform} アカウントをリンクしました。ボットにメッセージを送るとエージェントと話せます。`,
+      linked: (platform: string) =>
+        `${platform} アカウントをリンクしました。ボットにメッセージを送るとエージェントと話せます。`,
       expired: 'コードは使われる前に期限切れになりました。新しいコードを取得してもう一度お試しください。',
-      refused: (platform: string) => `${platform} がリンクを拒否しました。新しいコードを取得してもう一度お試しください。`,
+      refused: (platform: string) =>
+        `${platform} がリンクを拒否しました。新しいコードを取得してもう一度お試しください。`,
       qrAlt: (platform: string) => `共有 ${platform} ボットの QR コード`,
       managed: 'Team Gateway が管理',
-      managedNote: (platform: string) => `このインスタンスではメッセージを Team Gateway が扱うため、ゲートウェイは起動のたびに ${platform} の直接接続をオフにします。リレーと併用するには、ゲートウェイの環境に GATEWAY_RELAY_ALLOW_DIRECT_PLATFORMS=true を設定してください（直接接続があるとインスタンスがゼロまでスケールダウンできず、メッセージが二重に届くことがあります）。`,
+      managedNote: (platform: string) =>
+        `このインスタンスではメッセージを Team Gateway が扱うため、Hermes は起動のたびに ${platform} の直接接続をオフにします。リレーと併用するには、Hermes の環境に GATEWAY_RELAY_ALLOW_DIRECT_PLATFORMS=true を設定してください（直接接続があるとインスタンスがゼロまでスケールダウンできず、メッセージが二重に届くことがあります）。`,
       managedIntro: 'このエージェントのアカウントは Nous Portal からリンクします。',
       openPortal: 'Nous Portal でアカウントをリンク',
-      noNewAccount: (platform: string) => `コードは無効になり、新しいアカウントは表示されませんでした。${platform} アカウントが一覧にない場合は、新しいコードを取得してもう一度お試しください。`
+      noNewAccount: (platform: string) =>
+        `コードは無効になり、新しいアカウントは表示されませんでした。${platform} アカウントが一覧にない場合は、新しいコードを取得してもう一度お試しください。`
     },
     telegramQr: {
       title: 'Telegram ボットの接続方法を選択',
@@ -1674,12 +1701,12 @@ export const jaOverrides = {
       applying: '保存中…',
       pairingExpired: 'Telegram のペアリングが期限切れです。新しい QR セットアップを開始してください。',
       stillWaiting: detail => `Telegram を待機中。エラー後に再試行: ${detail}`,
-      savedRestarting: 'Telegram を保存しました。ゲートウェイを再起動中…',
-      savedRestartFailed: detail => `Telegram を保存しましたが、ゲートウェイの再起動に失敗しました${detail}`
+      savedRestarting: 'Telegram を保存しました。Hermes を再起動中…',
+      savedRestartFailed: detail => `Telegram を保存しましたが、Hermes の再起動に失敗しました${detail}`
     },
     credentialsSet: '認証情報を設定しました',
     needsSetup: '設定が必要',
-    gatewayStopped: 'メッセージングゲートウェイが停止中',
+    gatewayStopped: 'メッセージングが停止中',
     getCredentials: '認証情報を取得',
     openSetupGuide: 'セットアップガイドを開く',
     required: '必須',
@@ -1703,11 +1730,11 @@ export const jaOverrides = {
     disableAria: name => `${name} を無効にする`,
     platformEnabled: name => `${name} を有効にしました`,
     platformDisabled: name => `${name} を無効にしました`,
-    restartToApply: 'この変更はゲートウェイの再起動後に有効になります。',
+    restartToApply: 'この変更は Hermes の再起動後に有効になります。',
     setupSaved: name => `${name} の設定を保存しました`,
-    restartToReconnect: '新しい認証情報はゲートウェイの再起動後に有効になります。',
-    appliedLive: '実行中のゲートウェイに適用されました。',
-    connectingLive: '実行中のゲートウェイが新しい認証情報で接続しています。',
+    restartToReconnect: '新しい認証情報は Hermes の再起動後に有効になります。',
+    appliedLive: '実行中の Hermes に適用されました。',
+    connectingLive: '実行中の Hermes が新しい認証情報で接続しています。',
     keyCleared: key => `${key} をクリアしました`,
     setupUpdated: name => `${name} の設定が更新されました。`,
     failedUpdate: name => `${name} の更新に失敗しました`,
@@ -1739,7 +1766,7 @@ export const jaOverrides = {
       },
       DISCORD_HOME_CHANNEL: {
         label: 'ホームチャンネル ID',
-        help: 'ボットがプロアクティブなメッセージを送信するチャンネル（Cron 出力、リマインダー）。'
+        help: 'ボットがプロアクティブなメッセージを送信するチャンネル（スケジュールの実行結果、リマインダー）。'
       },
       DISCORD_HOME_CHANNEL_NAME: {
         label: 'ホームチャンネル名',
@@ -1752,7 +1779,10 @@ export const jaOverrides = {
       MATTERMOST_ALLOW_ALL_USERS: { label: 'すべての Mattermost ユーザーを許可' },
       MATTERMOST_HOME_CHANNEL: { label: 'ホームチャンネル' },
       QQ_ALLOW_ALL_USERS: { label: 'すべての QQ ユーザーを許可' },
-      QQBOT_HOME_CHANNEL: { label: 'QQ ホームチャンネル', help: 'Cron 配信のデフォルトチャンネルまたはグループ。' },
+      QQBOT_HOME_CHANNEL: {
+        label: 'QQ ホームチャンネル',
+        help: 'スケジュールの実行結果を配信するデフォルトのチャンネルまたはグループ。'
+      },
       QQBOT_HOME_CHANNEL_NAME: { label: 'QQ ホームチャンネル名' },
       SLACK_BOT_TOKEN: {
         label: 'Slack ボットトークン',
@@ -1805,28 +1835,28 @@ export const jaOverrides = {
   },
 
   profiles: {
-    close: 'プロファイルを閉じる',
+    close: 'エージェントを閉じる',
     nameHint: '小文字、数字、ハイフン、アンダースコア。文字または数字で始める必要があります。',
-    title: 'プロファイル',
-    count: count => `${count} プロファイル`,
-    search: 'プロファイルを検索...',
-    loading: 'プロファイルを読み込み中...',
-    newProfile: '新しいプロファイル',
-    importProfile: 'プロファイルをインポート…',
-    exportProfile: 'プロファイルをエクスポート…',
-    imported: 'プロファイルをインポートしました',
-    exported: 'プロファイルをエクスポートしました',
-    failedImport: 'プロファイルのインポートに失敗しました',
-    failedExport: 'プロファイルのエクスポートに失敗しました',
+    title: desktopTerms.ja.agents,
+    count: count => `エージェント ${count} 件`,
+    search: 'エージェントを検索...',
+    loading: 'エージェントを読み込み中...',
+    newProfile: '新しいエージェント',
+    importProfile: 'エージェントをインポート…',
+    exportProfile: 'エージェントをエクスポート…',
+    imported: 'エージェントをインポートしました',
+    exported: 'エージェントをエクスポートしました',
+    failedImport: 'エージェントのインポートに失敗しました',
+    failedExport: 'エージェントのエクスポートに失敗しました',
     exportNeedsHost: name =>
-      `ブラウザーではプロファイルのアーカイブを保存できません。Hermes ホストで次を実行してください: hermes profile export ${name}`,
-    allProfiles: 'すべてのプロファイル',
-    showAllProfiles: 'すべてのプロファイルを表示',
+      `ブラウザーではエージェントのアーカイブを保存できません。Hermes ホストで次を実行してください: hermes profile export ${name}`,
+    allProfiles: 'すべてのエージェント',
+    showAllProfiles: 'すべてのエージェントを表示',
     notServedHere: 'ここでは提供されていません',
     switchToProfile: name => `${name} に切り替え`,
     switchToConnection: name => `${name} に切り替え`,
     switchConnectionFailed: name => `${name} に接続できませんでした`,
-    manageProfiles: 'プロファイルを管理…',
+    manageProfiles: 'エージェントを管理…',
     fleet: {
       localDevice:
         'このデバイス（ローカルバックエンド — Hermes が無ければインストールし、あれば新しいセッションを開きます）',
@@ -1840,7 +1870,7 @@ export const jaOverrides = {
       menuItem: 'リモートホストに接続…',
       badge: (host: string) => `${host} で実行中`,
       title: (profile: string) => `${profile} をリモートホストに接続`,
-      description: 'このプロファイルのセッションは、このパソコンではなく指定したリモートの Hermes で実行されます。',
+      description: 'このエージェントのセッションは、このパソコンではなく指定したリモートの Hermes で実行されます。',
       urlLabel: 'リモートアドレス',
       urlPlaceholder: 'https://hermes.example.com',
       urlInvalid: 'http:// または https:// で始まる完全なアドレスを入力してください',
@@ -1850,15 +1880,15 @@ export const jaOverrides = {
       plainTextOptIn:
         'このパソコンには安全な鍵ストレージがないため、トークンは暗号化されずにディスクへ保存されます。それでも保存する。',
       collisionWarning: (label: string) =>
-        `「${label}」という名前のゲートウェイが設定に既に存在します。このプロファイル接続は別物であり、それを変更しません。`,
-      confirmTitle: 'このプロファイルをリモートホストに接続しますか？',
+        `「${label}」という名前のマシンが設定に既に存在します。このエージェントの接続は別物であり、それを変更しません。`,
+      confirmTitle: 'このエージェントをリモートホストに接続しますか？',
       confirmNote: (profile: string, host: string) =>
         `${profile} の新しいチャットは ${host} で実行されます。コマンドの実行やファイルの読み取りはこのパソコンではなくそのコンピュータで行われます。信頼できるホストにのみ接続してください。`,
       confirmBack: '戻る',
       connect: '接続',
       connecting: '接続中…',
       disconnect: 'リモート接続を解除',
-      savedTitle: 'プロファイルを接続しました',
+      savedTitle: 'エージェントを接続しました',
       savedMessage: (profile: string, host: string) => `${profile} は ${host} で実行されます`,
       removedTitle: 'リモート接続を解除しました',
       removedMessage: (profile: string) => `${profile} はこのパソコンで実行されます`,
@@ -1874,16 +1904,16 @@ export const jaOverrides = {
     colorFor: 'カラー',
     openInNewWindow: '新しいウィンドウで開く',
     setAsDefault: 'デフォルトに設定',
-    defaultProfile: 'デフォルトのプロファイル',
+    defaultProfile: 'デフォルトのエージェント',
     defaultSet: name => `${name} をデフォルトに設定しました`,
-    defaultDescription: 'Hermes の起動時と新しいチャットに使用します。既存のセッションのプロファイルは変わりません。',
-    failedSetDefault: 'デフォルトのプロファイルを設定できませんでした',
+    defaultDescription: 'Hermes の起動時と新しいチャットに使用します。既存のセッションのエージェントは変わりません。',
+    failedSetDefault: 'デフォルトのエージェントを設定できませんでした',
     setColor: color => `カラー ${color} に設定`,
     autoColor: '自動',
-    noProfiles: 'プロファイルが見つかりません。',
-    selectPrompt: '詳細を表示するにはプロファイルを選択してください。',
-    refresh: 'プロファイルを更新',
-    refreshing: 'プロファイルを更新中',
+    noProfiles: 'エージェントが見つかりません。',
+    selectPrompt: '詳細を表示するにはエージェントを選択してください。',
+    refresh: 'エージェントを更新',
+    refreshing: 'エージェントを更新中',
     default: 'デフォルト',
     skills: count => `${count} スキル`,
     env: 'env',
@@ -1897,12 +1927,12 @@ export const jaOverrides = {
     modelLabel: 'モデル',
     skillsLabel: 'スキル',
     notSet: '未設定',
-    soulDesc: 'このプロファイルに組み込まれたシステムプロンプトとペルソナの指示。',
+    soulDesc: 'このエージェントへの指示や振る舞いを設定します。',
     soulMissing:
-      'このプロファイルにはまだ SOUL.md がありません。下に指示を入力して保存すると作成できます。config.yaml のペルソナ設定は別途管理されます。',
+      'このエージェントにはまだ SOUL.md がありません。下に指示を入力して保存すると作成できます。config.yaml のペルソナ設定は別途管理されます。',
     soulOptional: '省略可能',
     soulPlaceholder: mode =>
-      `このプロファイルのシステムプロンプト / ペルソナ。\n空欄のままにすると ${mode} のデフォルトを使用します。`,
+      `このエージェントへの指示や振る舞い。\n空欄のままにすると ${mode} のデフォルトを使用します。`,
     soulPlaceholderCloned: 'クローン済み',
     soulPlaceholderEmpty: '空',
     unsavedChanges: '未保存の変更',
@@ -1910,24 +1940,24 @@ export const jaOverrides = {
     emptySoul: '空の SOUL.md — ペルソナの記述を始めてください...',
     saving: '保存中...',
     saveSoul: 'SOUL を保存',
-    deleteTitle: 'プロファイルを削除しますか？',
+    deleteTitle: 'エージェントを削除しますか？',
     deleteDescPrefix: 'これにより ',
     deleteDescMid: ' が削除され、その ',
     deleteDescSuffix: ' ディレクトリが削除されます。この操作は元に戻せません。',
     deleting: '削除中...',
-    createDesc: 'プロファイルは独立した Hermes 環境です：設定、スキル、SOUL.md が別々になります。',
+    createDesc: 'エージェントごとに独自の指示、設定、チャットを持ちます。',
     nameLabel: '名前',
     cloneFrom: '複製元',
     cloneFromNone: 'なし（空）',
-    cloneFromDesc: '選択したプロファイルから設定、スキル、SOUL.md をコピーします。',
-    cloneFromDefault: 'デフォルトプロファイルから設定を複製',
-    cloneFromDefaultDesc: 'デフォルトプロファイルから設定、スキル、SOUL.md をコピーします。',
-    invalidName: hint => `無効なプロファイル名。${hint}`,
+    cloneFromDesc: '選択したエージェントから設定、スキル、SOUL.md をコピーします。',
+    cloneFromDefault: 'デフォルトのエージェントから設定を複製',
+    cloneFromDefaultDesc: 'デフォルトのエージェントから設定、スキル、SOUL.md をコピーします。',
+    invalidName: hint => `無効なエージェント名。${hint}`,
     nameRequired: '名前は必須です',
     creating: '作成中...',
-    createAction: 'プロファイルを作成',
-    renameTitle: 'プロファイルの名前を変更',
-    renameDescPrefix: '名前を変更するとプロファイルディレクトリと ',
+    createAction: 'エージェントを作成',
+    renameTitle: 'エージェントの名前を変更',
+    renameDescPrefix: '名前を変更するとエージェントのディレクトリと ',
     renameDescSuffix: ' 内のラッパースクリプトが更新されます。',
     newNameLabel: '新しい名前',
     renaming: '名前を変更中...',
@@ -1936,13 +1966,13 @@ export const jaOverrides = {
     deleted: '削除しました',
     setupCopied: 'セットアップコマンドをコピーしました',
     soulSaved: 'SOUL.md を保存しました',
-    failedLoad: 'プロファイルの読み込みに失敗しました',
-    failedDelete: 'プロファイルの削除に失敗しました',
+    failedLoad: 'エージェントの読み込みに失敗しました',
+    failedDelete: 'エージェントの削除に失敗しました',
     failedCopy: 'セットアップコマンドのコピーに失敗しました',
     failedLoadSoul: 'SOUL.md の読み込みに失敗しました',
     failedSaveSoul: 'SOUL.md の保存に失敗しました',
-    failedCreate: 'プロファイルの作成に失敗しました',
-    failedRename: 'プロファイルの名前変更に失敗しました'
+    failedCreate: 'エージェントの作成に失敗しました',
+    failedRename: 'エージェントの名前変更に失敗しました'
   },
 
   modelAssignment: {
@@ -1955,11 +1985,11 @@ export const jaOverrides = {
 
   cron: {
     control: jaCronControl,
-    close: 'Cron を閉じる',
-    title: 'スケジュール済みジョブ',
-    count: count => `${count} 件のジョブ`,
-    search: 'Cron ジョブを検索...',
-    loading: 'Cron ジョブを読み込み中...',
+    close: 'スケジュールを閉じる',
+    title: desktopTerms.ja.schedules,
+    count: count => `スケジュール ${count} 件`,
+    search: 'スケジュールを検索...',
+    loading: 'スケジュールを読み込み中...',
     states: {
       enabled: '有効',
       scheduled: 'スケジュール済み',
@@ -2011,11 +2041,10 @@ export const jaOverrides = {
     monthlyOnDayAt: (dayOfMonth, time) => `毎月 ${dayOfMonth} 日 ${time} に`,
     topOfHour: '毎時 0 分',
     everyHourAt: minute => `毎時 :${minute} に`,
-    newCron: '新しい Cron',
-    emptyDescNew:
-      'Cron 式でプロンプトを実行するスケジュールを設定します。Hermes が実行して、選択した宛先に結果を送信します。',
+    newCron: '新しいスケジュール',
+    emptyDescNew: 'スケジュールを設定すると、エージェントがプロンプトを自動実行し、選択した宛先に結果を送信します。',
     emptyDescSearch: '検索キーワードを広げてください。',
-    emptyTitleNew: 'スケジュールされたジョブがまだありません',
+    emptyTitleNew: 'スケジュールがまだありません',
     emptyTitleSearch: '一致なし',
     last: '前回',
     next: '次回',
@@ -2026,30 +2055,30 @@ export const jaOverrides = {
     hideRuns: '実行履歴を隠す',
     runHistory: '実行履歴',
 
-    actionsTitle: 'Cron ジョブのアクション',
+    actionsTitle: 'スケジュールの操作',
     resume: '再開',
     pause: '一時停止',
     resumeTitle: '再開',
     pauseTitle: '一時停止',
     triggerNow: '今すぐ実行',
-    edit: 'Cron を編集',
-    deleteTitle: 'Cron ジョブを削除しますか？',
+    edit: 'スケジュールを編集',
+    deleteTitle: 'スケジュールを削除しますか？',
     deleteDescPrefix: 'これにより ',
     deleteDescSuffix: ' が完全に削除され、即座に実行が停止されます。',
     deleting: '削除中...',
-    resumed: 'Cron を再開しました',
-    paused: 'Cron を一時停止しました',
-    triggered: 'Cron をトリガーしました',
-    deleted: 'Cron を削除しました',
-    created: 'Cron を作成しました',
-    updated: 'Cron を更新しました',
-    failedLoad: 'Cron ジョブの読み込みに失敗しました',
-    failedUpdate: 'Cron ジョブの更新に失敗しました',
-    failedTrigger: 'Cron ジョブのトリガーに失敗しました',
-    failedDelete: 'Cron ジョブの削除に失敗しました',
-    failedSave: 'Cron ジョブの保存に失敗しました',
-    editTitle: 'Cron ジョブを編集',
-    createTitle: '新しい Cron ジョブ',
+    resumed: 'スケジュールを再開しました',
+    paused: 'スケジュールを一時停止しました',
+    triggered: 'スケジュールを実行しました',
+    deleted: 'スケジュールを削除しました',
+    created: 'スケジュールを作成しました',
+    updated: 'スケジュールを更新しました',
+    failedLoad: 'スケジュールの読み込みに失敗しました',
+    failedUpdate: 'スケジュールの更新に失敗しました',
+    failedTrigger: 'スケジュールの実行に失敗しました',
+    failedDelete: 'スケジュールの削除に失敗しました',
+    failedSave: 'スケジュールの保存に失敗しました',
+    editTitle: 'スケジュールを編集',
+    createTitle: '新しいスケジュール',
     editDesc: 'スケジュール、プロンプト、または配信先を更新します。変更は次回の実行時に適用されます。',
     createDesc:
       'プロンプトを自動実行するスケジュールを設定します。Cron 構文または「15 分ごと」などのフレーズを使用します。',
@@ -2071,18 +2100,18 @@ export const jaOverrides = {
     promptRequired: 'プロンプトは必須です。',
     promptScheduleRequired: 'プロンプトとスケジュールは必須です。',
     scheduleRequired: 'スケジュールは必須です。',
-    scriptOnlyEditHint: 'スクリプトのみのジョブ（AI プロンプトなし）。ジョブ ID:',
+    scriptOnlyEditHint: 'スクリプトのみを実行するスケジュール（AI プロンプトなし）。スケジュール ID:',
     saveChanges: '変更を保存',
-    createAction: 'Cron を作成',
+    createAction: 'スケジュールを作成',
     tabs: {
-      jobs: 'ジョブ',
+      jobs: desktopTerms.ja.schedules,
       blueprints: 'ブレーンプリント'
     },
     blueprints: {
       tab: 'ブレーンプリント',
       startFrom: '開始点',
       custom: 'カスタム',
-      subtitle: 'すぐに使える自動化',
+      subtitle: 'すぐに使えるスケジュール',
       dialogDesc: '詳細を入力してスケジュールします。',
       scheduleIt: 'スケジュールする',
       scheduling: 'スケジュール中...',
@@ -2090,7 +2119,7 @@ export const jaOverrides = {
       loading: 'ブレーンプリントを読み込み中...',
       failedLoad: 'ブレーンプリントの読み込みに失敗しました',
       emptyTitle: '利用できるブレーンプリントはありません',
-      emptyDesc: 'このバックエンドで利用できる自動化ブレーンプリントはありません。'
+      emptyDesc: 'このバックエンドで利用できるスケジュールのブレーンプリントはありません。'
     }
   },
 
@@ -2150,7 +2179,7 @@ export const jaOverrides = {
   },
 
   sidebar: {
-    profileRail: 'プロファイルバー',
+    profileRail: 'エージェントバー',
     markAllRead: 'すべて既読にする',
     filter: {
       grouping: 'グループ化',
@@ -2159,7 +2188,7 @@ export const jaOverrides = {
       filters: 'フィルター',
       status: 'ステータス',
       pullRequest: 'プルリクエスト',
-      profile: 'プロファイル',
+      profile: desktopTerms.ja.agents,
       project: 'プロジェクト',
       archived: 'アーカイブ',
       resetToDefaults: 'デフォルトに戻す',
@@ -2184,10 +2213,10 @@ export const jaOverrides = {
       noPR: 'PRなし'
     },
     gatewayGroups: {
-      grouping: 'ゲートウェイとプロファイル',
+      grouping: 'マシンとエージェント',
       rename: 'グループ名を変更',
       aliasLabel: '表示名',
-      aliasHint: '表示名のみ変更します。ゲートウェイ名とプロファイル名は変わりません。',
+      aliasHint: '表示名のみ変更します。マシン名とエージェント名は変わりません。',
       resetName: '名前をリセット',
       moveUp: '上に移動',
       moveDown: '下に移動',
@@ -2199,7 +2228,7 @@ export const jaOverrides = {
       capabilities: 'スキルとツール',
       messaging: 'メッセージング',
       artifacts: 'アーティファクト',
-      cron: 'スケジュール済みジョブ'
+      cron: desktopTerms.ja.schedules
     },
     searchAria: 'セッションを検索',
     searchPlaceholder: 'セッションを検索…',
@@ -2212,7 +2241,7 @@ export const jaOverrides = {
     files: 'ファイル',
     review: 'レビュー',
     logs: 'ログ',
-    cronJobs: 'Cronジョブ',
+    cronJobs: desktopTerms.ja.schedules,
     groupAriaGrouped: 'セッションを単一リストとして表示',
     groupAriaUngrouped: 'ワークスペースごとにセッションをグループ化',
     showProjects: 'プロジェクトを表示',
@@ -2258,7 +2287,7 @@ export const jaOverrides = {
       backgroundRunning: 'バックグラウンドタスク実行中',
       draftSession: '下書き — 未送信',
       handoffOrigin: platform => `${platform} から引き継ぎ`,
-      ownedByProfile: profile => `プロファイル: ${profile}`,
+      ownedByProfile: profile => `エージェント: ${profile}`,
       renamed: '名前を変更しました',
       renameFailed: '名前の変更に失敗しました',
       renameTitle: 'セッションの名前を変更',
@@ -2365,8 +2394,8 @@ export const jaOverrides = {
       '/worktree': '分離した Git ワークツリーを表示、一覧、作成、整理',
       '/compress': '会話コンテキストを圧縮',
       '/rollback': 'チェックポイントを一覧または復元',
-      '/export': 'プロファイルの設定、スキル、テーマを共有用アーカイブに書き出す',
-      '/import': '共有アーカイブを新しいプロファイルとして読み込む',
+      '/export': 'エージェントの設定、スキル、テーマを共有用アーカイブに書き出す',
+      '/import': '共有アーカイブを新しいエージェントとして読み込む',
       '/stop': '進行中のターンとバックグラウンドプロセスを停止',
       '/pause': '新しい処理を全体で一時停止（緊急停止）；/pause off で再開',
       '/bg': '別のバックグラウンドセッションでプロンプトを実行',
@@ -2387,7 +2416,7 @@ export const jaOverrides = {
       '/egress': 'Docker の送信プロキシの状態を表示',
       '/context': 'コンテキスト使用量、内訳、圧縮統計、処理速度を表示',
       '/whoami': 'スラッシュコマンドのアクセス権を表示',
-      '/profile': 'アクティブな Hermes プロファイルを切り替え',
+      '/profile': 'アクティブなエージェントを切り替え',
       '/codex-runtime': 'OpenAI/Codex モデルの Codex app-server ランタイムを切り替え',
       '/personality': 'このセッションの人格を切り替え',
       '/battery': 'ステータスバーのバッテリー表示を切り替え',
@@ -2406,14 +2435,14 @@ export const jaOverrides = {
       '/hatch': '新しいペットを生成',
       '/learn': 'ディレクトリ、URL、会話、メモから再利用可能なスキルを学ぶ',
       '/init': 'リポジトリを調べて AGENTS.md の指示を作成または更新',
-      '/suggestions': '提案された自動化を確認し、採用または却下',
-      '/blueprint': 'ブループリントから自動化を設定',
+      '/suggestions': '提案されたスケジュールを確認し、採用または却下',
+      '/blueprint': 'ブループリントからスケジュールを設定',
       '/browser': 'エージェントのブラウザーを管理 [connect|disconnect|status]',
       '/palette': 'コマンドパレットを開く',
       '/usage': 'このセッションのトークン使用量を表示',
       '/subscription': 'Nous のプランを確認し、ブラウザーで変更',
       '/topup': 'Nous の残高を表示し、請求を管理',
-      '/platform': '問題のあるゲートウェイプラットフォームを一時停止、再開、一覧表示',
+      '/platform': '問題のあるメッセージングプラットフォームを一時停止、再開、一覧表示',
       '/version': 'Hermes Agent のバージョンを表示',
       '/debug': 'デバッグレポートを作成',
       '/model': 'このセッションのモデルを切り替え'
@@ -2454,7 +2483,7 @@ export const jaOverrides = {
     queueCancelFailed: 'キュー内のターンを削除できませんでした',
     queueLostDiscard: '破棄',
     queueLostDiscardTip:
-      'ターン中にゲートウェイが再起動したため完了できません。破棄すると後続のキュー済みターンが実行されます。',
+      'ターン中に Hermes が再起動したため完了できません。破棄すると後続のキュー済みターンが実行されます。',
     queueResume: '再開',
     queueResumeTip: '停止により一時停止中 — キュー済みターンの送信を再開します',
     queueStuckTitle: 'キュー内のメッセージを送信できません',
@@ -2794,7 +2823,7 @@ export const jaOverrides = {
     justNowSuffix: ' · たった今',
     bundleOutOfSync: 'アプリのビルドが古くなっています',
     bundleOutOfSyncDesc:
-      'Hermes ランタイムは更新されましたが、デスクトップアプリ自体は古いビルドのままです。アプリを更新するまで、新しいインターフェース機能(Bot Mode など)は表示されません。下の更新を実行してアプリを再ビルドしてください。それでもこの警告が消えない場合は、最新のデスクトップインストーラーから再インストールしてください。',
+      'Hermes ランタイムは更新されましたが、デスクトップアプリ自体は古いビルドのままです。アプリを更新するまで、新しいインターフェース機能（エージェントモードなど）は表示されません。下の更新を実行してアプリを再ビルドしてください。それでもこの警告が消えない場合は、最新のデスクトップインストーラーから再インストールしてください。',
     bundleOutOfSyncAction: 'インストーラーを入手',
     checkingShort: '確認中…'
   },
@@ -2817,7 +2846,7 @@ export const jaOverrides = {
     retryAfterRun: '実行しました — 再試行',
     setupChoiceTitle: 'Hermes Desktop をセットアップ',
     setupChoiceDesc:
-      'すでに実行している Hermes ゲートウェイに接続するか、このコンピューターに Hermes をローカルインストールします。',
+      'Hermes がすでに動作しているマシンに接続するか、このコンピューターに Hermes をローカルインストールします。',
     connectExistingTitle: '既存の Hermes に接続',
     connectExistingShort: '既存環境に接続',
     connectExistingDesc:
@@ -2828,26 +2857,26 @@ export const jaOverrides = {
       'ローカルインストールを開始できません。Hermes Desktop を再起動して、もう一度お試しください。',
     remoteSetupTitle: '既存の Hermes に接続',
     remoteSetupDesc:
-      'ゲートウェイ URL を入力してください。Hermes Desktop がトークンとブラウザーサインインのどちらが必要かを検出します。',
-    remoteUrlTitle: 'ゲートウェイ URL',
-    remoteUrlDesc: 'Hermes ゲートウェイのベース URL を使用します。リモートの場合は https:// を含めてください。',
+      'マシン URL を入力してください。Hermes Desktop がトークンとブラウザーサインインのどちらが必要かを検出します。',
+    remoteUrlTitle: 'マシン URL',
+    remoteUrlDesc: 'Hermes マシンのベース URL を使用します。リモートの場合は https:// を含めてください。',
     remoteUrlPlaceholder: 'https://gateway.example.com/hermes',
-    probing: 'ゲートウェイ認証方式を検出中...',
-    probeError: 'その Hermes ゲートウェイに到達できませんでした。',
+    probing: 'マシン認証方式を検出中...',
+    probeError: 'その Hermes マシンに到達できませんでした。',
     identityProvider: 'ID プロバイダー',
     authTitle: '認証',
-    authNeedsOauth: provider => `このゲートウェイをテストする前に ${provider} でサインインしてください。`,
+    authNeedsOauth: provider => `このマシンをテストする前に ${provider} でサインインしてください。`,
     authSignedIn: 'ブラウザーサインインが完了しました。',
     connected: '接続済み',
     signIn: 'サインイン',
     signInWith: provider => `${provider} でサインイン`,
-    enterUrlFirst: '先にゲートウェイ URL を入力してください。',
+    enterUrlFirst: '先にマシン URL を入力してください。',
     signInIncomplete: '認証が完了する前にサインインウィンドウが閉じられました。',
     tokenTitle: 'セッショントークン',
-    tokenDesc: 'リモートゲートウェイの .env ファイルからセッショントークンを貼り付けます。',
+    tokenDesc: 'リモートマシンの .env ファイルからセッショントークンを貼り付けます。',
     pasteSessionToken: 'セッショントークンを貼り付け',
-    incompleteSignInTest: 'OAuth で保護されたこのゲートウェイをテストする前にサインインしてください。',
-    incompleteTokenTest: 'このゲートウェイをテストする前にセッショントークンを入力してください。',
+    incompleteSignInTest: 'OAuth で保護されたこのマシンをテストする前にサインインしてください。',
+    incompleteTokenTest: 'このマシンをテストする前にセッショントークンを入力してください。',
     testConnection: '接続をテスト',
     testSucceeded: (baseUrl, version) => `${baseUrl}${version ? ` (${version})` : ''} に接続しました。`,
     applyRemote: '適用して再接続',
@@ -2960,7 +2989,9 @@ export const jaOverrides = {
       daybreakFailed: 'Daybreak の更新に失敗しました'
     },
     gatewayMenu: {
-      gateway: 'ゲートウェイ',
+      connectionLabel: '接続',
+      inferenceLabel: '推論',
+      gateway: 'マシン',
       connected: '接続済み',
       connecting: '接続中',
       offline: 'オフライン',
@@ -2968,12 +2999,18 @@ export const jaOverrides = {
       inferenceNotReady: '推論準備未完了',
       checkingInference: '推論を確認中',
       disconnected: '切断済み',
-      reconnectGateway: 'ゲートウェイに再接続',
+      reconnectGateway: 'マシンに再接続',
       openSystem: 'システムパネルを開く',
       connection: label => `接続: ${label}`,
       recentActivity: '最近のアクティビティ',
       viewAllLogs: 'すべてのログを見る →',
-      messagingPlatforms: 'メッセージングプラットフォーム'
+      messagingPlatforms: 'メッセージングプラットフォーム',
+      machineStatus: (machine, status) => `${machine} の状態: ${status}`,
+      checkAgain: '再確認',
+      switchToMachine: 'このマシンに切り替える',
+      machineSettings: 'ゲートウェイとマシン',
+      restartTitle: 'ゲートウェイを再起動しますか？',
+      restartBody: 'このマシンで実行中の応答は停止します。数秒で復帰し、自動で再接続します。'
     },
     approvalMode: {
       title: '承認モード',
@@ -3007,7 +3044,7 @@ export const jaOverrides = {
       openCommandCenter: 'コマンドセンターを開く',
       showTerminal: 'ターミナルを表示',
       hideTerminal: 'ターミナルを非表示',
-      gateway: 'ゲートウェイ',
+      gateway: 'マシン',
       backend: 'バックエンド',
       messagingStopped: 'メッセージング停止',
       messagingDegraded: name => `${name} 停止`,
@@ -3018,15 +3055,15 @@ export const jaOverrides = {
       gatewayConnecting: '接続中',
       gatewayOffline: 'オフライン',
       gatewayRestarting: '再起動中…',
-      gatewayTitle: 'ゲートウェイ',
+      gatewayTitle: 'マシン',
       agents: 'エージェント',
       closeAgents: 'エージェントを閉じる',
       openAgents: 'エージェントを開く',
       subagents: count => `${count} サブエージェント`,
       failed: count => `${count} 失敗`,
       running: count => `${count} 実行中`,
-      cron: 'Cron',
-      openCron: 'Cron ジョブを開く',
+      cron: desktopTerms.ja.schedules,
+      openCron: 'スケジュールを開く',
       starmap: 'メモリグラフ',
       openStarmap: 'メモリグラフを開く',
       turnRunning: '実行中',
@@ -3128,11 +3165,11 @@ export const jaOverrides = {
     terminalCloseOthers: '他を閉じる',
     terminalCloseAll: 'すべて閉じる',
     terminalNewOn: '新しいターミナルを開く場所…',
-    terminalGatewayRemoved: '削除されたゲートウェイ',
+    terminalGatewayRemoved: '削除されたマシン',
     terminalGatewayRemovedBody:
-      'このターミナルが動作していたゲートウェイは削除されたため、再度開けません。このタブを閉じてください。',
+      'このターミナルが動作していたマシンは削除されたため、再度開けません。このタブを閉じてください。',
     terminalGatewayNoShellBody:
-      'このゲートウェイにはシェルアクセスがないため、このターミナルは再度開けません。このタブを閉じてください。',
+      'このマシンにはシェルアクセスがないため、このターミナルは再度開けません。このタブを閉じてください。',
     terminalDisconnectedBody:
       'ターミナルが切断されました。Enter キーで新しいシェルを開始します。スクロールバックは保持されます。',
     addToChat: 'チャットに追加'
@@ -3173,7 +3210,7 @@ export const jaOverrides = {
     editing: '編集中',
     unsavedChanges: '未保存の変更',
     saveFailed: message => `保存できませんでした：${message}`,
-    saveScopeChanged: 'この下書きを保存するには、元の接続とプロファイルに戻ってください。',
+    saveScopeChanged: 'この下書きを保存するには、元の接続とエージェントに戻ってください。',
     diskChangedTitle: 'ファイルがディスク上で変更されました',
     diskChangedBody:
       'このファイルは開いてから変更されています。あなたの版で上書きするか、編集を破棄して再読み込みしますか？',
@@ -3310,7 +3347,7 @@ export const jaOverrides = {
       skill: name => `スキル ${name}`,
       kind: { plugin: 'プラグイン', skill: 'スキル' },
       tier: { official: '公式', verified: '認証済み', community: 'コミュニティ' },
-      targetProfile: profile => `${profile} プロファイルにインストールします`,
+      targetProfile: profile => `エージェント「${profile}」にインストールします`,
       sendFailed: '回答を送信できませんでした。もう一度お試しください。',
       commitLabel: 'コミット',
       subdirLabel: 'フォルダー',
@@ -3461,7 +3498,7 @@ export const jaOverrides = {
       attachingFile: '添付中…'
     },
     approval: {
-      gatewayDisconnected: 'Hermes ゲートウェイが接続されていません',
+      gatewayDisconnected: 'マシンに接続されていません',
       sendFailed: '承認応答を送信できませんでした',
       run: '実行',
       command: 'コマンド',
@@ -3560,7 +3597,7 @@ export const jaOverrides = {
         },
         browser_type: { done: 'ページに入力しました', pending: 'ページに入力中', pendingAction: '入力中' },
         clarify: { done: '質問しました', pending: '質問中', pendingAction: '質問中' },
-        cronjob: { done: 'Cron ジョブ', pending: 'Cron ジョブをスケジュール中', pendingAction: 'スケジュール中' },
+        cronjob: { done: desktopTerms.ja.schedules, pending: 'スケジュールを設定中', pendingAction: '設定中' },
         edit_file: { done: 'ファイルを編集しました', pending: 'ファイルを編集中', pendingAction: '編集中' },
         execute_code: { done: 'コードを実行しました', pending: 'スクリプト作成中', pendingAction: 'スクリプト作成中' },
         image_generate: { done: '画像を生成しました', pending: '画像を生成中', pendingAction: '生成中' },
@@ -3601,7 +3638,7 @@ export const jaOverrides = {
   },
 
   prompts: {
-    gatewayDisconnected: 'Hermes ゲートウェイが接続されていません',
+    gatewayDisconnected: 'マシンに接続されていません',
     sudoSendFailed: 'sudo パスワードを送信できませんでした',
     secretSendFailed: 'シークレットを送信できませんでした',
     sudoTitle: '管理者パスワード',
@@ -3610,7 +3647,7 @@ export const jaOverrides = {
     sudoCommandUnavailable:
       'エージェントからコマンドが提供されていません。会話で確認できない場合はキャンセルしてください。',
     sudoInstallDesc:
-      'Bot Screen のパッケージ（TigerVNC + Xfce）をゲートウェイホストにインストールするため、sudo パスワードが必要です。そのホストにのみ送信されます。',
+      'エージェント画面のパッケージ（TigerVNC + Xfce）を接続先のマシンにインストールするため、sudo パスワードが必要です。そのホストにのみ送信されます。',
     sudoPlaceholder: 'sudo パスワード',
     secretTitle: 'シークレットが必要です',
     secretDesc: 'Hermes は続行するための認証情報が必要です。',
@@ -3662,11 +3699,11 @@ export const jaOverrides = {
     yoloTitle: 'YOLO',
     yoloToggleFailed: 'YOLO を切り替えられませんでした',
     profileStatus: current =>
-      `プロファイル: ${current}。/profile <name> または「新しいセッション」ピッカーを使って別のプロファイルでチャットを始めてください。`,
-    unknownProfile: '不明なプロファイル',
-    noProfileNamed: (target, available) => `"${target}" という名前のプロファイルはありません。利用可能: ${available}`,
-    newChatsProfile: name => `新しいチャットはプロファイル ${name} を使用します。`,
-    setProfileFailed: 'プロファイルの設定に失敗しました',
+      `エージェント: ${current}。/profile <name> または「新しいセッション」ピッカーを使って別のエージェントでチャットを始めてください。`,
+    unknownProfile: '不明なエージェント',
+    noProfileNamed: (target, available) => `"${target}" という名前のエージェントはありません。利用可能: ${available}`,
+    newChatsProfile: name => `新しいチャットはエージェント「${name}」を使用します。`,
+    setProfileFailed: 'エージェントの設定に失敗しました',
     sttDisabled: '音声認識は設定で無効になっています。',
     stopFailed: '停止に失敗しました',
     regenerateFailed: '再生成に失敗しました',
@@ -3679,9 +3716,9 @@ export const jaOverrides = {
     readOnlyTranscriptSendBlocked: 'このチャットは読み取り専用トランスクリプトとして開いています。送信は無効です。',
     resumeStrandedTitle: 'このセッションを読み込めませんでした',
     resumeStrandedBody:
-      'このセッションへの接続に失敗し、自動再試行も停止しました。ゲートウェイが実行中か確認してから、もう一度お試しください。',
+      'このセッションへの接続に失敗し、自動再試行も停止しました。Hermes が実行中か確認してから、もう一度お試しください。',
     poolSlotTimeoutBody:
-      'すべてのローカルプロファイルバックエンドスロットが使用中です。「設定」→「詳細設定」で「Warm Bot Backends」を増やすか、アイドル状態のバックエンドが解放された後に再試行してください。',
+      'すべてのローカルエージェントのバックエンドスロットが使用中です。「設定」→「詳細設定」で待機状態に保つエージェントのバックエンド数を増やすか、アイドル状態のバックエンドが解放された後に再試行してください。',
     poolSlotTimeoutOpenSettings: '詳細設定を開く',
     resumeRetry: '再試行',
     nothingToBranch: 'ブランチするものがありません',
@@ -3739,7 +3776,7 @@ export const jaOverrides = {
       success: platform => `${platform} に引き継ぎました。いつでもここで再開できます。`,
       systemNote: platform => `↻ ${platform} に引き継ぎました — いつでもここで再開できます。`,
       failed: error => `引き継ぎに失敗しました: ${error}`,
-      timedOut: 'ゲートウェイの待機がタイムアウトしました。`hermes gateway` は起動していますか？'
+      timedOut: 'Hermes の待機がタイムアウトしました。`hermes gateway` は起動していますか？'
     }
   },
 
@@ -3763,16 +3800,16 @@ export const jaOverrides = {
         text: '全セッションの画像・ファイル・リンクを一箇所にまとめています。'
       },
       cron: {
-        title: '自動で動く仕事',
-        text: 'プロンプトを毎時・毎晩、または cron 式で実行できます。'
+        title: 'スケジュールで自動実行',
+        text: 'プロンプトを毎時・毎晩などに自動実行できます。Cron 式で実行日時を指定することもできます。'
       },
       'command-palette': {
         title: 'すべてはこの一箇所から',
         text: 'セッション、設定、スキル、コマンドはすべてパレットから呼び出せます。'
       },
       profiles: {
-        title: 'プロファイルは独立しています',
-        text: 'それぞれが独自のキー・メモリ・セッションを持つ、別の Hermes です。'
+        title: 'エージェントごとに独立',
+        text: 'それぞれのエージェントが独自の指示、設定、チャットを持ちます。'
       },
       'composer-mentions': {
         title: 'ファイルとコマンド',

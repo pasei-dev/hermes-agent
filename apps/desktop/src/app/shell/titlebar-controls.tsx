@@ -1,6 +1,6 @@
 import { compactNumber } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
+import { type ComponentProps, type CSSProperties, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { hudTargetSessionId } from '@/app/hud/handoff'
@@ -34,11 +34,30 @@ import {
 } from '@/store/layout'
 import { REVIEW_PANE_ID } from '@/store/review'
 import { $unreadSessionCount } from '@/store/session-dot-state'
+import { $focusedStoredSessionId } from '@/store/session-focus'
+import { usePortalShell } from '@/store/shell-variant'
 import { $titlebarAppActionsSide, TITLEBAR_FIXED_TOOLS } from '@/store/titlebar-app-actions'
 import { $canGoBack, backVisible, goBackToPreviousView } from '@/store/view-history'
 
-import { appViewForPath, hidesFixedTitlebarClusters, isOverlayView } from '../routes'
+import {
+  $workspaceIsPage,
+  appViewForPath,
+  hidesFixedTitlebarClusters,
+  isOverlayView,
+  NEW_CHAT_ROUTE,
+  sessionRoute
+} from '../routes'
 
+import {
+  $historyPosition,
+  canGoBack,
+  canGoForward,
+  historyBack,
+  historyForward,
+  useMouseHistoryButtons,
+  useTrackHistoryPosition
+} from './history-position'
+import { PortalSessionTab } from './portal-session-tab'
 import {
   TITLEBAR_CHROME_CHANGED_EVENT,
   TITLEBAR_ICON_BADGE_SCALE,
@@ -47,6 +66,7 @@ import {
   titlebarToolClusterClass
 } from './titlebar'
 import { TitlebarIcon } from './titlebar-icon'
+import { useTitlebarHeight } from './use-touch-titlebar'
 
 export interface TitlebarTool extends Tiered {
   id: string
@@ -184,7 +204,70 @@ function useSidebarEdges(): { left: SidebarEdge; right: SidebarEdge } {
   }
 }
 
+/** The redesigned sidebar carries its own collapse button (Figma 906:19685), so the band offers
+ *  only the way back while it is hidden; pages have no sidebar to bring back. A narrow window
+ *  keeps it: there the sidebar is an overlay this button reveals. ⌘B works in every state. */
+function useBandSidebarToolHidden(portal: boolean, sidebarOpen: boolean): boolean {
+  const workspacePage = useStore($workspaceIsPage)
+  const narrow = useStore($narrowViewport)
+
+  return portal && !narrow && (sidebarOpen || workspacePage)
+}
+
+/** The redesigned band leads with Back and Forward on every screen (Figma 906:19467, 856:2713):
+ *  the window's own router history. A workspace page (Capabilities, Library, …) reached with nothing
+ *  behind it (a deep link, a fresh window) still has a way back: the chat the Chats destination
+ *  would open. */
+function usePortalHistoryTools(portal: boolean): TitlebarTool[] {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const position = useStore($historyPosition)
+  const workspacePage = useStore($workspaceIsPage)
+  const sessionId = useStore($focusedStoredSessionId)
+  const back = canGoBack(position)
+  const fallback = workspacePage && !back ? (sessionId ? sessionRoute(sessionId) : NEW_CHAT_ROUTE) : null
+
+  return [
+    {
+      disabled: !back && !fallback,
+      hidden: !portal,
+      icon: <TitlebarIcon name="arrow-left" />,
+      id: 'history-back',
+      label: t.common.back,
+      onSelect: () => (fallback ? navigate(fallback) : historyBack())
+    },
+    {
+      disabled: !canGoForward(position),
+      hidden: !portal,
+      icon: <TitlebarIcon name="arrow-right" />,
+      id: 'history-forward',
+      label: t.preview.web.goForward,
+      onSelect: historyForward
+    }
+  ]
+}
+
+/** The redesign centres its 30px chrome buttons in its 60px band; native controls are centred
+ *  there too, so the pre-Tahoe optical nudge stands down. The leading cluster starts at
+ *  `--portal-band-start` (portalBandLeadingInset: past macOS traffic lights, else on the content inset).
+ *  Classic keeps the stylesheet's placement. */
+function usePortalClusterStyles(portal: boolean): { clusterStyle?: CSSProperties; leftClusterStyle?: CSSProperties } {
+  const titlebarHeight = useTitlebarHeight()
+
+  if (!portal) {
+    return {}
+  }
+
+  const clusterStyle = {
+    '--titlebar-controls-top': `calc((${titlebarHeight}px - var(--titlebar-control-height)) / 2)`,
+    '--titlebar-controls-y-nudge': '0px'
+  } as CSSProperties
+
+  return { clusterStyle, leftClusterStyle: { ...clusterStyle, left: 'var(--portal-band-start)' } }
+}
+
 export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }: TitlebarControlsProps) {
+  const portal = usePortalShell()
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -217,6 +300,10 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const { left: leftEdge, right: rightEdge } = useSidebarEdges()
   const leftLabel = leftEdge.open ? t.titlebar.hideSidebar : t.titlebar.showSidebar
   const rightLabel = rightEdge.open ? t.titlebar.hideRightSidebar : t.titlebar.showRightSidebar
+  const sidebarToolHidden = useBandSidebarToolHidden(portal, leftEdge.open)
+  const historyTools = usePortalHistoryTools(portal)
+  useTrackHistoryPosition()
+  useMouseHistoryButtons(portal)
 
   const sidebarTool: TitlebarTool = {
     ...TITLEBAR_FIXED_TOOLS.sidebar,
@@ -224,6 +311,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     badge: panesFlipped ? undefined : unreadBadge,
     icon: <TitlebarIcon name="layout-sidebar-left" />,
     id: 'sidebar',
+    hidden: sidebarToolHidden,
     expanded: leftEdge.expanded,
     label: `${leftLabel}${panesFlipped ? '' : unreadHint}`,
     onSelect: () => {
@@ -267,6 +355,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
       actionId: 'nav.settings',
       icon: <TitlebarIcon name="settings-gear" />,
       id: 'settings',
+      hidden: portal,
       label: t.titlebar.openSettings,
       onSelect: () => {
         triggerHaptic('open')
@@ -275,6 +364,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     },
     {
       ...TITLEBAR_FIXED_TOOLS.layout,
+      hidden: portal && interfaceMode === 'simple',
       className: 'group/tool',
       // Hover + held ⌘/Ctrl morphs the glyph into its reset form (see
       // LayoutGlyph) — the mod-click telegraphs itself before it happens.
@@ -316,6 +406,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   // One rule for the affordance, read here and inside BackViewButton: the
   // overlay branch needs to know whether its lone cluster exists at all.
   const backShown = backVisible(view, canGoBack)
+  const { clusterStyle, leftClusterStyle } = usePortalClusterStyles(portal)
 
   // Route changes can replace measured clusters without resizing the panels,
   // and the anchored back control is a measurement input for the zone's own
@@ -344,7 +435,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   if (isOverlayView(view)) {
     return backShown ? (
       <div className={leftClusterClass}>
-        <BackViewButton />
+        <BackViewButton portal={portal} />
       </div>
     ) : null
   }
@@ -365,7 +456,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         data-titlebar-back=""
         style={{ left: `${mainZoneLeft}px` }}
       >
-        <BackViewButton />
+        <BackViewButton portal={portal} />
       </div>
     ) : null
 
@@ -381,16 +472,16 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     // Both markers are required even when a page contributes to only one side.
     return (
       <>
-        {backCluster}
-        <div className={leftClusterClass} data-titlebar-cluster="left">
+        <div className={leftClusterClass} data-titlebar-cluster="left" style={leftClusterStyle}>
           {pageTools.map(tool => (
-            <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+            <TitlebarToolButton key={tool.id} navigate={navigate} portal={portal} tool={tool} />
           ))}
           <Slot area="titleBar.left" />
         </div>
         <div
           className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
           data-titlebar-cluster="right"
+          style={clusterStyle}
         >
           <Slot area="titleBar.right" />
         </div>
@@ -398,9 +489,11 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     )
   }
 
-  const visibleLeftTools = [
-    ...(appActionsSide === 'left' ? [sidebarTool, ...systemTools, ...leftTools] : [sidebarTool, ...leftTools])
-  ].filter(visibleTool)
+  const visibleLeftTools = (
+    appActionsSide === 'left'
+      ? [...historyTools, sidebarTool, ...systemTools, ...leftTools]
+      : [...historyTools, sidebarTool, ...leftTools]
+  ).filter(visibleTool)
 
   const visibleSystemTools = appActionsSide === 'right' ? systemTools.filter(visibleTool) : []
   const visiblePaneTools = tools.filter(visibleTool)
@@ -409,13 +502,27 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   return (
     <>
       {backCluster}
-      <div aria-label={t.shell.windowControls} className={leftClusterClass} data-titlebar-cluster="left">
+      <div
+        aria-label={t.shell.windowControls}
+        className={leftClusterClass}
+        data-titlebar-cluster="left"
+        style={leftClusterStyle}
+      >
         {visibleLeftTools.map(tool => (
-          <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+          <TitlebarToolButton key={tool.id} navigate={navigate} portal={portal} tool={tool} />
         ))}
         <Slot area="titleBar.left" />
         <Slot area="titleBar.center" />
       </div>
+
+      {portal && (
+        <div
+          className={cn(titlebarToolClusterClass, 'portal-session-tab-cluster top-(--titlebar-controls-top)')}
+          style={clusterStyle}
+        >
+          <PortalSessionTab />
+        </div>
+      )}
 
       {visiblePaneTools.length > 0 && (
         <div
@@ -424,9 +531,10 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
             titlebarToolClusterClass,
             'top-[calc(var(--titlebar-controls-top)+var(--right-rail-top-inset,0px))] right-[calc(var(--titlebar-tools-right)+var(--shell-preview-toolbar-gap,0))]'
           )}
+          style={clusterStyle}
         >
           {visiblePaneTools.map(tool => (
-            <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+            <TitlebarToolButton key={tool.id} navigate={navigate} portal={portal} tool={tool} />
           ))}
         </div>
       )}
@@ -435,12 +543,13 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         aria-label={t.shell.appControls}
         className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
         data-titlebar-cluster="right"
+        style={clusterStyle}
       >
         {visibleSystemTools.map(tool => (
-          <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+          <TitlebarToolButton key={tool.id} navigate={navigate} portal={portal} tool={tool} />
         ))}
         {visibleRightFixedTools.map(tool => (
-          <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+          <TitlebarToolButton key={tool.id} navigate={navigate} portal={portal} tool={tool} />
         ))}
         <Slot area="titleBar.right" />
       </div>
@@ -454,20 +563,23 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
  * anchored to the main view on a page route. Both hosts render it as-is, so the
  * affordance cannot drift between them.
  */
-export function BackViewButton() {
+export function BackViewButton({ portal = false }: { portal?: boolean }) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const canGoBack = useStore($canGoBack)
   const view = appViewForPath(location.pathname)
 
-  if (!backVisible(view, canGoBack)) {
+  // The redesign band carries its own history Back (`history-back`), so this
+  // anchored control would be a second way back on the same screen.
+  if (portal || !backVisible(view, canGoBack)) {
     return null
   }
 
   return (
     <TitlebarToolButton
       navigate={navigate}
+      portal={portal}
       tool={{
         icon: <TitlebarIcon name="arrow-left" />,
         id: 'back',
@@ -482,11 +594,22 @@ export function BackViewButton() {
   )
 }
 
-function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof useNavigate>; tool: TitlebarTool }) {
-  // Titlebar actions never show an active background — state reads from the
-  // icon itself (e.g. the mute/unmute glyph). aria-pressed still carries it
-  // for a11y.
-  const className = cn(titlebarButtonClass, 'bg-transparent select-none', tool.className)
+interface TitlebarToolButtonProps {
+  navigate: ReturnType<typeof useNavigate>
+  /** The redesign draws every titlebar tool as a 30px chrome button. */
+  portal: boolean
+  tool: TitlebarTool
+}
+
+function TitlebarToolButton({ navigate, portal, tool }: TitlebarToolButtonProps) {
+  // Classic titlebar actions never show an active background — state reads
+  // from the icon itself (e.g. the mute/unmute glyph). aria-pressed still
+  // carries it for a11y.
+  const className = cn(
+    portal ? 'portal-chrome-button' : [titlebarButtonClass, 'bg-transparent'],
+    'select-none',
+    tool.className
+  )
 
   const tooltipLabel = tool.actionId ? (
     <TipKeybindLabel actionId={tool.actionId} text={tool.title ?? tool.label} />

@@ -1,14 +1,25 @@
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import type { HermesConnection } from '@/global'
+import { $connection } from '@/store/session'
+import { $shellChoice } from '@/store/shell-variant'
 
 import {
   MACOS_TAHOE_DARWIN_MAJOR,
+  PORTAL_TITLEBAR_HEIGHT,
+  portalBandLeadingInset,
   TITLEBAR_CONTROL_OFFSET_X,
   TITLEBAR_EDGE_INSET,
+  TITLEBAR_HEIGHT,
   TITLEBAR_MAC_TRAFFIC_LIGHTS_Y_NUDGE,
+  titlebarBandHeight,
   titlebarControlsPosition,
   titlebarControlsYNudge,
-  titlebarToolsRightCss
+  titlebarToolsRightCss,
+  TOUCH_TITLEBAR_HEIGHT
 } from './titlebar'
+import { installTitlebarBandProperty, useTitlebarHeight } from './use-touch-titlebar'
 
 describe('titlebarControlsPosition', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -63,5 +74,72 @@ describe('titlebarToolsRightCss', () => {
 
   it('matches the left edge inset on macOS fullscreen', () => {
     expect(titlebarToolsRightCss(0, { darwinMajor: 25, isFullscreen: true })).toBe(`${TITLEBAR_EDGE_INSET}px`)
+  })
+})
+
+describe('titlebarBandHeight', () => {
+  it('gives the redesign its 60px header and keeps classic compact (touch: 44px)', () => {
+    expect(titlebarBandHeight({ portal: true, touch: false })).toBe(PORTAL_TITLEBAR_HEIGHT)
+    expect(titlebarBandHeight({ portal: true, touch: true })).toBe(PORTAL_TITLEBAR_HEIGHT)
+    expect(titlebarBandHeight({ portal: false, touch: false })).toBe(TITLEBAR_HEIGHT)
+    expect(titlebarBandHeight({ portal: false, touch: true })).toBe(TOUCH_TITLEBAR_HEIGHT)
+  })
+
+  it('follows a live shell flip in the window band', () => {
+    const { result } = renderHook(() => useTitlebarHeight())
+
+    expect(result.current).toBe(PORTAL_TITLEBAR_HEIGHT)
+    act(() => $shellChoice.set(false))
+    expect(result.current).toBe(TITLEBAR_HEIGHT)
+    act(() => $shellChoice.set(null))
+    expect(result.current).toBe(PORTAL_TITLEBAR_HEIGHT)
+  })
+
+  it('publishes the band on the root for body-portalled surfaces, in both shells', () => {
+    const root = document.createElement('html')
+    const band = () => root.style.getPropertyValue('--titlebar-band-height')
+    const stop = installTitlebarBandProperty(root)
+
+    expect(band()).toBe(`${PORTAL_TITLEBAR_HEIGHT}px`)
+    $shellChoice.set(false)
+    expect(band()).toBe(`${TITLEBAR_HEIGHT}px`)
+    $shellChoice.set(null)
+    expect(band()).toBe(`${PORTAL_TITLEBAR_HEIGHT}px`)
+    stop()
+  })
+})
+
+describe('portalBandLeadingInset', () => {
+  it('starts at x=130 past macOS traffic lights', () => {
+    expect(portalBandLeadingInset({ x: 23, y: 23 }, false, true)).toBe(130)
+  })
+
+  it('assumes lights on a mac before native state arrives', () => {
+    expect(portalBandLeadingInset(undefined, false, true)).toBe(130)
+  })
+
+  it('aligns with the content inset (x=80) on Windows/Linux/web', () => {
+    expect(portalBandLeadingInset(null, false, false)).toBe(80)
+    expect(portalBandLeadingInset(undefined, false, false)).toBe(80)
+  })
+
+  it('aligns with the content inset in macOS fullscreen', () => {
+    expect(portalBandLeadingInset({ x: 23, y: 23 }, true, true)).toBe(80)
+    expect(portalBandLeadingInset(null, true, true)).toBe(80)
+  })
+
+  it('publishes the live start on the root for the band clusters and page toolbars', () => {
+    const root = document.createElement('html')
+    const start = () => root.style.getPropertyValue('--portal-band-start')
+    const stop = installTitlebarBandProperty(root)
+
+    $connection.set({ isFullscreen: false, windowButtonPosition: { x: 23, y: 23 } } as HermesConnection)
+    expect(start()).toBe('130px')
+    $connection.set({ isFullscreen: true, windowButtonPosition: { x: 23, y: 23 } } as HermesConnection)
+    expect(start()).toBe('80px')
+    $connection.set({ isFullscreen: false, windowButtonPosition: null } as HermesConnection)
+    expect(start()).toBe('80px')
+    stop()
+    $connection.set(null)
   })
 })

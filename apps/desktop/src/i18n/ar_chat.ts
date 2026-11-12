@@ -1,4 +1,5 @@
 import type { TranslationOverrides } from './define-locale'
+import { desktopTerms } from './desktop-terms'
 
 export const arChat = {
   composer: {
@@ -57,8 +58,8 @@ export const arChat = {
       '/worktree': 'عرض أشجار عمل Git المعزولة أو سردها أو إنشاؤها أو تنظيفها',
       '/compress': 'ضغط سياق المحادثة الحالية',
       '/rollback': 'عرض نقاط استعادة الملفات أو استعادتها مع الحفاظ على تعديلاتك اليدوية',
-      '/export': 'تصدير الملف الشخصي بإعداداته ومهاراته وسمته إلى أرشيف قابل للمشاركة',
-      '/import': 'استيراد أرشيف مشترك كملف شخصي جديد',
+      '/export': 'تصدير الوكيل بإعداداته ومهاراته وسمته إلى أرشيف قابل للمشاركة',
+      '/import': 'استيراد أرشيف مشترك كوكيل جديد',
       '/stop': 'إيقاف الدور الجاري والعمليات الخلفية',
       '/pause': 'إيقاف العمل الجديد مؤقتًا للجميع؛ الاستئناف باستخدام /pause off',
       '/bg': 'تشغيل طلب في جلسة خلفية منفصلة',
@@ -79,7 +80,7 @@ export const arChat = {
       '/egress': 'عرض حالة وكيل الاتصالات الصادرة في Docker',
       '/context': 'عرض استخدام السياق وتفاصيله وإحصاءات الضغط ومعدل المعالجة',
       '/whoami': 'عرض صلاحية الوصول إلى أوامر الشرطة المائلة',
-      '/profile': 'تبديل ملف Hermes الشخصي النشط',
+      '/profile': 'تبديل الوكيل النشط',
       '/codex-runtime': 'تبديل بيئة Codex app-server لنماذج OpenAI/Codex',
       '/personality': 'اختيار شخصية محددة مسبقًا',
       '/battery': 'تبديل عرض مؤشر البطارية الملون في شريط الحالة',
@@ -105,7 +106,7 @@ export const arChat = {
       '/usage': 'عرض استخدام الرموز وحدود الطلبات؛ reset يسترد إعادة ضبط محفوظة لحدود Codex',
       '/subscription': 'عرض خطة Nous وتغييرها في المتصفح',
       '/topup': 'عرض رصيد Nous وإدارة الفواتير',
-      '/platform': 'إيقاف منصة بوابة متعثرة مؤقتًا أو استئنافها أو عرضها',
+      '/platform': 'إيقاف منصة مراسلة متعثرة مؤقتًا أو استئنافها أو عرضها',
       '/version': 'عرض إصدار Hermes Agent',
       '/debug': 'رفع تقرير تصحيح يتضمن معلومات النظام والسجلات للحصول على رابط قابل للمشاركة',
       '/model': 'تبديل نموذج هذه الجلسة'
@@ -196,7 +197,7 @@ export const arChat = {
   statusStack: {
     hideStack: 'إخفاء لوحة الحالة',
     showStack: 'إظهار لوحة الحالة',
-    agents: 'الوكلاء',
+    agents: desktopTerms.ar.agents,
     background: count => `${count} في الخلفية`,
     goalActive: 'الهدف نشط',
     goalBlocked: 'الهدف متعذر',
@@ -346,7 +347,7 @@ export const arChat = {
     }
   },
   prompts: {
-    gatewayDisconnected: 'البوابة غير متصلة',
+    gatewayDisconnected: 'الجهاز غير متصل',
     sudoSendFailed: 'فشل إرسال كلمة مرور sudo',
     secretSendFailed: 'فشل إرسال السر',
     sudoTitle: 'مطلوب sudo',
@@ -354,7 +355,7 @@ export const arChat = {
       'راجع الأمر قبل إدخال كلمة مرور sudo. تُرسل كلمة المرور إلى الوكيل الذي ينفّذه وتُحفظ مؤقتًا لهذه الجلسة.',
     sudoCommandUnavailable: 'لم يقدّم هذا الوكيل الأمر. ألغِ الطلب إذا لم تتمكن من التحقق منه في المحادثة.',
     sudoInstallDesc:
-      'يحتاج Hermes إلى كلمة مرور sudo لتثبيت حزم Bot Screen (TigerVNC + Xfce) على مضيف البوابة. تُرسل إلى ذلك المضيف فقط.',
+      'يحتاج Hermes إلى كلمة مرور sudo لتثبيت حزم شاشة الوكيل (TigerVNC + Xfce) على الجهاز المتصل. تُرسل إلى ذلك المضيف فقط.',
     sudoPlaceholder: 'كلمة المرور',
     secretTitle: 'مطلوب سر',
     secretDesc: 'أدخل القيمة المطلوبة لمتابعة المهمة.',
@@ -403,11 +404,11 @@ export const arChat = {
     yoloSystem: active => (active ? 'YOLO مفعل للنظام' : 'YOLO معطل للنظام'),
     yoloTitle: 'وضع YOLO',
     yoloToggleFailed: 'فشل تبديل YOLO',
-    profileStatus: current => `الملف الحالي: ${current}`,
-    unknownProfile: 'ملف شخصي غير معروف',
-    noProfileNamed: (target, available) => `لا يوجد ملف باسم ${target}. المتاح: ${available}`,
-    newChatsProfile: name => `المحادثات الجديدة تستخدم ${name}`,
-    setProfileFailed: 'فشل ضبط الملف الشخصي',
+    profileStatus: current => `الوكيل الحالي: ${current}`,
+    unknownProfile: 'وكيل غير معروف',
+    noProfileNamed: (target, available) => `لا يوجد وكيل باسم ${target}. المتاح: ${available}`,
+    newChatsProfile: name => `المحادثات الجديدة مع ${name}`,
+    setProfileFailed: 'فشل تعيين الوكيل',
     sttDisabled: 'تحويل الكلام إلى نص معطل',
     stopFailed: 'فشل الإيقاف',
     regenerateFailed: 'فشلت إعادة التوليد',
@@ -419,10 +420,9 @@ export const arChat = {
       'لا يوجد بعد خادم متصل يملك هذه المحادثة القديمة، لذا فُتحت كنصّ محفوظ للقراءة فقط. السجل سليم؛ الإرسال معطّل حتى يتبنّاها خادم.',
     readOnlyTranscriptSendBlocked: 'هذه المحادثة مفتوحة كنصّ محفوظ للقراءة فقط — الإرسال معطّل.',
     resumeStrandedTitle: 'تعذّر تحميل هذه الجلسة',
-    resumeStrandedBody:
-      'فشل الاتصال بهذه الجلسة وتوقفت إعادة المحاولة التلقائية. تأكد من تشغيل البوابة، ثم حاول مجددا.',
+    resumeStrandedBody: 'فشل الاتصال بهذه الجلسة وتوقفت إعادة المحاولة التلقائية. تأكد من تشغيل Hermes، ثم حاول مجددا.',
     poolSlotTimeoutBody:
-      'جميع خانات الواجهات الخلفية المحلية للملفات الشخصية مشغولة. زد عدد Warm Bot Backends من الإعدادات ← متقدم، أو أعد المحاولة بعد إزالة واجهة خلفية خاملة.',
+      'جميع خانات الواجهات الخلفية المحلية للوكلاء مشغولة. زد عدد الواجهات الخلفية الجاهزة للوكلاء من الإعدادات ← متقدم، أو أعد المحاولة بعد إزالة واجهة خلفية خاملة.',
     poolSlotTimeoutOpenSettings: 'فتح الإعدادات المتقدمة',
     resumeRetry: 'إعادة المحاولة',
     nothingToBranch: 'لا يوجد ما يمكن تفريعه',
@@ -479,7 +479,7 @@ export const arChat = {
       success: platform => `تم التسليم إلى ${platform}. استأنف هنا في أي وقت.`,
       systemNote: platform => `↻ تم التسليم إلى ${platform} — استأنف هنا في أي وقت.`,
       failed: error => `فشل التسليم: ${error}`,
-      timedOut: 'انتهت المهلة في انتظار البوابة. هل `hermes gateway` قيد التشغيل؟'
+      timedOut: 'انتهت المهلة في انتظار Hermes. هل `hermes gateway` قيد التشغيل؟'
     }
   },
   tips: {
@@ -502,16 +502,16 @@ export const arChat = {
         text: 'الصور والملفات والروابط من كل الجلسات، مفهرسة في مكان واحد.'
       },
       cron: {
-        title: 'عمل يجري من تلقاء نفسه',
-        text: 'جدوِل موجّهًا كل ساعة أو كل ليلة أو وفق تعبير cron.'
+        title: 'الجداول تعمل تلقائيًا',
+        text: 'أنشئ جدولاً لتشغيل الوكيل كل ساعة أو كل ليلة أو وفق تعبير cron.'
       },
       'command-palette': {
         title: 'صندوق واحد لكل شيء',
         text: 'الجلسات والإعدادات والمهارات والأوامر كلها تستجيب للوحة الأوامر.'
       },
       profiles: {
-        title: 'الملفات الشخصية منفصلة',
-        text: 'كل واحد منها Hermes مستقل — مفاتيحه وذاكرته وجلساته الخاصة.'
+        title: 'لكل وكيل مساحته الخاصة',
+        text: 'لكل وكيل تعليماته وإعداداته ومحادثاته الخاصة.'
       },
       'composer-mentions': {
         title: 'المرفقات والأوامر',

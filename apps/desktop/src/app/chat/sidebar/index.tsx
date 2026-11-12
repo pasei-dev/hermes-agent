@@ -197,6 +197,8 @@ import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 import { useEnteredProjectSessions } from './use-entered-project-sessions'
 import { useServerSessionSearch } from './use-server-session-search'
 
+export { searchResultToSession, stripFtsMarkers } from './search-result-to-session'
+
 // Non-session groups (messaging platforms) stay compact: show a few rows up
 // front, reveal more in larger steps on demand. Keeps a busy platform from
 // dominating the sidebar before the user asks to see it.
@@ -294,9 +296,9 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onRetrySessions: () => Promise<void> | void
   onLoadMoreMessaging?: (platform: string) => Promise<void> | void
   onResumeSession: (sessionId: string, session?: SessionInfo) => void
-  onDeleteSession: (sessionId: string) => void
-  onArchiveSession: (sessionId: string) => void
-  onBranchSession: (sessionId: string) => void
+  onDeleteSession: (sessionId: string, session?: SessionInfo) => void
+  onArchiveSession: (sessionId: string, session?: SessionInfo) => void
+  onBranchSession: (sessionId: string, profile?: string, session?: SessionInfo) => void
   onNewSessionInWorkspace: (path: null | string, owner?: AgentProfileRoute) => void
   /** Create a brand-new session and open it as a tile. `dir` is the dock edge
    *  (or `center` to stack a tab); `anchor`/`before` optionally pin it to a
