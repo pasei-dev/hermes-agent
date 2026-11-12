@@ -140,7 +140,7 @@ function useConfigSectionVisibility({
     showAttachments: !hasOwner && activeSectionId === 'chat' && includesSubpage('attachments'),
     portalSafety,
     showSharedMetrics: !hasOwner && activeSectionId === 'safety' && subpage === 'privacy',
-    showRepoScan: !hasOwner && activeSectionId === 'workspace' && subpage === 'projects'
+    showRepoScan: !hasOwner && activeSectionId === 'workspace' && includesSubpage('projects')
   }
 }
 
@@ -437,10 +437,15 @@ function ConfigSettingsInner({
     return sectionFieldEntries(schema, config)
   }, [schema, config])
 
-  const fields = (sectionFields.get(activeSectionId) ?? []).filter(([key]) =>
-    compactAgent
-      ? agentPageShowsField(activeSectionId, key)
-      : agentModel || subpage === undefined || configSubpageForField(activeSectionId, key) === subpage
+  const fields = (sectionFields.get(activeSectionId) ?? []).filter(
+    ([key]) =>
+      (compactAgent
+        ? agentPageShowsField(activeSectionId, key)
+        : agentModel || subpage === undefined || configSubpageForField(activeSectionId, key) === subpage) &&
+      // Stacked switches (nested discovery under the scan) mount only when
+      // their parent is on — the same rule search uses, so a hit never lands
+      // on a row this page does not render.
+      (loadedConfig ? sectionFieldVisible(activeSectionId, key, loadedConfig) : true)
   )
 
   const { showModelSettings, showDesktopSettings, showAttachments, portalSafety, showSharedMetrics, showRepoScan } =

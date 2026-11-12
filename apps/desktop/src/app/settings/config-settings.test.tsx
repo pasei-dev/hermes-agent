@@ -40,7 +40,7 @@ vi.mock('@/hermes', async () => ({
   getElevenLabsVoices: () => getElevenLabsVoices(),
   // Owner scoping reads the profile list; a single default profile keeps the
   // shared (unowned) sections visible, which is what these suites assert.
-  getProfiles: async () => [],
+  getProfiles: async () => ({ profiles: [] }),
   setApiRequestProfile: () => {}
 }))
 
