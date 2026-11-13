@@ -21,7 +21,7 @@ from contextvars import copy_context
 from gateway.bot_peer_notices import automatic_notices_allowed
 from gateway.config import Platform
 from gateway.media_repair import repair_explicit_computer_use_media_paths
-from gateway.platforms.base import BasePlatformAdapter
+from gateway.platforms.base import BasePlatformAdapter, _mark_notify_metadata
 from gateway.platforms.event import MessageEvent
 from gateway.session import (
     SessionSource, _session_key_namespace, build_channel_continuity_note,
@@ -215,10 +215,15 @@ class GatewayTurnPersistenceMixin:
     def _hmwa_prepend_reasoning(self, agent_result, response, source, _intentional_silence):
         """Prepend the last reasoning block when show_reasoning is on for this platform. Mattermost
         requires an explicit per-platform opt-in (scratch text, not final-answer content)."""
+        block = self._hmwa_reasoning_block(agent_result, response, source, _intentional_silence)
+        return f"{block}\n\n{response}" if block else response
+
+    def _hmwa_reasoning_block(self, agent_result, response, source, _intentional_silence) -> str:
+        """The rendered reasoning block for this turn's reply, or "" when none is shown."""
         if source.platform == Platform.LOCAL and not _acp_launch(self, source):
             # Local viewers receive reasoning.delta through their event stream; projecting it into
             # the final response duplicates it and leaks messaging-platform formatting into Desktop.
-            return response
+            return ""
         from gateway.run import _load_gateway_config, _platform_config_key, _resolve_gateway_display_bool
         try:
             _show_reasoning_effective = _resolve_gateway_display_bool(
@@ -227,12 +232,13 @@ class GatewayTurnPersistenceMixin:
                 require_platform_override_for={Platform.MATTERMOST},
             )
         except Exception:
+            logger.debug("show_reasoning resolution failed; using the gateway default", exc_info=True)
             _show_reasoning_effective = (
                 False if source.platform == Platform.MATTERMOST else getattr(self, "_show_reasoning", False)
             )
         last_reasoning = agent_result.get("last_reasoning")
         if not (_show_reasoning_effective and response and not _intentional_silence and last_reasoning):
-            return response
+            return ""
         from gateway.stream_consumer_fences import escape_code_fences_for_display
         # Collapse long reasoning to keep messages readable
         lines = last_reasoning.strip().splitlines()
@@ -247,15 +253,16 @@ class GatewayTurnPersistenceMixin:
                 _load_gateway_config(), _platform_config_key(source.platform), "reasoning_style", "code",
             )
         except Exception:
+            logger.debug("reasoning_style resolution failed; using code", exc_info=True)
             _reasoning_style = "code"
         _quote = self._REASONING_QUOTE_STYLES.get(_reasoning_style)
         if _quote:
             header_key, prefix, empty = _quote
             _quoted = "\n".join(f"{prefix}{ln}" if ln else empty for ln in display_reasoning.splitlines())
-            return f"{t(header_key)}\n{_quoted}\n\n{response}"
+            return f"{t(header_key)}\n{_quoted}"
         # Escape ``` inside reasoning so inner fences don't break the outer code block.
         display_reasoning = escape_code_fences_for_display(display_reasoning)
-        return t("gateway.reasoning.block", reasoning=display_reasoning, response=response)
+        return t("gateway.reasoning.block", reasoning=display_reasoning, response="").rstrip()
 
     def _hmwa_runtime_footer_line(self, agent_result, source, _turn_seconds):
         """Runtime-metadata footer for the FINAL message of the turn; off by default
@@ -722,18 +729,19 @@ class GatewayTurnPersistenceMixin:
                                              generation=run_generation)
         return delivered
 
-    async def _ledger_uncertain_streamed_final(self, event, session_key, response, adapter) -> None:
+    async def _ledger_uncertain_streamed_final(self, event, session_key, response, adapter) -> bool:
         """A stream send of this answer timed out after the request left and was counted as shown: on
         screen or lost, the wire cannot tell. Sending it again now would be a silent second copy; the
         adapter ledgers it as a failed row instead, so the timed redelivery sends it once more WITH the
         may-be-a-duplicate marker and a lost send is not silence. That is what ``send_final_ledgered``
         gives a timed-out final on a non-streaming platform. Both the completion path and the queued
         first-response lane (whose result the follow-up replaces) ledger through here; an adapter
-        without the base contract has no ledger and keeps the old behaviour."""
+        without the base contract has no ledger and keeps the old behaviour. True only when a
+        redelivery row was saved (``gateway.delivery_ledger: false`` saves none)."""
         if not callable(getattr(adapter, "ledger_attempted_final", None)):
-            return
-        await adapter.ledger_attempted_final(
-            event, session_key, response, error="Timed out: the streamed send may not have landed")
+            return False
+        return await adapter.ledger_attempted_final(
+            event, session_key, response, error="Timed out: the streamed send may not have landed") is True
 
     async def _hmwa_stop_typing_for_turn(self, event, source):
         """Stop the typing indicator (never raises), with the delivery path's thread/workspace routing
@@ -792,12 +800,28 @@ class GatewayTurnPersistenceMixin:
         if agent_result.get("already_sent") and not agent_result.get("failed"):
             # The queued-follow-up lane uploads this response's attachments itself; re-scanning here
             # would upload every file a second time.
+            _footer_captioned = False  # the footer rode the last photo's caption (#74547)
             if response and adapter and not agent_result.get("media_already_delivered"):
-                await self._deliver_media_from_response(response, event, adapter)
-            if response and adapter and agent_result.get("delivery_uncertain"):
-                await self._ledger_uncertain_streamed_final(event, session_key, response, adapter)
+                # This media completes the user-visible reply: mark it notify-worthy like the
+                # non-streamed attachments (#144897) — in `important` mode it must still ring.
+                _footer_captioned = await self._deliver_media_from_response(
+                    response, event, adapter, footer_line="" if _intentional_silence else _footer_line,
+                    thread_metadata=_mark_notify_metadata(self._event_thread_metadata(event, source)))
+            ledgered = bool(response and adapter and agent_result.get("delivery_uncertain")) and (
+                await self._ledger_uncertain_streamed_final(event, session_key, response, adapter))
+            # The stream showed only the answer: the reasoning block prepended to ``response`` for
+            # show_reasoning never reached the chat, so it follows as its own message (#7251). A
+            # ledgered final already carries it: its redelivery sends reasoning and answer together.
+            reasoning_block = "" if ledgered else self._hmwa_reasoning_block(
+                agent_result, response, source, _intentional_silence)
+            # A bot peer would take a second message as fresh input: gated like the footer line.
+            if reasoning_block and adapter and automatic_notices_allowed(source):
+                try:
+                    await adapter.send(source.chat_id, reasoning_block, metadata=self._event_thread_metadata(event, source))
+                except Exception:
+                    logger.debug("trailing reasoning send failed", exc_info=True)
             # Streaming delivered the body, but the footer was held back (`not already_sent` gate).
-            if _footer_line and adapter and not _intentional_silence:
+            if _footer_line and adapter and not _intentional_silence and not _footer_captioned:
                 try:
                     await adapter.send(source.chat_id, _footer_line, metadata=self._event_thread_metadata(event, source))
                 except Exception as _e:

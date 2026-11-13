@@ -42,6 +42,7 @@ import { notifyError } from '@/store/notifications'
 import type { SessionInfo } from '@/types/hermes'
 
 import { dropAgentSidebarPreferences, migrateAgentSidebarPreferences } from './agent-sidebar-preferences'
+import { dropQueuedLaunchPicksForProfile, migrateQueuedLaunchPicksForProfile } from './composer-queued-pick'
 import { dropStatusDrawersForProfile, migrateStatusDrawersForProfile } from './composer-status-drawer'
 import { registryConnectionKind } from './connection-registry-state'
 import { recordDislike } from './desktop-metrics'
@@ -56,6 +57,7 @@ import {
 import { forgetPendingRuntimeTabs } from './preview-ownership'
 import { dropPreviewArtifactsForProfile, migratePreviewArtifactsForProfile } from './preview-status'
 import { $activeGatewayProfile, normalizeProfileKey } from './profile'
+import { renameLocalOwnerRoute } from './profile-owner-rename'
 import { $projectTree } from './project-tree'
 import { clearAllProviderWaits, clearSessionProviderWait } from './provider-wait'
 import {
@@ -2790,6 +2792,7 @@ export function dropTilesForProfile(
     (String(route?.connectionId ?? '').trim() || LOCAL_CONNECTION_ID) === LOCAL_CONNECTION_ID
   )
   dropBrowserProfilePrefs(name, route?.connectionId?.trim() || undefined)
+  dropQueuedLaunchPicksForProfile(name, route ? (route.connectionId ?? '') : undefined)
 }
 
 /**
@@ -2808,21 +2811,7 @@ export function migrateTilesForProfile(oldProfile: string, newProfile: string): 
     return
   }
 
-  const isLocal = (owner: SessionProfileRoute | undefined) =>
-    Boolean(owner) && (String(owner?.connectionId ?? '').trim() || 'local') === 'local'
-
-  const renamedOwner = (owner: SessionProfileRoute | undefined): SessionProfileRoute | undefined => {
-    if (!owner || !isLocal(owner)) {
-      return owner
-    }
-
-    const profile = normalizeProfileKey(owner.profile) === from ? to : owner.profile
-    const targetProfile = normalizeProfileKey(owner.targetProfile) === from ? to : owner.targetProfile
-
-    return profile === owner.profile && targetProfile === owner.targetProfile
-      ? owner
-      : { ...owner, profile, ...(targetProfile === undefined ? {} : { targetProfile }) }
-  }
+  const renamedOwner = (owner: SessionProfileRoute | undefined) => renameLocalOwnerRoute(owner, from, to)
 
   const moved = tilesByProfile[from]
 
@@ -2858,6 +2847,7 @@ export function migrateTilesForProfile(oldProfile: string, newProfile: string): 
   migratePreviewTabsForProfile(from, to)
   migrateBrowserProfilePrefs(from, to)
   migrateAgentSidebarPreferences({ connectionId: null, profile: from }, to)
+  migrateQueuedLaunchPicksForProfile(from, to)
 }
 
 /** ⌘⇧T — reopen the most recently closed tab where it was, then focus it.

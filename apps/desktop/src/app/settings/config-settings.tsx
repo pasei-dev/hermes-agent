@@ -33,6 +33,7 @@ import { normalizeProfileKey } from '@/store/profile'
 import { repoDiscoveryPolicyFromConfig, repoDiscoveryPolicySignature, scanAndRecordRepos } from '@/store/projects'
 import { $settingsRequestProfile } from '@/store/settings-scope'
 import { usePortalShell } from '@/store/shell-variant'
+import { $autoSpeakReplies, setAutoSpeakReplies } from '@/store/voice-prefs'
 import type { ConfigFieldSchema, HermesConfigRecord } from '@/types/hermes'
 
 import { useAgentSettingsEditorCopy } from '../agent-settings/settings-copy'
@@ -234,6 +235,12 @@ function ConfigSettingsInner({
     refetch: refetchConfig,
     writeScope
   } = useHermesConfigRecord(requestScope)
+
+  const desktopReadAloud = useStore($autoSpeakReplies)
+
+  // Writes land on the same cache key the query above reads (base key when
+  // following the active profile, suffixed when a scope override is set).
+  const writeConfigCache = useMemo(() => hermesConfigCacheWriter(scopeProfile), [scopeProfile])
 
   const {
     data: schemaResponse,
@@ -704,10 +711,19 @@ function ConfigSettingsInner({
         subpage={agentModel ? undefined : subpage}
         writeScope={writeScope}
       />
-      {activeSectionId === 'voice' && !compactAgent ? (
-        <SettingsCard>
+      {activeSectionId === 'voice' ? (
+        <>
+          {/* Desktop's own read-aloud switch: the same preference as the composer's toggle, for
+              every window and profile. voice.auto_tts below stays the messaging/CLI setting of
+              the profile being edited (#119885). */}
+          <ToggleRow
+            checked={desktopReadAloud}
+            description={c.desktopReadAloudDesc}
+            label={c.desktopReadAloudTitle}
+            onChange={on => void setAutoSpeakReplies(on)}
+          />
           <ListRow description={c.voiceShortcutHintDesc} title={c.voiceShortcutHintTitle} />
-        </SettingsCard>
+        </>
       ) : null}
       {showEmptyState ? (
         <EmptyState description={c.emptyDesc} title={c.emptyTitle} />
