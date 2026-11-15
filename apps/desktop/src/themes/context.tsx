@@ -19,6 +19,7 @@ import { persistString, persistStringRecord, storedString, storedStringRecord } 
 import { recordFeatureUse } from '@/store/desktop-metrics'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $connection } from '@/store/session'
+import { $portalShell, usePortalShell } from '@/store/shell-variant'
 import { setAppearance } from '@/store/translucency'
 
 import { $accentOverride } from './accent-override'
@@ -32,7 +33,7 @@ import {
 import { writeBootPalette } from './boot-palette'
 import { $chatFontFamily, resolveChatFontFamily } from './chat-font'
 import { harmonize, normalizeHex, readableInk } from './color'
-import { BUILTIN_THEME_LIST, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme, RETIRED_SKINS } from './presets'
+import { BUILTIN_THEME_LIST, DEFAULT_TYPOGRAPHY, defaultSkinName, nousTheme, RETIRED_SKINS } from './presets'
 import { $pendingModeApply } from './request'
 import { retintTheme } from './retint'
 import type { DesktopTheme, DesktopThemeColors, DesktopThemeTypography } from './types'
@@ -59,7 +60,7 @@ const resolveMode = (mode: ThemeMode, systemDark = matchesQuery('(prefers-color-
   mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
 
 const normalizeSkin = (name: string | null): string =>
-  name && resolveTheme(name) && !RETIRED_SKINS.has(name) ? name : DEFAULT_SKIN_NAME
+  name && resolveTheme(name) && !RETIRED_SKINS.has(name) ? name : defaultSkinName($portalShell.get())
 
 /**
  * A stored mode, or `system` when there isn't one.
@@ -132,9 +133,10 @@ const BOOT_PROFILE_KEY = typeof window === 'undefined' ? 'default' : (localDispl
 // Provider state keeps the raw pick so a name nothing resolves YET (a backend
 // skin the gateway hasn't seeded on this launch) isn't flattened to the default
 // for the rest of the session — it paints as soon as the registry can resolve it.
-const storedSkin = (profile: string): string =>
-  skinPref.stored(profile) ??
-  (profile === BOOT_PROFILE_KEY ? (localDisplaySkinName ?? DEFAULT_SKIN_NAME) : DEFAULT_SKIN_NAME)
+// Null is "no pick": normalizeSkin resolves it to the shell's default at paint
+// time, so it follows a live shell flip.
+const storedSkin = (profile: string): null | string =>
+  skinPref.stored(profile) ?? (profile === BOOT_PROFILE_KEY ? localDisplaySkinName : null)
 
 /** The live profile's committed theme: what the ThemeProvider paints without a preview. */
 export const committedTheme = (): DesktopTheme =>
@@ -312,6 +314,18 @@ function applyTypographyKnobs(root: HTMLElement, typo: Partial<DesktopThemeTypog
   }
 }
 
+/** A live Light/Dark switch swaps every colour token at once; a control whose `color` eases (hover
+ *  returns, chrome buttons) would spend its transition passing through the new background, so its
+ *  label reads blank for a frame. Transitions stand down until the new mode has painted. */
+function holdTransitionsThroughModeSwitch(root: HTMLElement, rendered: 'dark' | 'light') {
+  if (!root.dataset.hermesMode || root.dataset.hermesMode === rendered) {
+    return
+  }
+
+  root.dataset.themeSwitching = ''
+  requestAnimationFrame(() => requestAnimationFrame(() => delete root.dataset.themeSwitching))
+}
+
 function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark', chatFontFamily = $chatFontFamily.get()) {
   if (typeof document === 'undefined') {
     return
@@ -325,6 +339,7 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark', chatFontFamily 
   const midground = c.midground ?? c.ring
   const skinName = theme.name.endsWith(`-${mode}`) ? theme.name.slice(0, -mode.length - 1) : theme.name
 
+  holdTransitionsThroughModeSwitch(root, rendered)
   root.style.setProperty('color-scheme', rendered)
   root.dataset.hermesTheme = skinName
   root.dataset.hermesMode = rendered
@@ -470,9 +485,11 @@ if (typeof window !== 'undefined') {
 
 // ─── Context ────────────────────────────────────────────────────────────────
 
-interface ThemeContextValue {
+export interface ThemeContextValue {
   theme: DesktopTheme
   themeName: string
+  /** What an unchosen skin resolves to in this shell (see defaultSkinName). */
+  defaultThemeName: string
   mode: ThemeMode
   /** The light/dark switch the user picked. */
   resolvedMode: 'light' | 'dark'
@@ -499,7 +516,8 @@ const SKIN_LIST = BUILTIN_THEME_LIST.map(({ name, label, description }) => ({ na
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: nousTheme,
-  themeName: DEFAULT_SKIN_NAME,
+  themeName: defaultSkinName(false),
+  defaultThemeName: defaultSkinName(false),
   mode: 'light',
   resolvedMode: 'light',
   renderedMode: 'light',
@@ -540,9 +558,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [userThemes, backendThemes, registryVersion]
   )
 
-  const [themeName, setThemeNameState] = useState(() =>
-    typeof window === 'undefined' ? DEFAULT_SKIN_NAME : storedSkin(BOOT_PROFILE_KEY)
+  const [themeName, setThemeNameState] = useState<null | string>(() =>
+    typeof window === 'undefined' ? null : storedSkin(BOOT_PROFILE_KEY)
   )
+
+  const portalShell = usePortalShell()
 
   const [mode, setModeState] = useState<ThemeMode>(() =>
     typeof window === 'undefined' ? 'system' : modePref.resolve(BOOT_PROFILE_KEY)
@@ -589,9 +609,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // backend skin that failed to resolve at boot paints once the gateway seeds it.
   const committedName = useMemo(
     () => normalizeSkin(themeName),
-    // normalizeSkin resolves through the merged registry; the stores are its reactivity.
+    // normalizeSkin resolves through the merged registry and the shell's default;
+    // the stores are its reactivity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [themeName, userThemes, backendThemes, registryVersion]
+    [themeName, portalShell, userThemes, backendThemes, registryVersion]
   )
 
   const paintedName = preview ? preview.name : committedName
@@ -687,6 +708,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => ({
       theme: paintedTheme,
       themeName: committedName,
+      defaultThemeName: defaultSkinName(portalShell),
       mode,
       resolvedMode,
       renderedMode,
@@ -699,6 +721,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [
       paintedTheme,
       committedName,
+      portalShell,
       mode,
       resolvedMode,
       renderedMode,

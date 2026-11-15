@@ -2941,6 +2941,24 @@
       }
     },
     {
+      "name": "projects.set_parent",
+      "summary": "Nest a project under another, or move it back out; answers the refreshed project.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProjectsSetParentParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProjectResult"
+        }
+      }
+    },
+    {
       "name": "projects.set_primary",
       "summary": "Make one attached folder the project's primary path.",
       "params": [
@@ -26022,6 +26040,20 @@
             ],
             "default": null,
             "title": "Run Id"
+          },
+          "step": {
+            "default": "preferences",
+            "enum": [
+              "preferences",
+              "model"
+            ],
+            "title": "Step",
+            "type": "string"
+          },
+          "started": {
+            "default": false,
+            "title": "Started",
+            "type": "boolean"
           }
         },
         "required": [
@@ -26035,6 +26067,18 @@
         "additionalProperties": false,
         "description": "``mark_profile_offered`` also latches ``onboarding.seen.profile_build_offered`` in the root config,\nso the first chat after onboarding gets the plain intro instead of the profile offer.",
         "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
           "run": {
             "title": "Run",
             "type": "boolean"
@@ -26042,6 +26086,32 @@
           "mark_profile_offered": {
             "default": false,
             "title": "Mark Profile Offered",
+            "type": "boolean"
+          },
+          "sessionless": {
+            "default": false,
+            "title": "Sessionless",
+            "type": "boolean"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preferences",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Step"
+          },
+          "restart": {
+            "default": false,
+            "title": "Restart",
             "type": "boolean"
           }
         },
@@ -26164,9 +26234,26 @@
         "additionalProperties": false,
         "description": "``assume_fresh``: the unpackaged desktop's ``--fresh-install`` launch; the backend treats this\nmachine as one that never used Hermes. Packaged builds never send it.",
         "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
           "assume_fresh": {
             "default": false,
             "title": "Assume Fresh",
+            "type": "boolean"
+          },
+          "sessionless": {
+            "default": false,
+            "title": "Sessionless",
             "type": "boolean"
           }
         },
@@ -32306,6 +32393,18 @@
             "default": null,
             "title": "Primary Path"
           },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Id"
+          },
           "archived": {
             "default": false,
             "title": "Archived",
@@ -32460,6 +32559,18 @@
             "default": null,
             "title": "Path"
           },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parentid"
+          },
           "color": {
             "anyOf": [
               {
@@ -32487,6 +32598,11 @@
           "isAuto": {
             "default": false,
             "title": "Isauto",
+            "type": "boolean"
+          },
+          "discovered": {
+            "default": false,
+            "title": "Discovered",
             "type": "boolean"
           },
           "isNoProject": {
@@ -32974,7 +33090,7 @@
       },
       "ProjectsCreateParams": {
         "additionalProperties": false,
-        "description": "``use`` also activates the new project.",
+        "description": "``use`` also activates the new project. ``parent_id`` nests it from the start \u2014 ``''`` for an\nexplicit top level, an absent (or null) value leaves it to folder containment, and an unknown id\nfalls back the same way.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -33078,6 +33194,18 @@
             ],
             "default": null,
             "title": "Board Slug"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Id"
           },
           "use": {
             "default": false,
@@ -33408,6 +33536,45 @@
           }
         },
         "title": "ProjectsSetActiveParams",
+        "type": "object"
+      },
+      "ProjectsSetParentParams": {
+        "additionalProperties": false,
+        "description": "``parent_id`` names the project this one nests under in the sidebar; ``''`` moves it to the top\nlevel, and an absent (or null) value hands it back to folder containment. Looping moves are\nrefused (5063).",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Id"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ProjectsSetParentParams",
         "type": "object"
       },
       "ProjectsTreeParams": {
@@ -34738,6 +34905,11 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "nested": {
+            "default": false,
+            "title": "Nested",
+            "type": "boolean"
+          },
           "roots": {
             "items": {
               "type": "string"
@@ -34776,6 +34948,18 @@
             ],
             "default": null,
             "title": "Enabled"
+          },
+          "nested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Nested"
           },
           "roots": {
             "anyOf": [
@@ -34848,6 +35032,18 @@
             ],
             "default": null,
             "title": "Repo Scan Exclude Paths"
+          },
+          "repo_scan_nested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Repo Scan Nested"
           }
         },
         "title": "RepoDiscoveryPolicyParams",
@@ -42373,7 +42569,8 @@
               "click",
               "menu",
               "palette",
-              "shortcut"
+              "shortcut",
+              "state"
             ],
             "title": "Via",
             "type": "string"

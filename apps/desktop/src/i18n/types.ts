@@ -5,10 +5,10 @@
 // surface. Fully translated locale files may satisfy this interface directly;
 // partial locales should use `defineLocale()` so missing desktop-only strings
 // fall back to English while new keys remain type-checked.
-
 import type { ErrorCodeKey } from '@/lib/error-surface'
 import type { TipId } from '@/lib/tips/catalog'
 
+import type { SimplifiedAgentsCopy } from './simplified-agents'
 import type { AppTourTranslations } from './types_app_tour'
 import type { BillingTranslations } from './types_billing'
 import type { BootTranslations } from './types_boot'
@@ -30,6 +30,7 @@ import type { OnboardingTranslations } from './types_onboarding'
 import type { PluginPreviewAccessTranslations } from './types_plugin_preview_access'
 import type { PluginUpdateAllTranslations, PluginUpdateTranslations } from './types_plugin_update'
 import type { SidebarProjectsTranslations } from './types_projects'
+import type { RepoScanSettingsTranslations } from './types_repo_scan'
 import type { RightSidebarTranslations } from './types_right_sidebar'
 import type { SharedMetricsTranslations } from './types_shared_metrics'
 import type { ThemePickerCopy } from './types_theme_picker'
@@ -92,6 +93,7 @@ interface ModeOptionCopy {
 }
 
 export interface Translations extends NoticeTranslations {
+  simplifiedAgents: SimplifiedAgentsCopy
   /** Shared-metrics consent: first-run dialog + Settings › Safety toggles. */
   sharedMetrics: SharedMetricsTranslations
   appTour: AppTourTranslations
@@ -549,6 +551,7 @@ export interface Translations extends NoticeTranslations {
   }
 
   titlebar: {
+    back: string
     hideSidebar: string
     showSidebar: string
     search: string
@@ -599,7 +602,7 @@ export interface Translations extends NoticeTranslations {
     noResults: string
   }
 
-  settings: {
+  settings: RepoScanSettingsTranslations & {
     subpages: Record<string, string>
     closeSettings: string
     exportConfig: string
@@ -774,6 +777,13 @@ export interface Translations extends NoticeTranslations {
     searchPlaceholder: Record<'about' | 'config' | 'gateway' | 'keys' | 'mcp' | 'sessions', string>
     modeOptions: Record<'light' | 'dark' | 'system', ModeOptionCopy>
     appearance: {
+      redesign: {
+        toolViewTitle: string
+        toolViewDesc: string
+        product: string
+        introSplashTitle: string
+        embedsTitle: string
+      }
       title: string
       intro: string
       colorMode: string
@@ -923,6 +933,12 @@ export interface Translations extends NoticeTranslations {
     fieldDescriptions: Record<string, string>
     uninstallSection: UninstallSectionTranslations
     memoryLayers: MemoryLayersTranslations
+    poolLimits: {
+      warmBotBackendsAria: string
+      warmBotBackendsTitle: string
+      backendIdleTimeoutAria: string
+      backendIdleTimeoutTitle: string
+    }
     customEndpoints: {
       active: string
       apiKeySet: string
@@ -1856,6 +1872,13 @@ export interface Translations extends NoticeTranslations {
 
   skillDeepLink: SkillDeepLinkCopy
   skills: {
+    inventoryScopeHint: string
+    agentScopeHint: string
+    toolSecretsHint: string
+    openAgentSettings: string
+    openToolLibrary: string
+    remotePluginHint: string
+    showAllToolsets: (count: number) => string
     tabSkills: string
     tabToolsets: string
     configuringProfile: string
@@ -3573,6 +3596,8 @@ export interface Translations extends NoticeTranslations {
       daybreakFailed: string
     }
     gatewayMenu: {
+      connectionLabel: string
+      inferenceLabel: string
       gateway: string
       connected: string
       connecting: string
@@ -3587,6 +3612,12 @@ export interface Translations extends NoticeTranslations {
       recentActivity: string
       viewAllLogs: string
       messagingPlatforms: string
+      machineStatus: (machine: string, status: string) => string
+      checkAgain: string
+      switchToMachine: string
+      machineSettings: string
+      restartTitle: string
+      restartBody: string
     }
     approvalMode: {
       title: string

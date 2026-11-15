@@ -5,6 +5,7 @@ import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
+import { ActionsMenu } from '@/components/ui/actions-menu'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Codicon } from '@/components/ui/codicon'
@@ -44,6 +45,7 @@ import {
   type SessionInfo,
   updateCronJob
 } from '@/hermes'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertTriangle } from '@/lib/icons'
 import { requestModelOptions } from '@/lib/model-options'
@@ -52,8 +54,10 @@ import { $cronFocusJobId, $cronJobs, invalidateCronJobsRequests, setCronFocusJob
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
 import { $profileScope, ALL_PROFILES } from '@/store/profile'
+import { usePortalShell } from '@/store/shell-variant'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
+import { PAGE_SIDEBAR_NARROW } from '../overlays/page-sidebar'
 import {
   Panel,
   PanelAction,
@@ -69,7 +73,8 @@ import {
   PanelMeta,
   PanelPill,
   type PanelPillTone,
-  PanelSectionLabel
+  PanelSectionLabel,
+  renderPanelMenuItems
 } from '../overlays/panel'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
@@ -87,10 +92,13 @@ import {
   toggleCronDeliveryTarget,
   validateCronEditor
 } from './cron-job-model'
+import { CronEmptyPage, CronListEmpty, CronPageHeader } from './empty-page'
 import { jobState, jobTitle, nextRunOverdueMs, STATE_DOT, truncateText } from './job-state'
+import { initialScheduleSelection, pickSchedule, rememberViewedSchedule } from './landing'
 import { isCronRunRow, openCronRun, reconcileCronRunVerdicts } from './open-cron-run'
 import { catchUpChoice, catchUpValue, jobLastCancelReason, jobRunLive } from './run-control'
 import { LastCancelledNote, RunStopAction } from './run-stop-action'
+import { CronSchedulesPanel, CronStage } from './schedules-panel'
 import { useCronRunStop } from './use-cron-run-stop'
 
 const DEFAULT_DELIVER = 'local'
@@ -311,25 +319,10 @@ interface CronViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
-  const { t } = useI18n()
-  const c = t.cron
-  // Source of truth is the shared atom (also fed by the controller poll), so the
-  // sidebar and this overlay never drift — a delete here clears the sidebar row
-  // immediately. `loading` only gates the first paint before the atom is filled.
-  const jobs = useStore($cronJobs)
-  const [loading, setLoading] = useState(jobs.length === 0)
-  const [query, setQuery] = useState('')
-  const [busyJobTokens, setBusyJobTokens] = useState<ReadonlyMap<string, symbol>>(() => new Map())
+/** The Run-now controller for this view's lifetime, and which jobs it is triggering right now. */
+function useCronTriggerController() {
   const [triggeringJobKeys, setTriggeringJobKeys] = useState<ReadonlySet<string>>(() => new Set())
   const triggerControllerRef = useRef<CronTriggerController | null>(null)
-  // Accepted-but-unmaterialized triggers, by `${profile}:${jobId}`. The ref is
-  // written before the state set, so a queued row appears synchronously with
-  // the click and the controller guard has no untracked window.
-  const pendingTriggersRef = useRef(new Map<string, number>())
-  const [pendingTriggers, setPendingTriggers] = useState<ReadonlyMap<string, number>>(() => new Map())
-  // Click time of each Run-now whose request has not returned, by the same key (Stop visibility).
-  const [triggerStarts, setTriggerStarts] = useState<ReadonlyMap<string, number>>(() => new Map())
 
   // eslint-disable-next-line no-restricted-syntax -- controller mount identity, not an atom mirror
   useEffect(() => {
@@ -358,12 +351,66 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
     }
   }, [])
 
-  // Master/detail: the job whose schedule + run history fill the right pane.
-  const [selectedJobId, setSelectedJobId] = useState<null | string>(null)
+  return { triggerControllerRef, triggeringJobKeys }
+}
+
+/** Sidebar → "open this job": resolve the one-shot focus id (or name) to a job, hand it to `open`,
+ *  then clear the focus so re-opening Schedules normally does not re-trigger it. */
+function useSidebarJobFocus(jobs: readonly CronJob[], open: (jobId: string) => void) {
+  const focusJobId = useStore($cronFocusJobId)
+
+   
+  useEffect(() => {
+    if (!focusJobId) {
+      return
+    }
+
+    const match = jobs.find(job => job.id === focusJobId || jobName(job) === focusJobId)
+
+    if (match) {
+      open(match.id)
+    }
+
+    setCronFocusJobId(null)
+  }, [focusJobId, jobs, open])
+}
+
+export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
+  const { t } = useI18n()
+  const c = t.cron
+  const redesign = usePortalShell()
+  // The redesign lists schedules in the page sidebar panel; a narrow window, where that panel folds
+  // away, keeps the stacked list-over-detail page.
+  const narrow = useMediaQuery(PAGE_SIDEBAR_NARROW)
+  const panelLayout = redesign && !narrow
+  // Source of truth is the shared atom (also fed by the controller poll), so the
+  // sidebar and this overlay never drift — a delete here clears the sidebar row
+  // immediately. `loading` only gates the first paint before the atom is filled.
+  const jobs = useStore($cronJobs)
+  const [loading, setLoading] = useState(jobs.length === 0)
+  const [query, setQuery] = useState('')
+  const [busyJobTokens, setBusyJobTokens] = useState<ReadonlyMap<string, symbol>>(() => new Map())
+  const { triggerControllerRef, triggeringJobKeys } = useCronTriggerController()
+  // Accepted-but-unmaterialized triggers, by `${profile}:${jobId}`. The ref is
+  // written before the state set, so a queued row appears synchronously with
+  // the click and the controller guard has no untracked window.
+  const pendingTriggersRef = useRef(new Map<string, number>())
+  const [pendingTriggers, setPendingTriggers] = useState<ReadonlyMap<string, number>>(() => new Map())
+  // Click time of each Run-now whose request has not returned, by the same key (Stop visibility).
+  const [triggerStarts, setTriggerStarts] = useState<ReadonlyMap<string, number>>(() => new Map())
+
+  // Master/detail: the job whose schedule + run history fill the right pane. The redesign reopens
+  // the schedule this window showed last, as its Agents page does.
+  const [selectedJobId, setSelectedJobId] = useState<null | string>(() => initialScheduleSelection(redesign))
+
+  const selectJob = (jobId: string) => {
+    setSelectedJobId(jobId)
+    rememberViewedSchedule(jobId)
+  }
+
   // Set when a job is opened from the sidebar so we scroll it into view once the
   // row exists. Cleared after the scroll fires.
   const pendingScrollRef = useRef<null | string>(null)
-  const focusJobId = useStore($cronFocusJobId)
 
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
   const [pendingDelete, setPendingDelete] = useState<CronJob | null>(null)
@@ -398,24 +445,11 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
     return () => invalidateCronJobsRequests()
   }, [refresh])
 
-  // Sidebar → "open this job": resolve the focus id (or name) to a job, select
-  // it, queue a scroll, then clear the one-shot focus so re-opening cron
-  // normally doesn't re-trigger it.
-  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
-  useEffect(() => {
-    if (!focusJobId) {
-      return
-    }
-
-    const match = jobs.find(job => job.id === focusJobId || jobName(job) === focusJobId)
-
-    if (match) {
-      setSelectedJobId(match.id)
-      pendingScrollRef.current = match.id
-    }
-
-    setCronFocusJobId(null)
-  }, [focusJobId, jobs])
+  useSidebarJobFocus(jobs, jobId => {
+    setSelectedJobId(jobId)
+    rememberViewedSchedule(jobId)
+    pendingScrollRef.current = jobId
+  })
 
   const visibleJobs = useMemo(
     () => jobs.filter(job => matchesQuery(job, query.trim())).sort((a, b) => jobTitle(a).localeCompare(jobTitle(b))),
@@ -441,10 +475,7 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
 
   // Detail always reflects a concrete job: the explicitly selected one, else the
   // first visible row, so the right pane is never empty while jobs exist.
-  const selectedJob = useMemo(
-    () => visibleJobs.find(job => job.id === selectedJobId) ?? visibleJobs[0] ?? null,
-    [visibleJobs, selectedJobId]
-  )
+  const selectedJob = useMemo(() => pickSchedule(visibleJobs, selectedJobId), [visibleJobs, selectedJobId])
 
   // Scroll a sidebar-opened job into view once its list row is mounted.
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
@@ -710,12 +741,103 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
     setEditor({ mode: 'closed' })
   }
 
+  const jobMenuItems = (job: CronJob): PanelMenuItem[] => [
+    { icon: 'edit', label: c.edit, onSelect: () => setEditor({ mode: 'edit', job }) },
+    { icon: 'trash', label: t.common.delete, onSelect: () => setPendingDelete(job), tone: 'danger' }
+  ]
+
+  const jobDetail = (job: CronJob, stage: boolean) => (
+    <CronJobDetail
+      busy={busyJobTokens.has(job.id) || triggeringJobKeys.has(`${profile}:${job.id}`)}
+      c={c}
+      job={job}
+      menuItems={jobMenuItems(job)}
+      onEdit={() => setEditor({ mode: 'edit', job })}
+      onOpenSession={onOpenSession}
+      onPauseResume={() => void handlePauseResume(job)}
+      onPendingRunSettled={settlePendingTrigger}
+      onStop={() => void runStop.stop(job)}
+      onTrigger={() => void handleTrigger(job)}
+      pendingJobKey={`${profile}:${job.id}`}
+      pendingRunAt={pendingTriggers.get(`${profile}:${job.id}`)}
+      runLive={selectedRunLive}
+      stage={stage}
+      stopping={runStop.stoppingJobIds.has(job.id)}
+    />
+  )
+
+  const dialogs = (
+    <>
+      <CronEditorDialog
+        blueprintProfile={blueprintProfile}
+        editor={editor}
+        onBlueprintCreate={handleBlueprintCreate}
+        onClose={() => setEditor({ mode: 'closed' })}
+        onSave={handleEditorSave}
+      />
+
+      <ConfirmDialog
+        busyLabel={c.deleting}
+        confirmLabel={t.common.delete}
+        description={
+          pendingDelete ? (
+            <>
+              {c.deleteDescPrefix}
+              <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>
+              {c.deleteDescSuffix}
+            </>
+          ) : null
+        }
+        destructive
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+        open={pendingDelete !== null}
+        title={c.deleteTitle}
+      />
+    </>
+  )
+
+  if (panelLayout) {
+    return (
+      <Panel closeLabel={c.close} contentClassName="cron-page" onClose={onClose}>
+        <CronSchedulesPanel
+          blueprints={visibleBlueprints}
+          jobs={visibleJobs}
+          menuItems={jobMenuItems}
+          onCreate={() => setEditor({ mode: 'create' })}
+          onQueryChange={setQuery}
+          onSelect={selectJob}
+          onStartFrom={blueprintKey => setEditor({ blueprintKey, mode: 'create' })}
+          query={query}
+          selectedId={selectedJob?.id ?? null}
+          totalCount={totalCount}
+        />
+        <CronStage
+          blueprints={visibleBlueprints}
+          loading={loading && jobs.length === 0}
+          onCreate={() => setEditor({ mode: 'create' })}
+          onStartFrom={blueprintKey => setEditor({ blueprintKey, mode: 'create' })}
+          totalCount={totalCount}
+        >
+          {selectedJob && jobDetail(selectedJob, true)}
+        </CronStage>
+        {dialogs}
+      </Panel>
+    )
+  }
+
   return (
     <Panel closeLabel={c.close} onClose={onClose}>
-      <PanelHeader subtitle={c.count(totalCount)} title={c.title} />
+      <CronPageHeader totalCount={totalCount} />
 
       {loading && jobs.length === 0 ? (
         <PageLoader label={c.loading} />
+      ) : redesign && totalCount === 0 ? (
+        <CronEmptyPage
+          blueprints={visibleBlueprints}
+          onCreate={() => setEditor({ mode: 'create' })}
+          onStartFrom={blueprintKey => setEditor({ blueprintKey, mode: 'create' })}
+        />
       ) : totalCount === 0 && visibleBlueprints.length === 0 ? (
         <PanelEmpty
           action={
@@ -745,19 +867,12 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
                 active={selectedJob?.id === job.id}
                 job={job}
                 key={job.id}
-                menuItems={[
-                  { icon: 'edit', label: c.edit, onSelect: () => setEditor({ mode: 'edit', job }) },
-                  { icon: 'trash', label: t.common.delete, onSelect: () => setPendingDelete(job), tone: 'danger' }
-                ]}
+                menuItems={jobMenuItems(job)}
                 menuLabel={c.manage}
-                onSelect={() => setSelectedJobId(job.id)}
+                onSelect={() => selectJob(job.id)}
               />
             ))}
-            {visibleJobs.length === 0 && (
-              <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-                {query.trim() ? c.emptyTitleSearch : c.emptyTitleNew}
-              </p>
-            )}
+            {visibleJobs.length === 0 && <CronListEmpty searching={Boolean(query.trim())} />}
             <PanelAddButton label={c.newCron} onClick={() => setEditor({ mode: 'create' })} />
             {visibleBlueprints.length > 0 && (
               <>
@@ -778,70 +893,46 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
           </PanelList>
 
           {selectedJob ? (
-            <CronJobDetail
-              busy={busyJobTokens.has(selectedJob.id) || triggeringJobKeys.has(`${profile}:${selectedJob.id}`)}
-              c={c}
-              job={selectedJob}
-              onEdit={() => setEditor({ mode: 'edit', job: selectedJob })}
-              onOpenSession={onOpenSession}
-              onPauseResume={() => void handlePauseResume(selectedJob)}
-              onPendingRunSettled={settlePendingTrigger}
-              onStop={() => void runStop.stop(selectedJob)}
-              onTrigger={() => void handleTrigger(selectedJob)}
-              pendingJobKey={`${profile}:${selectedJob.id}`}
-              pendingRunAt={pendingTriggers.get(`${profile}:${selectedJob.id}`)}
-              runLive={selectedRunLive}
-              stopping={runStop.stoppingJobIds.has(selectedJob.id)}
-            />
-          ) : query.trim() ? (
-            // A search with no selected job: search-flavored copy is right.
-            <PanelEmpty description={c.emptyDescSearch} icon="search" />
+            jobDetail(selectedJob, false)
           ) : (
-            // No selection and no search — "Try a broader search query" here
-            // just confused people staring at an empty panel with zero jobs.
-            <PanelEmpty
-              action={
-                jobs.length === 0 ? (
-                  <Button onClick={() => setEditor({ mode: 'create' })} size="sm">
-                    {c.newCron}
-                  </Button>
-                ) : undefined
-              }
-              description={c.emptyDescNew}
-              icon="watch"
-              title={jobs.length === 0 ? c.emptyTitleNew : undefined}
+            <CronDetailEmpty
+              noJobs={jobs.length === 0}
+              onCreate={() => setEditor({ mode: 'create' })}
+              searching={Boolean(query.trim())}
             />
           )}
         </PanelBody>
       )}
 
-      <CronEditorDialog
-        blueprintProfile={blueprintProfile}
-        editor={editor}
-        onBlueprintCreate={handleBlueprintCreate}
-        onClose={() => setEditor({ mode: 'closed' })}
-        onSave={handleEditorSave}
-      />
-
-      <ConfirmDialog
-        busyLabel={c.deleting}
-        confirmLabel={t.common.delete}
-        description={
-          pendingDelete ? (
-            <>
-              {c.deleteDescPrefix}
-              <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>
-              {c.deleteDescSuffix}
-            </>
-          ) : null
-        }
-        destructive
-        onClose={() => setPendingDelete(null)}
-        onConfirm={handleConfirmDelete}
-        open={pendingDelete !== null}
-        title={c.deleteTitle}
-      />
+      {dialogs}
     </Panel>
+  )
+}
+
+/** The detail column with no job selected. */
+function CronDetailEmpty({ noJobs, onCreate, searching }: { noJobs: boolean; onCreate: () => void; searching: boolean }) {
+  const c = useI18n().t.cron
+
+  // A search with no selected job: search-flavored copy is right.
+  if (searching) {
+    return <PanelEmpty description={c.emptyDescSearch} icon="search" />
+  }
+
+  // No selection and no search — "Try a broader search query" here just confused people staring at
+  // an empty panel with zero jobs.
+  return (
+    <PanelEmpty
+      action={
+        noJobs ? (
+          <Button onClick={onCreate} size="sm">
+            {c.newCron}
+          </Button>
+        ) : undefined
+      }
+      description={c.emptyDescNew}
+      icon="watch"
+      title={noJobs ? c.emptyTitleNew : undefined}
+    />
   )
 }
 
@@ -877,6 +968,8 @@ interface CronJobDetailProps {
   busy: boolean
   c: Translations['cron']
   job: CronJob
+  /** Edit and Delete beside the stage heading's actions (the panel row carries the same menu). */
+  menuItems?: PanelMenuItem[]
   onEdit: () => void
   onOpenSession?: (sessionId: string, session?: SessionInfo) => void
   onPauseResume: () => void
@@ -887,6 +980,8 @@ interface CronJobDetailProps {
   pendingRunAt?: number
   /** A run is in flight (ledger) or this window's Run-now is still waiting on it. */
   runLive: boolean
+  /** The redesign's stage: the schedule's name is the page heading, its actions at the heading's end. */
+  stage?: boolean
   stopping: boolean
 }
 
@@ -894,6 +989,7 @@ function CronJobDetail({
   busy,
   c,
   job,
+  menuItems,
   onEdit,
   onOpenSession,
   onPauseResume,
@@ -903,6 +999,7 @@ function CronJobDetail({
   pendingJobKey,
   pendingRunAt,
   runLive,
+  stage = false,
   stopping
 }: CronJobDetailProps) {
   const state = runLive ? 'running' : jobState(job)
@@ -915,35 +1012,43 @@ function CronJobDetail({
   const description = jobDescription(job)
   const modelOverride = jobModel(job)
 
-  return (
+  const pills = <CronJobPills c={c} scriptOnly={scriptOnly} state={state} />
+
+  const actions = (
+    <CronJobActions
+      busy={busy}
+      c={c}
+      isPaused={isPaused}
+      menuItems={stage ? menuItems : undefined}
+      onPauseResume={onPauseResume}
+      onStop={onStop}
+      onTrigger={onTrigger}
+      pendingRunAt={pendingRunAt}
+      runLive={runLive}
+      stage={stage}
+      stopping={stopping}
+    />
+  )
+
+  const detail = (
     <PanelDetail>
       <header className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{jobTitle(job)}</h3>
-            {scriptOnly && <PanelPill tone="muted">{c.scriptBadge}</PanelPill>}
-            <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
+        {!stage && (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="min-w-0 break-words text-[0.95rem] font-semibold tracking-tight text-foreground">
+                {jobTitle(job)}
+              </h3>
+              {pills}
+            </div>
+            {actions}
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <RunStopAction c={c} onStop={onStop} runLive={runLive} stopping={stopping} />
-            <PanelAction disabled={busy} icon={isPaused ? 'play' : 'debug-pause'} onClick={onPauseResume}>
-              {isPaused ? c.resumeTitle : c.pauseTitle}
-            </PanelAction>
-            <PanelAction
-              disabled={busy}
-              icon={pendingRunAt === undefined ? 'zap' : 'loading'}
-              onClick={onTrigger}
-              primary
-              spinning={pendingRunAt !== undefined}
-            >
-              {c.triggerNow}
-            </PanelAction>
-          </div>
-        </div>
+        )}
 
         <PanelMeta
           rows={[
-            { label: c.frequencyLabel, value: jobScheduleDisplay(job) },
+            // The stage states the cadence under its heading.
+            ...(stage ? [] : [{ label: c.frequencyLabel, value: jobScheduleDisplay(job) }]),
             { label: c.last.replace(/:$/, ''), value: formatTime(job.last_run_at) },
             {
               label: (nextRunOverdueMs(job) === null ? c.next : c.overdueSince).replace(/:$/, ''),
@@ -992,6 +1097,88 @@ function CronJobDetail({
         pendingRunAt={pendingRunAt}
       />
     </PanelDetail>
+  )
+
+  if (!stage) {
+    return detail
+  }
+
+  return (
+    <>
+      <PanelHeader
+        actions={actions}
+        subtitle={
+          <span className="cron-stage-status">
+            {pills}
+            <span>{jobScheduleDisplay(job)}</span>
+          </span>
+        }
+        title={jobTitle(job)}
+      />
+      {detail}
+    </>
+  )
+}
+
+function CronJobPills({ c, scriptOnly, state }: { c: Translations['cron']; scriptOnly: boolean; state: string }) {
+  return (
+    <>
+      {scriptOnly && <PanelPill tone="muted">{c.scriptBadge}</PanelPill>}
+      <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
+    </>
+  )
+}
+
+interface CronJobActionsProps extends Pick<
+  CronJobDetailProps,
+  'busy' | 'c' | 'menuItems' | 'onPauseResume' | 'onStop' | 'onTrigger' | 'pendingRunAt' | 'runLive' | 'stopping'
+> {
+  isPaused: boolean
+  stage: boolean
+}
+
+/** Stop / Pause or Resume / Trigger now, and on the redesign's stage Edit and Delete behind "…". */
+function CronJobActions({
+  busy,
+  c,
+  isPaused,
+  menuItems,
+  onPauseResume,
+  onStop,
+  onTrigger,
+  pendingRunAt,
+  runLive,
+  stage,
+  stopping
+}: CronJobActionsProps) {
+  // The stage heading takes the page's 36px controls, as the agent page's heading does.
+  const size = stage ? 'lg' : 'sm'
+  const pending = pendingRunAt !== undefined
+
+  return (
+    <div className={stage ? 'cron-stage-actions' : 'flex shrink-0 items-center gap-0.5'}>
+      <RunStopAction c={c} onStop={onStop} runLive={runLive} size={size} stopping={stopping} />
+      <PanelAction disabled={busy} icon={isPaused ? 'play' : 'debug-pause'} onClick={onPauseResume} size={size}>
+        {isPaused ? c.resumeTitle : c.pauseTitle}
+      </PanelAction>
+      <PanelAction
+        disabled={busy}
+        icon={pending ? 'loading' : 'zap'}
+        onClick={onTrigger}
+        primary
+        size={size}
+        spinning={pending}
+      >
+        {c.triggerNow}
+      </PanelAction>
+      {menuItems && (
+        <ActionsMenu ariaLabel={c.manage} contentClassName="w-40" items={renderPanelMenuItems(menuItems)}>
+          <Button aria-label={c.manage} size="icon" variant="secondary">
+            <Codicon name="ellipsis" size="1rem" />
+          </Button>
+        </ActionsMenu>
+      )}
+    </div>
   )
 }
 
@@ -1191,11 +1378,14 @@ function CronJobRuns({
   )
 }
 
-// Label a cron delivery target: 'local' → localized "This desktop", known
-// platforms → their delivery label, anything else → the backend name. Configured
-// platforms without a cron home channel get a "set a home channel first" hint.
-function deliverTargetLabel(target: CronDeliveryTarget, c: Translations['cron']): string {
-  const base = target.id === 'local' ? c.deliveryLabels.local : (c.deliveryLabels[target.id] ?? target.name)
+// Canonical agent-chat target IDs stay unchanged; only their display name is localized.
+function deliverTargetLabel(target: CronDeliveryTarget, c: Translations['cron'], agentLabel: string): string {
+  let base = c.deliveryLabels[target.id] ?? target.name
+
+  if (target.id === 'bot-chat' || target.id.startsWith('bot-chat:')) {
+    const profile = target.id.slice('bot-chat:'.length)
+    base = profile ? `${agentLabel} (${profile})` : agentLabel
+  }
 
   return target.id !== 'local' && !target.home_target_set ? `${base} — ${c.deliverNeedsHomeChannel}` : base
 }
@@ -1217,6 +1407,7 @@ export function DeliverCheckboxes({
   targets: CronDeliveryTarget[]
   value: string
 }) {
+  const { t } = useI18n()
   const selected = parseCronDeliveryTargets(value)
   const knownIds = new Set(targets.map(target => target.id))
 
@@ -1245,12 +1436,21 @@ export function DeliverCheckboxes({
               id={checkboxId}
               onCheckedChange={next => onChange(toggleCronDeliveryTarget(value, target.id, next === true))}
             />
-            <span>{deliverTargetLabel(target, c)}</span>
+            <span>{deliverTargetLabel(target, c, t.sidebar.filter.profile)}</span>
           </label>
         )
       })}
     </div>
   )
+}
+
+function focusCronName(event: Event) {
+  const input = (event.target as HTMLElement).querySelector<HTMLInputElement>('#cron-name')
+
+  if (input) {
+    event.preventDefault()
+    input.focus()
+  }
 }
 
 function CronEditorDialog({
@@ -1450,7 +1650,7 @@ function CronEditorDialog({
 
   return (
     <Dialog onOpenChange={value => !value && !saving && onClose()} open={open}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onOpenAutoFocus={focusCronName}>
         <DialogHeader>
           <DialogTitle>{isEdit ? c.editTitle : c.createTitle}</DialogTitle>
           <DialogDescription>{isEdit ? c.editDesc : c.createDesc}</DialogDescription>
@@ -1534,7 +1734,6 @@ function CronEditorDialog({
 
             <Field htmlFor="cron-name" label={c.nameLabel} optional optionalLabel={c.optional}>
               <Input
-                autoFocus
                 id="cron-name"
                 onChange={event => setName(event.target.value)}
                 placeholder={c.namePlaceholder}

@@ -806,7 +806,7 @@ export interface SharedMetricsDesktopModeDay {
 }
 export interface SharedMetricsDesktopActionDay {
   action: string
-  via: 'click' | 'menu' | 'palette' | 'shortcut'
+  via: 'click' | 'menu' | 'palette' | 'shortcut' | 'state'
   count: number
 }
 export interface SharedMetricsDesktopDailyResult {
@@ -2297,7 +2297,9 @@ export interface ProfilesGetAssetResult {
 }
 /** ``assume_fresh``: the unpackaged desktop's ``--fresh-install`` launch; the backend treats this machine as one that never used Hermes. Packaged builds never send it. */
 export interface OnboardingStateParams {
+  profile?: string | null
   assume_fresh?: boolean
+  sessionless?: boolean
 }
 /** ``run``: onboarding opens on this launch (root config ``onboarding.run``, else a machine that never used Hermes). ``eligible``: this is the desktop's local backend and the welcome trial or a configured provider can carry the first chat. ``session_id``: the stored id of the onboarding chat still in progress, so a relaunch reopens it; ``run_id``: that run's id, which ``onboarding.ended`` names. */
 export interface OnboardingRunStateResult {
@@ -2305,11 +2307,17 @@ export interface OnboardingRunStateResult {
   eligible: boolean
   session_id?: string | null
   run_id?: string | null
+  step?: 'preferences' | 'model'
+  started?: boolean
 }
 /** ``mark_profile_offered`` also latches ``onboarding.seen.profile_build_offered`` in the root config, so the first chat after onboarding gets the plain intro instead of the profile offer. */
 export interface OnboardingSetRunParams {
+  profile?: string | null
   run: boolean
   mark_profile_offered?: boolean
+  sessionless?: boolean
+  step?: 'preferences' | 'model' | null
+  restart?: boolean
 }
 /** ``rerun``: start a new onboarding chat even when one is in progress (Settings, Run onboarding again; it never claims the welcome trial). ``fresh_launch``: the app's once-per-launch start; a run the app was closed on does not count, so its chat is deleted and the run starts over. ``facts_source``: whether the backend runs on the user's own computer. ``locale``: the desktop's UI language, preferred over the backend OS locale. ``assume_fresh``: as on ``onboarding.state``. A new run on a first install claims the welcome trial before its chat exists; a failed claim is error 5079 and leaves no guest and no chat. A claim that is blocked (another install took the trial) with no trial or provider to run on is error 5080 and opens no chat. */
 export interface OnboardingStartParams {
@@ -2536,6 +2544,7 @@ export interface ProjectInfo {
   color?: string | null
   board_slug?: string | null
   primary_path?: string | null
+  parent_id?: string | null
   archived?: boolean
   created_at: number
   folders?: ProjectFolder[]
@@ -2555,7 +2564,7 @@ export interface ProjectIdParams {
 export interface ProjectResult {
   project: ProjectInfo
 }
-/** ``use`` also activates the new project. */
+/** ``use`` also activates the new project. ``parent_id`` nests it from the start — ``''`` for an explicit top level, an absent (or null) value leaves it to folder containment, and an unknown id falls back the same way. */
 export interface ProjectsCreateParams {
   profile?: string | null
   name: string
@@ -2566,6 +2575,7 @@ export interface ProjectsCreateParams {
   icon?: string | null
   color?: string | null
   board_slug?: string | null
+  parent_id?: string | null
   use?: boolean
 }
 export interface OptionalProjectResult {
@@ -2580,6 +2590,12 @@ export interface ProjectsUpdateParams {
   icon?: string | null
   color?: string | null
   board_slug?: string | null
+}
+/** ``parent_id`` names the project this one nests under in the sidebar; ``''`` moves it to the top level, and an absent (or null) value hands it back to folder containment. Looping moves are refused (5063). */
+export interface ProjectsSetParentParams {
+  profile?: string | null
+  id: string
+  parent_id?: string | null
 }
 export interface ProjectsAddFolderParams {
   profile?: string | null
@@ -2635,6 +2651,7 @@ export interface DiscoveredRepo {
 /** ``methods_projects._repo_discovery_policy`` — the effective ``desktop.repo_scan_*`` config. */
 export interface RepoDiscoveryPolicy {
   enabled: boolean
+  nested?: boolean
   roots: string[]
   exclude_paths: string[]
 }
@@ -2651,11 +2668,13 @@ export interface RecordRepoItem {
 /** The policy the desktop scanned under (short or ``repo_scan_*`` long keys both accepted). */
 export interface RepoDiscoveryPolicyParams {
   enabled?: boolean | null
+  nested?: boolean | null
   roots?: string[] | null
   exclude_paths?: string[] | null
   repo_scan_enabled?: boolean | null
   repo_scan_roots?: string[] | null
   repo_scan_exclude_paths?: string[] | null
+  repo_scan_nested?: boolean | null
 }
 export interface ProjectsRecordReposResult {
   repos: DiscoveredRepo[]
@@ -2677,9 +2696,11 @@ export interface ProjectTreeNode {
   id: string
   label: string
   path?: string | null
+  parentId?: string | null
   color?: string | null
   icon?: string | null
   isAuto?: boolean
+  discovered?: boolean
   isNoProject?: boolean
   sessionCount?: number
   lastActive?: number
@@ -6664,6 +6685,8 @@ export interface RpcMethods {
   'projects.remove_folder': { params: ProjectFolderParams; result: ProjectResult }
   /** Switch (or clear) the active project for the profile. */
   'projects.set_active': { params: ProjectsSetActiveParams; result: ActiveIdResult }
+  /** Nest a project under another, or move it back out; answers the refreshed project. */
+  'projects.set_parent': { params: ProjectsSetParentParams; result: ProjectResult }
   /** Make one attached folder the project's primary path. */
   'projects.set_primary': { params: ProjectFolderParams; result: ProjectResult }
   /** Project → repo → lane overview with counts and a few preview sessions per project. */
@@ -7028,6 +7051,7 @@ export const RPC_METHODS = [
   'projects.record_repos',
   'projects.remove_folder',
   'projects.set_active',
+  'projects.set_parent',
   'projects.set_primary',
   'projects.tree',
   'projects.update',

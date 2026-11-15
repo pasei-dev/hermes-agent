@@ -27,6 +27,7 @@ import { $narrowOverlayPaneIds } from '../../narrow-overlay-state'
 import { NO_PANE_GROUP } from '../../pane-visibility'
 import { allPaneIds, findGroupOfPane, type LayoutNode } from '../model'
 import { $hiddenTreePanes, $layoutTree, $narrowViewport } from '../store'
+import { $routeCollapsedPanes } from '../store-route-collapse'
 
 import { KeepAlivePaneSlot, useStablePaneHosts } from './keep-alive-panes'
 import { fixedTrackSize, paneChrome, type TrackContext } from './track-model'
@@ -58,6 +59,7 @@ export function NarrowOverlays() {
   const paneStates = useStore($paneStates)
   const stableHosts = useStablePaneHosts()
   const hiddenPanes = useStore($hiddenTreePanes)
+  const routeCollapsed = useStore($routeCollapsedPanes)
   const [reveal, setReveal] = useState<{ id: string; pinned: boolean } | null>(null)
 
   // The revealed overlay spans the full viewport height (inset-y-0 below), so
@@ -91,12 +93,17 @@ export function NarrowOverlays() {
   const collapsibles = useMemo(
     // Solo adopts sidebar panes without their surrounding sidebar chrome.
     // Suppress every reveal path while those panes are intentionally hidden.
-    () => (solo ? [] : panes.filter(p => paneChrome(p).collapsible && inTree.has(p.id) && !hiddenPanes.has(p.id))),
-    [solo, panes, inTree, hiddenPanes]
+    () =>
+      solo
+        ? []
+        : panes.filter(
+            p => paneChrome(p).collapsible && inTree.has(p.id) && !hiddenPanes.has(p.id) && !routeCollapsed.has(p.id)
+          ),
+    [solo, panes, inTree, hiddenPanes, routeCollapsed]
   )
 
-  const collapsiblesRef = useRef(collapsibles)
-  collapsiblesRef.current = collapsibles
+  const panesRef = useRef(panes)
+  panesRef.current = panes
 
   useEffect(() => {
     const active = narrow && !solo && reveal ? collapsibles.find(p => p.id === reveal.id) : undefined
@@ -124,7 +131,18 @@ export function NarrowOverlays() {
         return
       }
 
-      const match = collapsiblesRef.current.find(p => p.id === id || paneChrome(p).revealAliases?.includes(id))
+      // Open actions can unhide a pane and dispatch before React paints that change.
+      const currentTree = $layoutTree.get()
+
+      const match = panesRef.current.find(
+        p =>
+          paneChrome(p).collapsible &&
+          !$hiddenTreePanes.get().has(p.id) &&
+          !$routeCollapsedPanes.get().has(p.id) &&
+          currentTree &&
+          findGroupOfPane(currentTree, p.id) &&
+          (p.id === id || paneChrome(p).revealAliases?.includes(id))
+      )
 
       if (!match) {
         return
@@ -142,7 +160,9 @@ export function NarrowOverlays() {
           // The browser host's titlebar Hide names the zone (its alias) while a
           // zone mate may be showing; native close names one pane, as on main.
           const currentTree = $layoutTree.get()
-          const targetZone = currentTree && hostHas('narrowOverlayChrome') ? findGroupOfPane(currentTree, match.id) : null
+
+          const targetZone =
+            currentTree && hostHas('narrowOverlayChrome') ? findGroupOfPane(currentTree, match.id) : null
 
           return current && (current.id === match.id || targetZone?.panes.includes(current.id)) ? null : current
         }
@@ -289,7 +309,9 @@ export function NarrowOverlays() {
               : wcOverlap
                 ? wcOverlap.y + wcOverlap.height
                 : undefined,
-            width: `min(${overlayWidth}, 85vw)`
+            width: `min(${overlayWidth}, 85vw)`,
+            // Global/developer rails take space outside this overlay's layout root.
+            maxWidth: '100%'
           }}
         >
           {wcOverlap && (

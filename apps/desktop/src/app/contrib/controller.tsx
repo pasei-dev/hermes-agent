@@ -1,3 +1,11 @@
+import '../redesign/portal-artwork.css'
+import '../redesign/portal-typography.css'
+import '../redesign/portal-layout.css'
+import '../redesign/portal-shell.css'
+import '../redesign/portal-controls.css'
+import '../redesign/portal-floating.css'
+import '../redesign/portal-pages.css'
+
 import { useStore } from '@nanostores/react'
 import { atom, computed } from 'nanostores'
 import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } from 'react'
@@ -5,12 +13,14 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { usePortalZoneHeader } from '@/app/redesign/portal-conversation-header'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
 import { IdleMount } from '@/components/idle-mount'
 import { $layoutEditMode, toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { allPaneIds } from '@/components/pane-shell/tree/model'
 import { LayoutTreeRoot } from '@/components/pane-shell/tree/renderer'
+import { provideZoneHeader } from '@/components/pane-shell/tree/renderer/zone-header-provider'
 import {
   $layoutTree,
   bindPaneVisibility,
@@ -56,7 +66,7 @@ import { TRANSCRIPT_DIRECTIVE_AREA, type TranscriptDirectiveContribution } from 
 import { setYoloEnabled } from '@/lib/yolo-session'
 import { $connectionsRegistry } from '@/store/connection-registry-state'
 import { watchDeadSessionPrune } from '@/store/dead-session-prune'
-import { $interfaceMode, $showsAdvancedChrome, setModeContext, toggleSimpleMode } from '@/store/interface-mode'
+import { $interfaceMode, setModeContext, toggleSimpleMode } from '@/store/interface-mode'
 import {
   $fileBrowserOpen,
   $sidebarOpen,
@@ -94,7 +104,8 @@ import {
 import { watchSessionPins } from '@/store/session-pin-sync'
 import { $botChatScopes } from '@/store/session-states'
 import { watchUnreadWriteGuard } from '@/store/session-unread-remote'
-import { $statusbarVisible } from '@/store/statusbar-prefs'
+import { $statusbarShown, $statusbarVisible } from '@/store/statusbar-prefs'
+import { $statusbarStripAvailable } from '@/store/statusbar-strip'
 import { isBrowserWindow, isHudWindow } from '@/store/windows'
 
 import { BrowserPopoutShell } from '../chat/browser-popout-shell'
@@ -113,16 +124,19 @@ import {
 } from '../chat/session-tile'
 import { AppContextMenu } from '../context-menu/app-context-menu'
 import { HudShell } from '../hud/hud-shell'
-import { $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
+import { $terminalCollapsedRail, $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
 import { terminalPaletteToggle } from '../right-sidebar/terminal/reveal-focus'
 import { $workspaceIsPage, WORKSPACE_PAGE_HEADER_AREA } from '../routes'
 import { Butterbar } from '../shell/butterbar'
 import { TermsButterbar } from '../shell/terms-butterbar'
 
+import { bindBotsPaneToShell } from './bots-pane-shell'
+import { DeveloperRail } from './developer-rail'
 import { BASIC_TREE, DEFAULT_TREE, registerLayoutPresets } from './layout-presets'
 import { bindLayoutSides } from './layout-sides'
 import { FilesPane, LogsPane, ReviewPaneContent } from './panes'
 import { PluginPreviewConsentDialog } from './plugin-preview-consent-dialog'
+import { LayoutTreeCover } from './route-cover'
 import { ContribWiring, WiredPane } from './wiring'
 import { WorkspacePageHeaderHostContext } from './workspace-page-header'
 
@@ -191,32 +205,35 @@ const workspaceTabDrag = (event: ReactPointerEvent<HTMLElement>, onTap: () => vo
   return true
 }
 
-registry.registerMany([
-  {
-    id: 'sessions',
-    area: 'panes',
-    // String fallback only (menus, drag ghosts); the tab itself renders
-    // `tabTitle` below so the strip follows `display.language` once it loads.
-    title: translateNow('sidebar.sessions'),
-    // Collapsible: leaves the grid on narrow viewports (edge overlay instead).
-    // dock: where a RE-ADOPTED pane lands (healed from a stale dismissal) —
-    // its default-ish spot beside main, not a random same-placement stack.
-    data: {
-      placement: 'left',
-      collapsible: true,
-      dock: { pane: 'workspace', pos: 'left' },
-      revealAliases: ['chat-sidebar'],
-      // Standing chrome: no close gestures at all — the tab is shown/hidden
-      // (zone menu Show/Hide rows + the auto-registered ⌘K toggle below).
-      hideOnly: true,
-      tabTitle: () => <LocalizedTabTitle select={t => t.sidebar.sessions} />,
-      tabTitleText: () => translateNow('sidebar.sessions'),
-      width: `${SIDEBAR_DEFAULT_WIDTH}px`,
-      minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
-      maxWidth: `${SIDEBAR_MAX_WIDTH}px`
-    },
-    render: () => <WiredPane part="sidebar" />
+const sessionsPane = {
+  id: 'sessions',
+  area: 'panes',
+  // String fallback only (menus, drag ghosts); the tab itself renders
+  // `tabTitle` below so the strip follows `display.language` once it loads.
+  title: translateNow('sidebar.sessions'),
+  // Collapsible: leaves the grid on narrow viewports (edge overlay instead).
+  // dock: where a RE-ADOPTED pane lands (healed from a stale dismissal) —
+  // its default-ish spot beside main, not a random same-placement stack.
+  data: {
+    placement: 'left',
+    collapsible: true,
+    dock: { pane: 'workspace', pos: 'left' },
+    revealAliases: ['chat-sidebar'],
+    // Standing chrome: no close gestures at all — the tab is shown/hidden
+    // (zone menu Show/Hide rows + the auto-registered ⌘K toggle below).
+    hideOnly: true,
+    tabTitle: () => <LocalizedTabTitle select={t => t.sidebar.sessions} />,
+    tabTitleText: () => translateNow('sidebar.sessions'),
+    width: `var(--sessions-pane-width, ${SIDEBAR_DEFAULT_WIDTH}px)`,
+    // The redesign's rows and New-session split need more room (portal-sidebar.css).
+    minWidth: `var(--sessions-pane-min-width, ${SIDEBAR_DEFAULT_WIDTH}px)`,
+    maxWidth: `${SIDEBAR_MAX_WIDTH}px`
   },
+  render: () => <WiredPane part="sidebar" />
+}
+
+registry.registerMany([
+  sessionsPane,
   {
     id: 'workspace',
     area: 'panes',
@@ -246,6 +263,7 @@ registry.registerMany([
     // its rail there). A real floor left a sliver of unusable terminal.
     data: {
       placement: 'bottom',
+      minWidth: 'var(--terminal-panel-min-width, 0px)',
       height: '20vh',
       maxHeight: '80vh',
       lifecycleKeepAlive: true,
@@ -362,17 +380,6 @@ registry.registerMany([
       run: resetLayoutTree
     } satisfies PaletteContribution
   },
-  // Hiding the bar removes the surface that would otherwise offer it back, so
-  // ⌘K is the guaranteed door in (alongside the rebindable ⌘⇧S).
-  paletteToggle({
-    id: 'view.toggleStatusbar',
-    label: 'Toggle status bar',
-    action: 'view.toggleStatusbar',
-    icon: PanelBottom,
-    keywords: ['status bar', 'statusbar', 'bottom bar', 'hide', 'show', 'chrome'],
-    get: () => $statusbarVisible.get(),
-    set: enabled => $statusbarVisible.set(enabled)
-  }),
   paletteToggle({
     id: 'view.toggleProfileRail',
     label: 'Toggle profile rail',
@@ -446,6 +453,29 @@ registry.registerMany([
 registerLayoutPresets()
 
 declareDefaultTree(DEFAULT_TREE, BASIC_TREE)
+
+bindBotsPaneToShell()
+
+// Hiding the bar removes the surface that would otherwise offer it back, so ⌘K is the guaranteed
+// door in (alongside the rebindable ⌘⇧S) — offered only while the shell has a strip to toggle.
+let disposeStatusbarToggle: (() => void) | undefined
+
+$statusbarStripAvailable.subscribe(available => {
+  disposeStatusbarToggle?.()
+  disposeStatusbarToggle = available
+    ? registry.register(
+        paletteToggle({
+          id: 'view.toggleStatusbar',
+          label: 'Toggle status bar',
+          action: 'view.toggleStatusbar',
+          icon: PanelBottom,
+          keywords: ['status bar', 'statusbar', 'bottom bar', 'hide', 'show', 'chrome'],
+          get: () => $statusbarVisible.get(),
+          set: enabled => $statusbarVisible.set(enabled)
+        })
+      )
+    : undefined
+})
 
 // Bundled plugins load AFTER core, so a same-id contribution from a plugin
 // deliberately overrides the core default (last writer wins). Third-party
@@ -599,16 +629,14 @@ bindPaneVisibility(
   closeReview,
   () => openReview($reviewScopeCwd.get(), $reviewScopeTarget.get())
 )
-// ⌃` / statusbar toggle — the terminal COLLAPSES to a rail (tab stays), not
-// hides; PTYs stay alive while collapsed (see PersistentTerminal). Simple has
-// no terminal: where chrome is off a closed one hides, rail and all, and ⌃`
-// is the door for the session.
+// Classic Advanced keeps a collapsed terminal rail; the redesign and Simple
+// hide it completely. PersistentTerminal keeps the shells alive in either case.
 bindToolPaneCollapse(
   'terminal',
   $terminalTakeover,
   () => setTerminalTakeover(false),
   () => setTerminalTakeover(true),
-  $showsAdvancedChrome
+  $terminalCollapsedRail
 )
 // Without the statusbar, the rail is the only way to switch profiles or gateways.
 $profiles.subscribe(profiles => setModeContext({ profileCount: profiles.length }))
@@ -778,12 +806,14 @@ registerPaneOpener('sessions', () => {
 registerPaneCloser('files', () =>
   paneRootSide('files') === fileBrowserSide() ? setFileBrowserOpen(false) : dismissTreePane('files')
 )
+// The redesign's conversation header stands in for chat-only tab strips in every zone.
+provideZoneHeader(usePortalZoneHeader)
 
 // ---------------------------------------------------------------------------
 
 export function ContribController() {
   const sidebarOpen = useStore($sidebarOpen)
-  const statusbarVisible = useStore($statusbarVisible)
+  const statusbarVisible = useStore($statusbarShown)
 
   // HUD mode is the SAME app with its frame removed: the wiring (gateway,
   // sessions, streams, submit) mounts identically, and only the shell around
@@ -830,7 +860,13 @@ export function ContribController() {
           data-contrib-shell=""
           style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
-          <LayoutTreeRoot titlebar />
+          <div className="flex min-h-0 flex-1">
+            <WiredPane part="globalNav" />
+            <LayoutTreeCover>
+              <LayoutTreeRoot titlebar />
+            </LayoutTreeCover>
+            <DeveloperRail />
+          </div>
 
           {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
           <SessionTileCloseConfirm />

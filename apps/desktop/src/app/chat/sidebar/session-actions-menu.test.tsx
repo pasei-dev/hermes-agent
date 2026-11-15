@@ -112,6 +112,7 @@ vi.mock('@/store/windows', () => ({
   canOpenSessionInTerminal: () => false,
   canOpenSessionWindow: () => false,
   isBrowserWindow: () => false,
+  isHudWindow: () => false,
   isSecondaryWindow: () => false,
   openSessionInNewWindow: vi.fn(),
   openSessionInTerminal: vi.fn()
@@ -396,4 +397,17 @@ describe('SessionActionsMenu', () => {
 
     await waitFor(() => expect(refreshProjectTree).toHaveBeenCalledTimes(1))
   })
+})
+
+it('exports a remote search result using the exact owner from its row', async () => {
+  const { exportSession } = await import('@/lib/session-export')
+  const owner = { connectionId: 'remote-b', profile: 'research' }
+  render(
+    <SessionActionsMenu ownerRoute={owner} profile="research" sessionId="remote-only" title="Remote">
+      <button>Actions</button>
+    </SessionActionsMenu>
+  )
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Actions' }), { key: 'Enter' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Export' }))
+  expect(exportSession).toHaveBeenCalledWith('remote-only', { profile: owner, title: 'Remote' })
 })

@@ -1,3 +1,5 @@
+import './global-overviews.css'
+
 import { useStore } from '@nanostores/react'
 import { type ComponentType, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
@@ -5,8 +7,8 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import { codiconIcon } from '@/components/ui/codicon'
 import { KbdCombo } from '@/components/ui/kbd'
 import { Tip } from '@/components/ui/tooltip'
-import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { usePortalShell } from '@/store/shell-variant'
 import { triggerHaptic } from '@/lib/haptics'
 import {
   Archive,
@@ -14,6 +16,7 @@ import {
   Bell,
   Cpu,
   Download,
+  Gateway,
   Globe,
   Info,
   Keyboard,
@@ -31,24 +34,26 @@ import { isEditableTarget } from '@/lib/keybinds/combo'
 import { typeToFocusChar } from '@/lib/keybinds/composer-focus-keys'
 import { cn } from '@/lib/utils'
 import { $commandPaletteOpen, openCommandPalettePage } from '@/store/command-palette'
-import { confirm } from '@/store/confirm'
 import { $activeConnectionId } from '@/store/connections'
 import { recordFeatureUse, settingsArea } from '@/store/desktop-metrics'
 import { bindingsFor } from '@/store/keybinds'
 import { $localModelsEnabled } from '@/store/local-models-flag'
-import { notifyError } from '@/store/notifications'
 import { $settingsScopeProfile } from '@/store/settings-scope'
+import { rememberedViewSubState, rememberViewSubState } from '@/store/view-memory'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlayMain, OverlayNav, type OverlayNavGroup, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
+import { SETTINGS_ROUTE } from '../routes'
 
 import { AboutSettings } from './about-settings'
+import { AgentSettingsLink } from './agent-settings-link'
 import { AppearanceSettings } from './appearance-settings'
 import { BILLING_VIEWS, BillingSettings, type BillingSubView } from './billing'
 import { deriveBillingView, useBillingState, useSubscriptionState } from './billing/use-billing-state'
 import { ConfigSettings } from './config-settings'
+import { useConfigTransfer } from './config-transfer'
 import { SECTIONS } from './constants'
 import { GatewaySettings } from './gateway-settings'
 import { KeybindSettings } from './keybind-settings'
@@ -64,6 +69,8 @@ import {
 } from './plugin-settings'
 import { SettingsBreadcrumbContext } from './primitives'
 import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './providers-settings'
+import { settingsNavigationPresentation } from './redesign-navigation'
+import { redesignNavigationCopy } from './redesign-navigation-copy'
 import { SessionsSettings } from './sessions-settings'
 import { SettingsSubpageHeader } from './subpage-navigation'
 import { resolveSettingsSubpage, settingsSubpageIcon, settingsSubpages } from './subpages'
@@ -89,6 +96,30 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'about'
 ]
 
+/** Key into the per-view sub-state memory (see `store/view-memory`). */
+const SETTINGS_MEMORY_KEY = 'settings'
+
+/**
+ * The sub-pane a section was left on, keyed per view AND per axis: the `?page=`
+ * a section's own sub-nav uses, and the `?pview=` / `?kview=` / `?bview=` the
+ * three sections whose sub-nav is a second param. Stored by the same store as
+ * the tab, and validated against the live choices so a sub-pane that no longer
+ * exists can never be restored.
+ */
+function rememberedPane(axis: string, values?: readonly string[]): string | null {
+  const remembered = rememberedViewSubState(`${SETTINGS_MEMORY_KEY}:${axis}`)
+
+  return remembered && (!values || values.includes(remembered)) ? remembered : null
+}
+
+/** Remember a sub-pane. An undefined one (a section with no sub-nav) is
+ *  ignored rather than stored as a hole. */
+function rememberPane(axis: string, value: string | undefined): void {
+  if (value) {
+    rememberViewSubState(`${SETTINGS_MEMORY_KEY}:${axis}`, value)
+  }
+}
+
 // Pages that take nothing but the resolved sub-page.
 const SUBPAGE_VIEWS: Partial<Record<SettingsViewId, ComponentType<{ subpage?: string }>>> = {
   'config:appearance': AppearanceSettings,
@@ -101,12 +132,81 @@ const SUBPAGE_VIEWS: Partial<Record<SettingsViewId, ComponentType<{ subpage?: st
   notifications: NotificationsSettings
 }
 
+function SettingsSearchPill() {
+  const { t } = useI18n()
+
+  // Type-to-search: printable keystrokes on the Settings surface (outside any
+  // field) open the settings-scoped palette, seeded with the character — same
+  // reflex as the chat surface's type-to-focus, pointed at search instead.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ($commandPaletteOpen.get() || isEditableTarget(event.target)) {
+        return
+      }
+
+      const char = typeToFocusChar(event)
+
+      if (char === null || char === ' ') {
+        return
+      }
+
+      event.preventDefault()
+      openCommandPalettePage('settings', char)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // Fake search pill riding the card's top edge, dead-center and half off it.
+  // Clicking (or just typing) opens the ⌘K palette scoped to settings; while
+  // the palette is up the pill hands over to it — grows slightly and fades,
+  // then fades back when the palette closes. It sits outside the raised card,
+  // so it needs its own opaque glass surface to mask the content underneath.
+  const searchCombo = bindingsFor('nav.commandPalette')[0]
+  const paletteOpen = useStore($commandPaletteOpen)
+
+  return (
+    <button
+      className={cn(
+        'flex h-(--titlebar-control-height) items-center gap-1.5 rounded-full border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-2.5 text-(--ui-text-tertiary) shadow-sm transition-all duration-200 ease-out hover:text-foreground motion-reduce:transition-none',
+        paletteOpen && 'pointer-events-none scale-110 opacity-0'
+      )}
+      data-glass-opaque=""
+      data-slot="settings-search-pill"
+      onClick={() => {
+        triggerHaptic('open')
+        openCommandPalettePage('settings')
+      }}
+      tabIndex={paletteOpen ? -1 : undefined}
+      type="button"
+    >
+      <Search className="size-3" />
+      <span className="text-xs">{t.settings.search.pill}</span>
+      {searchCombo && <KbdCombo combo={searchCombo} size="sm" variant="ghost" />}
+    </button>
+  )
+}
+
 export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: SettingsPageProps) {
+  const simplified = usePortalShell()
   const scopeProfile = useStore($settingsScopeProfile)
   const activeConnectionId = useStore($activeConnectionId)
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const redesignCopy = redesignNavigationCopy(locale)
   const navigate = useNavigate()
   const { hash, pathname, search } = useLocation()
+
+  const openAgentSettings = () => {
+    const query = new URLSearchParams({ agentProfile: scopeProfile, panel: 'settings' })
+
+    if (activeConnectionId) {
+      query.set('connection', activeConnectionId)
+    }
+
+    navigate(`${SETTINGS_ROUTE}?${query}`)
+  }
 
   // MCP moved out of Settings into Capabilities. Keep old `/settings?tab=mcp`
   // deep links working — `useRouteEnumParam` would silently coerce the unknown
@@ -120,18 +220,36 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
     }
   }, [navigate, search])
 
-  const [activeView] = useRouteEnumParam('tab', SETTINGS_VIEWS, 'config:model' as SettingsViewId)
+  // Reopening Settings lands on the tab last used. An explicit `?tab=` (a
+  // sidebar row / palette deep link) always wins — the remembered value is only
+  // the fallback when the route names none.
+  const rememberedView = rememberedViewSubState(SETTINGS_MEMORY_KEY)
 
+  const defaultView: SettingsViewId =
+    rememberedView && (SETTINGS_VIEWS as readonly string[]).includes(rememberedView)
+      ? (rememberedView as SettingsViewId)
+      : ('config:model' as SettingsViewId)
+
+  const [activeView] = useRouteEnumParam('tab', SETTINGS_VIEWS, defaultView)
+
+  // Remember the tab whenever it changes, so the next open lands here.
+  useEffect(() => rememberViewSubState(SETTINGS_MEMORY_KEY, activeView), [activeView])
   useEffect(() => recordFeatureUse(settingsArea(activeView)), [activeView])
   const params = new URLSearchParams(search)
   const requestedSubpage = params.get('page')
-  const subpage = resolveSettingsSubpage(activeView, params)
+  const subpage = resolveSettingsSubpage(activeView, params, rememberedPane(`page:${activeView}`))
   const needsSubpageRedirect = Boolean(subpage && subpage !== requestedSubpage)
   const subpageSearch = new URLSearchParams(search)
 
   if (subpage) {
     subpageSearch.set('page', subpage)
   }
+
+  // The sub-pane is remembered too, so reopening a section lands on the pane it
+  // was left on rather than on the section's first one. A route that names one
+  // (a deep link, a search hit) always wins — `resolveSettingsSubpage` reads it
+  // first and only falls back to this.
+  useEffect(() => rememberPane(`page:${activeView}`, subpage), [activeView, subpage])
 
   const openSettingsPage = useCallback(
     (view: SettingsViewId, page?: string) => {
@@ -167,6 +285,44 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
   const [providerView, setProviderView] = useRouteEnumParam<ProviderView>('pview', PROVIDER_VIEWS, 'accounts')
   const [keysView] = useRouteEnumParam<KeysView>('kview', KEYS_VIEWS, 'tools')
   const [billingView] = useRouteEnumParam<BillingSubView>('bview', BILLING_VIEWS, 'overview')
+
+  // Those three sections reopen where they were left, the same way a section's
+  // `page` does: the route's own value is recorded, and a route that names none
+  // is sent to the remembered one. The restore WRITES the param (rather than
+  // serving it as a fallback), so every reader of that param — the section
+  // itself included — agrees on which sub-view is open. Only a non-default
+  // memory is restored, so clicking a sub-view's own default (which drops the
+  // param) is not read back as "no choice yet" and bounced right back.
+  useEffect(() => {
+    const axes: Array<[string, readonly string[], string]> = [
+      ['pview', PROVIDER_VIEWS, 'accounts'],
+      ['kview', KEYS_VIEWS, 'tools'],
+      ['bview', BILLING_VIEWS, 'overview']
+    ]
+
+    const current = new URLSearchParams(search)
+
+    for (const [param, values, fallback] of axes) {
+      const named = current.get(param)
+
+      if (named && values.includes(named)) {
+        rememberPane(param, named)
+
+        continue
+      }
+
+      const remembered = rememberedPane(param, values)
+
+      if (remembered && remembered !== fallback) {
+        const next = new URLSearchParams(search)
+
+        next.set(param, remembered)
+        navigate({ hash, pathname, search: `?${next}` }, { replace: true })
+
+        return
+      }
+    }
+  }, [hash, navigate, pathname, search])
   const billingState = useBillingState()
   const subscriptionState = useSubscriptionState()
   const billingPresentation = deriveBillingView(billingState.data, subscriptionState.data)
@@ -191,6 +347,11 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
         params.set(param, value)
       }
 
+      // Recorded from the CLICK, not from the route: choosing the sub-view's own
+      // default drops the param, and memory has to tell that apart from never
+      // having chosen (see the restore effect above).
+      rememberPane(param, value)
+
       const qs = params.toString()
       navigate({ hash, pathname, search: qs ? `?${qs}` : '' }, { replace: true })
     },
@@ -208,41 +369,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
   const importInputRef = useRef<HTMLInputElement | null>(null)
 
-  const exportConfig = async () => {
-    try {
-      const cfg = await getHermesConfigRecord()
-      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'hermes-config.json'
-      a.click()
-      URL.revokeObjectURL(url)
-      triggerHaptic('success')
-    } catch (err) {
-      notifyError(err, t.settings.exportFailed)
-    }
-  }
-
-  const resetConfig = async () => {
-    const ok = await confirm({
-      confirmLabel: t.settings.resetToDefaults,
-      destructive: true,
-      title: t.settings.resetConfirm
-    })
-
-    if (!ok) {
-      return
-    }
-
-    try {
-      await saveHermesConfig(await getHermesConfigDefaults())
-      triggerHaptic('success')
-      onConfigSaved?.()
-    } catch (err) {
-      notifyError(err, t.settings.resetFailed)
-    }
-  }
+  const { exportConfig, importConfig, resetConfig } = useConfigTransfer(importInputRef, onConfigSaved)
 
   const webAccessAvailable = useWebAccessAvailable()
 
@@ -367,7 +494,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
           },
           {
             active: activeView === 'gateway',
-            icon: Globe,
+            icon: Gateway,
             id: 'gateway',
             label: t.settings.nav.gateway,
             onSelect: () => setActiveView('gateway')
@@ -474,62 +601,19 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
     ]
   )
 
-  const activeGroup = navGroups.find(group => group.active)
-  const activeChild = activeGroup?.children?.find(child => child.active)
+  const {
+    groups: displayedGroups,
+    headerGroup,
+    headerChild
+  } = settingsNavigationPresentation(navGroups, simplified, activeView, subpage, {
+    billing: redesignCopy.accountPlan,
+    gateway: redesignCopy.gateways,
+    sessions: redesignCopy.sessions,
+    about: redesignCopy.about
+  })
 
-  // Type-to-search: printable keystrokes on the Settings surface (outside any
-  // field) open the settings-scoped palette, seeded with the character — same
-  // reflex as the chat surface's type-to-focus, pointed at search instead.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ($commandPaletteOpen.get() || isEditableTarget(event.target)) {
-        return
-      }
-
-      const char = typeToFocusChar(event)
-
-      if (char === null || char === ' ') {
-        return
-      }
-
-      event.preventDefault()
-      openCommandPalettePage('settings', char)
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  // Fake search pill riding the card's top edge, dead-center and half off it.
-  // Clicking (or just typing) opens the ⌘K palette scoped to settings; while
-  // the palette is up the pill hands over to it — grows slightly and fades,
-  // then fades back when the palette closes. It sits outside the raised card,
-  // so it needs its own opaque glass surface to mask the content underneath.
-  const searchCombo = bindingsFor('nav.commandPalette')[0]
-  const paletteOpen = useStore($commandPaletteOpen)
-
-  const searchPill = (
-    <button
-      className={cn(
-        'flex h-(--titlebar-control-height) items-center gap-1.5 rounded-full border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-2.5 text-(--ui-text-tertiary) shadow-sm transition-all duration-200 ease-out hover:text-foreground motion-reduce:transition-none',
-        paletteOpen && 'pointer-events-none scale-110 opacity-0'
-      )}
-      data-glass-opaque=""
-      onClick={() => {
-        triggerHaptic('open')
-        openCommandPalettePage('settings')
-      }}
-      tabIndex={paletteOpen ? -1 : undefined}
-      type="button"
-    >
-      <Search className="size-3" />
-      <span className="text-xs">{t.settings.search.pill}</span>
-      {searchCombo && <KbdCombo combo={searchCombo} size="sm" variant="ghost" />}
-    </button>
-  )
-
-  const navFooter = (
+  // The redesign draws these as labelled rows on Advanced (config-transfer.tsx); classic keeps its icons.
+  const navFooter = simplified ? undefined : (
     <>
       <Tip label={t.settings.exportConfig}>
         <OverlayIconButton onClick={() => void exportConfig()}>
@@ -537,23 +621,12 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
         </OverlayIconButton>
       </Tip>
       <Tip label={t.settings.importConfig}>
-        <OverlayIconButton
-          onClick={() => {
-            triggerHaptic('open')
-            importInputRef.current?.click()
-          }}
-        >
+        <OverlayIconButton onClick={importConfig}>
           <Upload />
         </OverlayIconButton>
       </Tip>
       <Tip label={t.settings.resetToDefaults}>
-        <OverlayIconButton
-          className="hover:text-destructive"
-          onClick={() => {
-            triggerHaptic('warning')
-            void resetConfig()
-          }}
-        >
+        <OverlayIconButton className="hover:text-destructive" onClick={() => void resetConfig()}>
           <RefreshCw />
         </OverlayIconButton>
       </Tip>
@@ -602,13 +675,26 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
   )
 
   return (
-    <OverlayView closeLabel={t.settings.closeSettings} edgeBadge={searchPill} onClose={onClose}>
+    <OverlayView closeLabel={t.settings.closeSettings} edgeBadge={<SettingsSearchPill />} onClose={onClose}>
       <OverlaySplitLayout>
-        <OverlayNav footer={navFooter} groups={navGroups} />
+        <OverlayNav
+          footer={navFooter}
+          groups={displayedGroups}
+          related={
+            simplified && (
+              <AgentSettingsLink
+                description={redesignCopy.agentSettingsDescription}
+                label={redesignCopy.agentSettings}
+                onOpen={openAgentSettings}
+              />
+            )
+          }
+          title={simplified ? t.commandCenter.settings : undefined}
+        />
 
         <OverlayMain className="px-0 pb-0">
           <SettingsBreadcrumbContext.Provider value>
-            {activeGroup && <SettingsSubpageHeader child={activeChild} group={activeGroup} />}
+            {headerGroup && <SettingsSubpageHeader child={headerChild} group={headerGroup} />}
             {needsSubpageRedirect ? (
               <Navigate replace to={{ hash, pathname, search: `?${subpageSearch}` }} />
             ) : (

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { PAGE_MAX_W } from '../layout-constants'
 
 import { OVERLAY_TOP_CLEARANCE } from './overlay-view'
+import { PageSidebarHead, usePageSidebarOpen } from './page-sidebar'
 
 // The wide rail and the narrow dropdown swap at exactly the width where
 // OverlaySplitLayout drops to a single column, so the rail never stacks.
@@ -57,7 +58,7 @@ export function OverlaySplitLayout({ children, className }: OverlaySplitLayoutPr
         // Narrow: one column, and pin rows to [nav-bar auto | main 1fr] — without
         // an explicit template the grid's default align-content:stretch splits the
         // height evenly across the two rows, shoving the content to mid-screen.
-        'grid h-full min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] overflow-hidden bg-transparent max-[47.5rem]:grid-cols-1 max-[47.5rem]:grid-rows-[auto_minmax(0,1fr)]',
+        'grid h-full min-h-0 flex-1 grid-cols-[var(--page-nav-width,13rem)_minmax(0,1fr)] overflow-hidden bg-transparent max-[47.5rem]:grid-cols-1 max-[47.5rem]:grid-rows-[auto_minmax(0,1fr)]',
         className
       )}
     >
@@ -103,6 +104,7 @@ export function OverlayMain({ children, className }: OverlayMainProps) {
         PAGE_MAX_W,
         className
       )}
+      data-slot="overlay-main"
     >
       {children}
     </main>
@@ -126,7 +128,8 @@ export const OverlayNavItem = memo(function OverlayNavItem({
       aria-current={current ? 'page' : undefined}
       aria-pressed={pressed}
       className={cn(
-        'row-hover flex h-7 w-full shrink-0 items-center justify-start gap-2 rounded-md border px-2 text-left text-[length:var(--conversation-text-font-size)] font-normal transition-colors',
+        'row-hover flex w-full shrink-0 items-center justify-start gap-2 rounded-md border px-2 text-left text-[length:var(--conversation-text-font-size)] font-normal transition-colors',
+        nested ? 'min-h-7' : 'min-h-(--page-nav-row-height,1.75rem)',
         nested
           ? active
             ? current
@@ -186,7 +189,15 @@ export interface OverlayNavGroup extends OverlayNavLink {
 // dropdown in PageSearchShell), so every OverlaySplitLayout pane degrades the
 // same way instead of stacking its whole sidebar. Drop it in as the first
 // child of an OverlaySplitLayout, before OverlayMain.
-export function OverlayNav({ footer, groups }: { footer?: ReactNode; groups: OverlayNavGroup[] }) {
+interface OverlayNavProps {
+  footer?: ReactNode
+  groups: OverlayNavGroup[]
+  title?: string
+  /** A related destination outside this rail (Settings → Agent settings), set off by a divider. */
+  related?: ReactNode
+}
+
+export function OverlayNav({ footer, groups, related, title }: OverlayNavProps) {
   const { t } = useI18n()
   const navId = useId()
   const [disclosures, setDisclosures] = useState<Record<string, boolean>>({})
@@ -213,9 +224,13 @@ export function OverlayNav({ footer, groups }: { footer?: ReactNode; groups: Ove
     })
   }, [activeGroupId, activeChildId])
 
+  // Only the redesign titles its column, and there the column is the shared page sidebar panel.
+  const panelOpen = usePageSidebarOpen()
+
   return (
     <>
-      <OverlaySidebar className={RAIL_HIDDEN}>
+      <OverlaySidebar className={cn(RAIL_HIDDEN, title && !panelOpen && 'hidden')}>
+        {title && <PageSidebarHead title={title} />}
         {groups.map(group => {
           const hasChildren = Boolean(group.children?.length)
           const expanded = disclosures[group.id] ?? group.active
@@ -287,6 +302,7 @@ export function OverlayNav({ footer, groups }: { footer?: ReactNode; groups: Ove
                           {child.children?.map(grandchild => (
                             <OverlayNavItem
                               active={grandchild.active}
+                              current={grandchild.active}
                               icon={grandchild.icon}
                               id={grandchild.id}
                               key={grandchild.id}
@@ -304,6 +320,7 @@ export function OverlayNav({ footer, groups }: { footer?: ReactNode; groups: Ove
             </Fragment>
           )
         })}
+        {related && <div className="mt-3 border-t border-(--ui-stroke-tertiary) pt-3">{related}</div>}
         {footer && <div className="mt-auto flex items-center gap-1 pt-2">{footer}</div>}
       </OverlaySidebar>
 

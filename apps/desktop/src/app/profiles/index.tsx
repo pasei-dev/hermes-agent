@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 import type * as React from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router'
 
 import { CodeEditor } from '@/components/chat/code-editor'
 import { PageLoader } from '@/components/page-loader'
@@ -10,10 +11,12 @@ import { getProfileSoul, type ProfileInfo, updateProfileSoul } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { displayPath } from '@/lib/display-path'
 import { AlertTriangle, Save } from '@/lib/icons'
+import { lazyView } from '@/lib/lazy-view'
 import { resolveProfileColor } from '@/lib/profile-color'
 import { normalize } from '@/lib/text'
 import { notify, notifyError } from '@/store/notifications'
 import { $profileColors, profileLabel, refreshProfiles } from '@/store/profile'
+import { usePortalShell } from '@/store/shell-variant'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import {
@@ -39,7 +42,25 @@ interface ProfilesViewProps {
   onClose: () => void
 }
 
+const AgentDirectory = lazyView(async () => (await import('../agent-settings/directory')).AgentDirectory)
+
+/** The rail warms this chunk too, so Agents paints without a second Suspense wait. */
+export const preloadAgentDirectory = AgentDirectory.preload
+
 export function ProfilesView({ onClose }: ProfilesViewProps) {
+  const simplified = usePortalShell()
+  const { search } = useLocation()
+
+  return simplified && new URLSearchParams(search).get('manage') !== 'true' ? (
+    <Suspense fallback={<PageLoader />}>
+      <AgentDirectory onClose={onClose} />
+    </Suspense>
+  ) : (
+    <ProfileManager onClose={onClose} />
+  )
+}
+
+function ProfileManager({ onClose }: ProfilesViewProps) {
   const { t } = useI18n()
   const p = t.profiles
   const [profiles, setProfiles] = useState<null | ProfileInfo[]>(null)
@@ -104,6 +125,11 @@ export function ProfilesView({ onClose }: ProfilesViewProps) {
 
   return (
     <Panel closeLabel={p.close} onClose={onClose}>
+      <PanelHeader
+        hideInClassic={!profiles?.length}
+        subtitle={profiles ? p.count(profiles.length) : undefined}
+        title={p.title}
+      />
       {!profiles ? (
         <PageLoader label={p.loading} />
       ) : profiles.length === 0 ? (
@@ -119,7 +145,6 @@ export function ProfilesView({ onClose }: ProfilesViewProps) {
         />
       ) : (
         <>
-          <PanelHeader subtitle={p.count(profiles.length)} title={p.title} />
           <PanelBody>
             <PanelList
               onSearchChange={setQuery}
@@ -232,7 +257,9 @@ function ProfileDetail({ profile }: { profile: ProfileInfo }) {
       <header className="space-y-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{profileLabel(profile)}</h3>
+            <h3 className="min-w-0 break-words text-[0.95rem] font-semibold tracking-tight text-foreground">
+              {profileLabel(profile)}
+            </h3>
             {profile.is_default && <PanelPill tone="good">{p.defaultBadge}</PanelPill>}
             {profile.has_env && <PanelPill tone="muted">.env</PanelPill>}
           </div>

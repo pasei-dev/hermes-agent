@@ -23,7 +23,7 @@ export const arAssistant = {
       skill: name => `المهارة ${name}`,
       kind: { plugin: 'إضافة', skill: 'مهارة' },
       tier: { official: 'رسمي', verified: 'موثّق', community: 'مجتمعي' },
-      targetProfile: profile => `يُثبَّت في ملفك الشخصي ${profile}`,
+      targetProfile: profile => `يُثبَّت للوكيل ${profile}`,
       sendFailed: 'تعذّر إرسال ردك. حاول مرة أخرى.',
       commitLabel: 'الإيداع',
       subdirLabel: 'المجلد',
@@ -138,8 +138,7 @@ export const arAssistant = {
         },
         truncated: {
           title: 'انقطع الرد قبل اكتماله',
-          body: (_provider, model) =>
-            `توقف ${model || 'النموذج'} قبل أن يُنهي ردّه. اختر «متابعة» ليكمل من حيث توقف.`
+          body: (_provider, model) => `توقف ${model || 'النموذج'} قبل أن يُنهي ردّه. اختر «متابعة» ليكمل من حيث توقف.`
         },
         invalid_response: {
           title: 'تعذّرت قراءة الرد',
@@ -195,8 +194,8 @@ export const arAssistant = {
           body: 'تسجيل الدخول بحساب Nous مجاني.'
         },
         cron_session_read_only: {
-          title: 'هذه المحادثة تابعة لمهمة مجدولة',
-          body: 'إنها تشغّل تلك المهمة فقط، لذا لم تُنفَّذ رسالتك. ابدأ محادثة جديدة لإرسالها.'
+          title: 'هذه المحادثة تابعة لجدول',
+          body: 'إنها مخصصة لتشغيل ذلك الجدول، لذا لم تُنفَّذ رسالتك. ابدأ محادثة جديدة لإرسالها.'
         },
         session_read_only: {
           title: 'هذه المحادثة للقراءة فقط',
@@ -285,7 +284,7 @@ export const arAssistant = {
       attachingFile: 'جار إرفاق الملف'
     },
     approval: {
-      gatewayDisconnected: 'البوابة غير متصلة',
+      gatewayDisconnected: 'الجهاز غير متصل',
       sendFailed: 'فشل الإرسال',
       run: 'تشغيل',
       command: 'الأمر',
@@ -300,7 +299,7 @@ export const arAssistant = {
     },
     clarify: {
       notReady: 'غير جاهز',
-      gatewayDisconnected: 'البوابة غير متصلة',
+      gatewayDisconnected: 'الجهاز غير متصل',
       sendFailed: 'فشل الإرسال',
       loadingQuestion: 'جار تحميل السؤال...',
       other: 'غير ذلك',
@@ -412,8 +411,8 @@ export const arAssistant = {
           pendingAction: 'جار السؤال'
         },
         cronjob: {
-          done: 'مهمة مجدولة',
-          pending: 'جار جدولة المهمة',
+          done: 'تم إعداد الجدول',
+          pending: 'جار إعداد الجدول',
           pendingAction: 'جار الجدولة'
         },
         edit_file: {

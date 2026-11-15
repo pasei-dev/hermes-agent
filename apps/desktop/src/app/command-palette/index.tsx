@@ -79,10 +79,9 @@ import { $projectTree, goToProject, openFolderAsProject, requestStartWorkSession
 import { $cronSessions, $messagingSessions, $sessions } from '@/store/session'
 import { $unconfirmedPinWrites } from '@/store/session-pin-sync'
 import { $removedSessionIds } from '@/store/session-removal'
+import { $setupGuideOnboarding } from '@/store/shell-policy'
 import { runGatewayRestart } from '@/store/system-actions'
-import {
-  requestActiveUpdate
-} from '@/store/updates'
+import { requestActiveUpdate } from '@/store/updates'
 import { canOpenNewWindow, openNewWindow } from '@/store/windows'
 import { luminance } from '@/themes/color'
 import { type ThemeMode, useTheme } from '@/themes/context'
@@ -430,7 +429,7 @@ const NON_CONFIG_SETTINGS: ReadonlyArray<{
   },
   {
     icon: Globe,
-    // The Connections registry merged into the unified Gateways page.
+    // The Connections registry merged into the unified Machines page.
     keywords: [
       'connection',
       'connections',
@@ -440,7 +439,9 @@ const NON_CONFIG_SETTINGS: ReadonlyArray<{
       'instances',
       'ssh',
       'cloud',
-      'add gateway',
+      'machine',
+      'machines',
+      'add machine',
       'registry'
     ],
     labelKey: 'gateway',
@@ -946,7 +947,7 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
           {
             icon: RefreshCw,
             id: 'cc-restart-gateway',
-            keywords: ['gateway', 'restart', 'messaging', 'reconnect', 'system'],
+            keywords: ['machine', 'hermes', 'gateway', 'restart', 'messaging', 'reconnect', 'system'],
             label: cc.restartGateway,
             run: () => void runGatewayRestart()
           },
@@ -1556,8 +1557,10 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
 
     completeFlow('command_palette')
     recordAction(item.action ?? 'other', 'palette')
-    // A Cmd-K command or layout is a way out of the first-run intro.
-    leaveIntro()
+
+    if (!$setupGuideOnboarding.get()) {
+      leaveIntro()
+    }
 
     if (item.runWithEvent) {
       item.runWithEvent(lastSelectMods.current)

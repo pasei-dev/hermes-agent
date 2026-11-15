@@ -7,10 +7,15 @@ import {
   clearPaneWidthOverride,
   ensurePaneRegistered,
   getPaneStateSnapshot,
+  setPaneHeightOverride,
   setPaneOpen,
   setPaneWidthOverride,
   togglePane
 } from './panes'
+import { $shellChoice } from './shell-variant'
+
+// These contracts pin the classic shell's layout keys; the redesign keeps its own (`.portal`).
+$shellChoice.set(false)
 
 const STORAGE_KEY = 'hermes.desktop.paneStates.v1'
 
@@ -69,6 +74,32 @@ describe('panes store', () => {
   })
 
   describe('width overrides', () => {
+    it('a resize NEVER closes the pane it resized', () => {
+      // A sash drag (and a double-click on a sash) reaches EVERY shown pane of
+      // the zone. An unregistered one used to be invented as `{ open: false }`,
+      // which closed the pane under the pointer — and a hidden zone stops
+      // rendering, so everything stacked beside it re-divided its heights.
+      setPaneWidthOverride('subagent-panes:live', 320)
+
+      expect($paneOpen('subagent-panes:live').get()).toBe(true)
+      expect(getPaneStateSnapshot('subagent-panes:live')).toEqual({ open: true, widthOverride: 320 })
+    })
+
+    it('the same holds on the Y axis', () => {
+      setPaneHeightOverride('terminal', 220)
+
+      expect($paneOpen('terminal').get()).toBe(true)
+      expect(getPaneStateSnapshot('terminal')?.heightOverride).toBe(220)
+    })
+
+    it('an override leaves a pane the user had closed closed', () => {
+      ensurePaneRegistered('sessions', { open: false })
+      setPaneWidthOverride('sessions', 237)
+
+      expect(getPaneStateSnapshot('sessions')?.open).toBe(false)
+      expect(getPaneStateSnapshot('sessions')?.widthOverride).toBe(237)
+    })
+
     it('clearPaneWidthOverride removes the override', () => {
       ensurePaneRegistered('files', { open: true })
       setPaneWidthOverride('files', 300)
