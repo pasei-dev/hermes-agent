@@ -55,6 +55,7 @@ export const TABLER_PIXEL = {
   Clipboard: 'clipboard',
   Clock: 'clock',
   Cloud: 'cloud',
+  CloudUpload: 'cloud-server',
   Command: KEEP_CLASSIC, // the ⌘ key cap; the set has no command glyph
   Copy: 'copy',
   CopyIcon: 'copy',
