@@ -28,6 +28,7 @@ import { ChatView } from '../chat'
 import { ChatSidebar } from '../chat/sidebar'
 import { TerminalPaneChrome } from '../right-sidebar/terminal/chrome'
 import { appViewForPath, contributedRoutes, isOverlayView, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
+import { backupSettingsHrefForLegacy } from '../settings/backup-palette'
 import { useStatusSnapshot } from '../shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from '../shell/hooks/use-statusbar-items'
 import { ModelMenuPanel } from '../shell/model-menu-panel'
@@ -104,6 +105,11 @@ function PageEscapeBack() {
   }, [navigate])
 
   return null
+}
+
+/** The retired Move to Hermes Cloud page, which the portal's link still opens. */
+function MoveToCloudRedirect() {
+  return <Navigate replace to={backupSettingsHrefForLegacy(useLocation().search)} />
 }
 
 export const SidebarSurface = memo(function SidebarSurface({
@@ -297,6 +303,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
         <Route element={null} path=":sessionId" />
         <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
         <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
+        <Route element={<MoveToCloudRedirect />} path="move-to-cloud" />
         <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
       </Routes>
     </>
